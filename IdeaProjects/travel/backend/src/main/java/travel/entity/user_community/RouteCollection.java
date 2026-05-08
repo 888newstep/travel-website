@@ -33,6 +33,9 @@ public class RouteCollection {
     @TableField("is_public")
     private Boolean isPublic = false;
 
+    @TableField("created_at")
+    private LocalDateTime createdAt;
+
     @TableField("notes")
     private String notes;
 
@@ -41,4 +44,9 @@ public class RouteCollection {
 
     public String getNote() { return notes; }
     public void setNote(String note) { this.notes = note; }
+
+    public void setCreateTime(LocalDateTime createTime) {
+        this.createdAt = createTime;
+        this.collectionTime = createTime;
+    }
 }

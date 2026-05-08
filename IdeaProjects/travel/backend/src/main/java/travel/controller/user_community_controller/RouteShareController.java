@@ -43,6 +43,39 @@ public class RouteShareController {
         }
     }
 
+    @PostMapping("/generate")
+    public Result<RouteShare> generateShareCode(@RequestBody Map<String, Object> request) {
+        try {
+            Integer itemId = (Integer) request.get("itemId");
+            String itemType = (String) request.get("itemType");
+
+            log.info("生成分享码请求: itemId={}, itemType={}", itemId, itemType);
+
+            RouteShare share = new RouteShare();
+            share.setItemId(itemId);
+            share.setItemType(itemType != null ? itemType : "route");
+            share.setUserId(null);
+
+            RouteShare result = routeShareService.generateShareCode(share);
+            return Result.success("生成分享码成功", result);
+        } catch (Exception e) {
+            log.error("生成分享码失败: error={}", e.getMessage());
+            return Result.error("生成分享码失败: " + e.getMessage());
+        }
+    }
+
+    @GetMapping("/validate")
+    public Result<Boolean> validateShareCode(@RequestParam String code) {
+        try {
+            log.info("验证分享码请求: code={}", code);
+            boolean valid = routeShareService.validateShareCode(code);
+            return Result.success("验证成功", valid);
+        } catch (Exception e) {
+            log.error("验证分享码失败: error={}", e.getMessage());
+            return Result.error("验证失败: " + e.getMessage());
+        }
+    }
+
     /**
      * 通过分享码获取路线信息
      * GET /api/route-share/info/{shareCode}
@@ -174,4 +207,6 @@ public class RouteShareController {
             return Result.error("获取失败: " + e.getMessage());
         }
     }
+
+
 }

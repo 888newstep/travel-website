@@ -17,6 +17,7 @@ import jakarta.validation.constraints.Size;
 import travel.utils.Result;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -32,77 +33,91 @@ public class UserController {
     private final FeedbackService feedbackService;
 
     @PostMapping("/register")
-    public User register(@RequestBody @Valid RegisterRequest request) {
+    public Result<User> register(@RequestBody @Valid RegisterRequest request) {
         User user = new User();
         user.setUsername(request.getUsername());
         user.setPhone(request.getPhone());
         user.setPassword(request.getPassword());
-        return userService.register(user, request.getCaptcha(), request.getAgreement());
+        User registered = userService.register(user, request.getCaptcha(), request.getAgreement());
+        return Result.success("注册成功", registered);
     }
 
-    @PostMapping("/login")
+    /*@PostMapping("/login")
     public LoginResponse login(@RequestBody @Valid LoginRequest request) {
         String token = userService.login(request.getUsername(), request.getPassword());
         LoginResponse response = new LoginResponse();
         response.setToken(token);
         return response;
+    }*/
+    @PostMapping("/login")
+    public Result<Map<String, String>> login(@RequestBody @Valid LoginRequest request) {
+        String token = userService.login(request.getUsername(), request.getPassword());
+        Map<String, String> response = new HashMap<>();
+        response.put("token", token);
+        return Result.success("登录成功", response);
     }
 
     @PostMapping("/captcha")
-    public CaptchaResponse sendCaptcha(@RequestParam @NotBlank @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式错误") String phone) {
+    public Result<Boolean> sendCaptcha(@RequestParam @NotBlank @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式错误") String phone) {
         String captcha = userService.sendCaptcha(phone);
-        CaptchaResponse response = new CaptchaResponse();
-        response.setCaptcha(captcha);
-        return response;
+        return Result.success("验证码发送成功", captcha != null && !captcha.isEmpty());
     }
 
     @GetMapping("/{id}")
-    public User getUser(@PathVariable Integer id) {
-        return userService.getById(id);
+    public Result<User> getUser(@PathVariable Integer id) {
+        User user = userService.getById(id);
+        return Result.success("获取用户信息成功", user);
     }
 
     @PutMapping
-    public boolean updateUser(@RequestBody @Valid User user) {
-        return userService.updateById(user);
+    public Result<Boolean> updateUser(@RequestBody @Valid User user) {
+        boolean result = userService.updateById(user);
+        return Result.success("更新用户信息成功", result);
     }
 
     @DeleteMapping("/{id}")
-    public boolean deleteUser(@PathVariable Integer id) {
-        return userService.removeById(id);
+    public Result<Boolean> deleteUser(@PathVariable Integer id) {
+        boolean result = userService.removeById(id);
+        return Result.success("删除用户成功", result);
     }
 
     // 新增接口
     @GetMapping("/current")
-    public User getCurrentUser() {
-        return userService.getCurrentUser();
+    public Result<User> getCurrentUser() {
+        User user = userService.getCurrentUser();
+        return Result.success("获取当前用户成功", user);
     }
 
     @PutMapping("/profile")
-    public User updateProfile(@RequestBody @Valid User user) {
-        return userService.updateProfile(user);
+    public Result<User> updateProfile(@RequestBody @Valid User user) {
+        User updated = userService.updateProfile(user);
+        return Result.success("更新资料成功", updated);
     }
 
     @PostMapping("/change-password")
-    public boolean changePassword(@RequestBody @Valid ChangePasswordRequest request) {
-        return userService.changePassword(request.getOldPassword(), request.getNewPassword());
+    public Result<Boolean> changePassword(@RequestBody @Valid ChangePasswordRequest request) {
+        boolean result = userService.changePassword(request.getOldPassword(), request.getNewPassword());
+        return Result.success("修改密码成功", result);
     }
 
     @PostMapping("/reset-password")
-    public boolean resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
-        return userService.resetPassword(request.getPhone(), request.getCaptcha(), request.getNewPassword());
+    public Result<Boolean> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
+        boolean result = userService.resetPassword(request.getPhone(), request.getCaptcha(), request.getNewPassword());
+        return Result.success("重置密码成功", result);
     }
 
     @PostMapping("/logout")
-    public void logout() {
+    public Result<Boolean> logout() {
         userService.logout();
+        return Result.success("退出登录成功", true);
     }
 
     @PostMapping("/refresh-token")
-    public RefreshTokenResponse refreshToken(@RequestBody @Valid RefreshTokenRequest request) {
+    public Result<RefreshTokenResponse> refreshToken(@RequestBody @Valid RefreshTokenRequest request) {
         String newToken = userService.refreshToken(request.getOldToken());
         RefreshTokenResponse response = new RefreshTokenResponse();
         response.setToken(newToken);
-        return response;
+        return Result.success("刷新Token成功", response);
     }
 
     // 通知相关接口

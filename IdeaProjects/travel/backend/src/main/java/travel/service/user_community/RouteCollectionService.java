@@ -62,4 +62,14 @@ public interface RouteCollectionService extends IService<RouteCollection> {
      * 获取公开收藏列表
      */
     List<RouteCollection> getPublicCollections(int page, int size);
+
+    /**
+     * 获取用户收藏分类列表
+     */
+    List<String> getUserCollectionCategories(Integer userId);
+
+    /**
+     * 批量删除收藏
+     */
+    int batchRemoveCollections(List<Integer> ids);
 }

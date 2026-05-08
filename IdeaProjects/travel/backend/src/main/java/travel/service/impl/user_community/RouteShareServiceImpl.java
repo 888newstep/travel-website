@@ -524,4 +524,45 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
         routeInfo.put("shareDescription", share.getShareDescription());
         return routeInfo;
     }
+
+    @Override
+    public RouteShare generateShareCode(RouteShare share) {
+        log.info("生成分享码: itemId={}, itemType={}", share.getItemId(), share.getItemType());
+
+        if (share.getItemId() == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "项目ID不能为空");
+        }
+
+        String shareCode = generateUniqueShareCode();
+        share.setShareCode(shareCode);
+        share.setIsActive(true);
+        share.setCreatedAt(LocalDateTime.now());
+        share.setShareCount(0);
+        share.setVisitCount(0);
+
+        if (share.getExpireTime() == null) {
+            share.setExpireTime(LocalDateTime.now().plusDays(7));
+        }
+
+        save(share);
+        log.info("生成分享码成功: shareCode={}, itemId={}", shareCode, share.getItemId());
+        return share;
+    }
+
+    @Override
+    public boolean validateShareCode(String shareCode) {
+        log.info("验证分享码: shareCode={}", shareCode);
+
+        if (shareCode == null || shareCode.isBlank()) {
+            return false;
+        }
+
+        try {
+            RouteShare share = getByShareCode(shareCode);
+            return share != null && isShareValid(share);
+        } catch (Exception e) {
+            log.error("验证分享码失败: shareCode={}, error={}", shareCode, e.getMessage());
+            return false;
+        }
+    }
 }
