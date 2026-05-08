@@ -14,6 +14,16 @@ public interface TravelNoteService extends IService<TravelNote> {
     TravelNote createTravelNote(TravelNote travelNote, List<String> tags);
 
     /**
+     * 收藏游记
+     */
+    boolean collectNote(Integer noteId, Integer userId);
+
+    /**
+     * 取消收藏游记
+     */
+    boolean uncollectNote(Integer noteId, Integer userId);
+
+    /**
      * 更新游记
      */
     TravelNote updateTravelNote(Integer id, TravelNote travelNote, List<String> tags);
@@ -67,4 +77,9 @@ public interface TravelNoteService extends IService<TravelNote> {
      * 获取最新游记
      */
     List<Map<String, Object>> getLatestTravelNotes(int limit);
+
+    /**
+     * 统计用户的游记数量
+     */
+    int countByUserId(Integer userId);
 }

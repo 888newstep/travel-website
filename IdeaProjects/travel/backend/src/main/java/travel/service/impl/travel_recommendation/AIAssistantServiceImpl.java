@@ -2,6 +2,7 @@ package travel.service.impl.travel_recommendation;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Primary;
 import travel.entity.route_planning.Route;
 import travel.entity.travel_recommendation.Attraction;
 import travel.service.route_planning.RouteService;
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
+@Primary
 @RequiredArgsConstructor
 public class AIAssistantServiceImpl implements AIAssistantService {
 

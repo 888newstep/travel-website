@@ -22,6 +22,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
+import static com.baomidou.mybatisplus.extension.toolkit.Db.count;
+
 /**
  * 路线分享服务实现类
  */
@@ -63,8 +65,8 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
 
         // 5. 创建分享记录
         RouteShare routeShare = new RouteShare();
-        routeShare.setRoute(route);
-        routeShare.setUser(user);
+        routeShare.setRouteId(routeId);
+        routeShare.setUserId(userId);
         routeShare.setShareCode(shareCode);
         routeShare.setShareTitle(shareTitle);
         routeShare.setShareDescription(shareDescription != null ? shareDescription : route.getDescription());
@@ -78,6 +80,84 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
         save(routeShare);
 
         log.info("创建路线分享成功: routeId={}, userId={}, shareCode={}", routeId, userId, shareCode);
+        return routeShare;
+    }
+
+    @Override
+    public List<Map<String, Object>> getRouteShares(Integer routeId, int page, int size) {
+        if (routeId == null || routeId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        log.info("获取路线分享列表: routeId={}, page={}, size={}", routeId, page, size);
+
+        // 从数据库获取
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getRouteId, routeId)
+                .eq(RouteShare::getIsActive, true)
+                .orderByDesc(RouteShare::getCreatedAt);
+
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<RouteShare> pageResult =
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<RouteShare> result = page(pageResult, queryWrapper);
+
+        // 转换为 Map 格式返回
+        List<Map<String, Object>> shareList = new ArrayList<>();
+        for (RouteShare share : result.getRecords()) {
+            Map<String, Object> shareMap = new HashMap<>();
+            shareMap.put("id", share.getId());
+            shareMap.put("routeId", share.getRouteId());
+            shareMap.put("userId", share.getUserId());
+            shareMap.put("shareCode", share.getShareCode());
+            shareMap.put("shareTitle", share.getShareTitle());
+            shareMap.put("shareDescription", share.getShareDescription());
+            shareMap.put("shareCount", share.getShareCount());
+            shareMap.put("visitCount", share.getVisitCount());
+            shareMap.put("expireTime", share.getExpireTime());
+            shareMap.put("isActive", share.getIsActive());
+            shareMap.put("createdAt", share.getCreatedAt());
+
+            // 检查是否过期
+            shareMap.put("isExpired", !isShareValid(share));
+
+            shareList.add(shareMap);
+        }
+
+        log.info("获取路线分享列表成功: routeId={}, count={}", routeId, shareList.size());
+        return shareList;
+    }
+
+    @Override
+    public RouteShare shareRoute(Integer routeId, Integer userId, String platform, String shareContent) {
+        log.info("分享路线: routeId={}, userId={}, platform={}", routeId, userId, platform);
+
+        // 参数校验
+        if (routeId == null || userId == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        // 校验路线是否存在
+        Route route = routeService.getById(routeId.longValue());
+        if (route == null) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+        }
+
+        // 创建分享记录
+        RouteShare routeShare = new RouteShare();
+        routeShare.setRouteId(routeId);
+        routeShare.setUserId(userId);
+        routeShare.setShareCode(generateUniqueShareCode());
+        routeShare.setShareTitle(route.getTitle() + " - 分享");
+        routeShare.setShareDescription(shareContent != null ? shareContent : route.getDescription());
+        routeShare.setShareCount(1);
+        routeShare.setVisitCount(0);
+        routeShare.setIsActive(true);
+        routeShare.setCreatedAt(LocalDateTime.now());
+
+        // 保存到数据库
+        save(routeShare);
+
+        log.info("路线分享成功: routeId={}, userId={}, shareCode={}", routeId, userId, routeShare.getShareCode());
         return routeShare;
     }
 
@@ -213,6 +293,27 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
         }
 
         return result;
+    }
+
+    @Override
+    public boolean increaseVisitCount(String shareCode) {
+        log.info("增加访问次数: shareCode={}", shareCode);
+        RouteShare share = getByShareCode(shareCode);
+        if (share == null) {
+            return false;
+        }
+        return incrementVisitCount(share.getId());
+    }
+
+    @Override
+    public long countByUserId(Integer userId) {
+        if (userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getUserId, userId);
+        return count(queryWrapper);
     }
 
     @Override
@@ -355,7 +456,8 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
         LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RouteShare::getUserId, userId);
         queryWrapper.orderByDesc(RouteShare::getCreatedAt);
-        return list(queryWrapper);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<RouteShare> pageResult = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        return page(pageResult, queryWrapper).getRecords();
     }
 
     @Override
@@ -421,15 +523,5 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
         routeInfo.put("shareTitle", share.getShareTitle());
         routeInfo.put("shareDescription", share.getShareDescription());
         return routeInfo;
-    }
-
-    @Override
-    public boolean increaseVisitCount(String shareCode) {
-        log.info("增加访问次数: shareCode={}", shareCode);
-        RouteShare share = getByShareCode(shareCode);
-        if (share == null) {
-            return false;
-        }
-        return incrementVisitCount(share.getId());
     }
 }

@@ -1,6 +1,7 @@
 package travel.service.impl.user_community;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,13 +40,12 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
         return feedback;
     }
 
-    @Override
     public List<Feedback> getByUserId(Integer userId, Integer page, Integer size) {
         LambdaQueryWrapper<Feedback> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Feedback::getUserId, userId);
         queryWrapper.orderByDesc(Feedback::getCreatedAt);
-        // 分页查询
-        return page((page - 1) * size, size, queryWrapper);
+        Page<Feedback> feedbackPage = page(new Page<>(page, size), queryWrapper);
+        return feedbackPage.getRecords();
     }
 
     @Override
@@ -69,21 +69,6 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
         return feedback;
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public boolean replyFeedback(Long id, String replyContent) {
-        Feedback feedback = getById(id);
-        if (feedback == null) {
-            throw new BusinessException(ErrorCodeEnum.FEEDBACK_NOT_EXIST);
-        }
-
-        feedback.setReplyContent(replyContent);
-        feedback.setReplyTime(LocalDateTime.now());
-        feedback.setStatus("completed");
-        feedback.setUpdatedAt(LocalDateTime.now());
-
-        return updateById(feedback);
-    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -124,8 +109,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
             queryWrapper.eq(Feedback::getType, type);
         }
         queryWrapper.orderByDesc(Feedback::getCreatedAt);
-        // 分页查询
-        return page((page - 1) * size, size, queryWrapper);
+        return page(new Page<>(page, size), queryWrapper).getRecords();
     }
 
     @Override
@@ -163,13 +147,6 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
     /**
      * 分页查询辅助方法
      */
-    private List<Feedback> page(int offset, int limit, LambdaQueryWrapper<Feedback> queryWrapper) {
-        // 实际项目中应该使用MyBatis-Plus的分页插件
-        // 这里暂时使用limit查询
-        queryWrapper.last("LIMIT " + offset + ", " + limit);
-        return list(queryWrapper);
-    }
-
     // 以下是Controller中使用的方法实现
 
     @Override
@@ -179,16 +156,18 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
     }
 
     @Override
-    public boolean replyFeedback(Long feedbackId, String replyContent, String replyUserId) {
-        log.info("回复反馈: feedbackId={}, replyContent={}", feedbackId, replyContent);
-        Feedback feedback = getById(feedbackId);
+    @Transactional(rollbackFor = Exception.class)
+    public boolean replyFeedback(Long id, String replyContent) {
+        Feedback feedback = getById(id);
         if (feedback == null) {
-            return false;
+            throw new BusinessException(ErrorCodeEnum.FEEDBACK_NOT_EXIST);
         }
+
         feedback.setReplyContent(replyContent);
-        feedback.setReplyTime(java.time.LocalDateTime.now());
-        feedback.setStatus("completed");
-        feedback.setUpdatedAt(java.time.LocalDateTime.now());
+        feedback.setReplyTime(LocalDateTime.now());
+        feedback.setStatus("resolved");
+        feedback.setUpdatedAt(LocalDateTime.now());
+
         return updateById(feedback);
     }
 
@@ -199,7 +178,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
         if (feedback == null) {
             return false;
         }
-        feedback.setStatus("completed");
+        feedback.setStatus("resolved");
         feedback.setUpdatedAt(java.time.LocalDateTime.now());
         return updateById(feedback);
     }
@@ -212,6 +191,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
             queryWrapper.eq(Feedback::getType, type);
         }
         queryWrapper.orderByDesc(Feedback::getCreatedAt);
-        return page((page - 1) * size, size, queryWrapper);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Feedback> pageParam = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        return page(pageParam, queryWrapper).getRecords();
     }
 }

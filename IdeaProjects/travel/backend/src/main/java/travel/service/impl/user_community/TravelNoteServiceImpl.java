@@ -3,6 +3,7 @@ package travel.service.impl.user_community;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import org.springframework.jdbc.core.JdbcTemplate;
 import travel.entity.user_community.TravelNote;
 import travel.entity.user_community.TravelNoteTag;
 import travel.mapper.user_community_mapper.TravelNoteMapper;
@@ -21,27 +22,25 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
 
     private static final Logger log = LoggerFactory.getLogger(TravelNoteServiceImpl.class);
 
+    private final JdbcTemplate jdbcTemplate;
     @Override
     @Transactional
     public TravelNote createTravelNote(TravelNote travelNote, List<String> tags) {
         try {
-            // 保存游记
             save(travelNote);
-            
-            // 保存标签
+
             if (tags != null && !tags.isEmpty()) {
                 List<TravelNoteTag> noteTags = tags.stream()
                         .map(tag -> {
                             TravelNoteTag noteTag = new TravelNoteTag();
-                            noteTag.setTravelNoteId(travelNote.getId());
+                            noteTag.setNoteId(travelNote.getId());
                             noteTag.setTagName(tag);
                             return noteTag;
                         })
                         .collect(Collectors.toList());
-                // 这里可以使用批量保存
                 noteTags.forEach(this::saveTag);
             }
-            
+
             log.info("创建游记成功: id={}, userId={}, title={}", travelNote.getId(), travelNote.getUserId(), travelNote.getTitle());
             return travelNote;
         } catch (Exception e) {
@@ -51,35 +50,52 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     }
 
     @Override
+    public List<Map<String, Object>> getHotTravelNotes(int limit) {
+        try {
+            QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("is_public", true);
+            queryWrapper.orderByDesc("views_count", "likes_count", "comments_count");
+            queryWrapper.last("LIMIT " + limit);
+
+            List<TravelNote> travelNotes = list(queryWrapper);
+
+            return travelNotes.stream()
+                    .map(note -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("travelNote", note);
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("获取热门游记失败: limit={}", limit, e);
+            throw new RuntimeException("获取热门游记失败", e);
+        }
+    }
+    @Override
     @Transactional
     public TravelNote updateTravelNote(Integer id, TravelNote travelNote, List<String> tags) {
         try {
-            // 检查游记是否存在
             TravelNote existingNote = getById(id);
             if (existingNote == null) {
                 throw new RuntimeException("游记不存在");
             }
-            
-            // 更新游记
+
             travelNote.setId(id);
             updateById(travelNote);
-            
-            // 更新标签
+
             if (tags != null) {
-                // 删除旧标签
                 deleteTagsByNoteId(id);
-                // 添加新标签
                 List<TravelNoteTag> noteTags = tags.stream()
                         .map(tag -> {
                             TravelNoteTag noteTag = new TravelNoteTag();
-                            noteTag.setTravelNoteId(id);
+                            noteTag.setNoteId(id);
                             noteTag.setTagName(tag);
                             return noteTag;
                         })
                         .collect(Collectors.toList());
                 noteTags.forEach(this::saveTag);
             }
-            
+
             log.info("更新游记成功: id={}, userId={}, title={}", id, travelNote.getUserId(), travelNote.getTitle());
             return travelNote;
         } catch (Exception e) {
@@ -308,44 +324,15 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     }
 
     @Override
-    public List<Map<String, Object>> getHotTravelNotes(int limit) {
-        try {
-            // 构建查询条件
-            QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("is_public", true);
-            queryWrapper.orderByDesc("views_count", "likes_count", "comments_count");
-            queryWrapper.last("LIMIT " + limit);
-            
-            // 查询
-            List<TravelNote> travelNotes = list(queryWrapper);
-            
-            // 构建返回结果
-            return travelNotes.stream()
-                    .map(note -> {
-                        Map<String, Object> map = new HashMap<>();
-                        map.put("travelNote", note);
-                        return map;
-                    })
-                    .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.error("获取热门游记失败: limit={}", limit, e);
-            throw new RuntimeException("获取热门游记失败", e);
-        }
-    }
-
-    @Override
     public List<Map<String, Object>> getLatestTravelNotes(int limit) {
         try {
-            // 构建查询条件
             QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("is_public", true);
             queryWrapper.orderByDesc("created_at");
             queryWrapper.last("LIMIT " + limit);
-            
-            // 查询
+
             List<TravelNote> travelNotes = list(queryWrapper);
-            
-            // 构建返回结果
+
             return travelNotes.stream()
                     .map(note -> {
                         Map<String, Object> map = new HashMap<>();
@@ -359,14 +346,73 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
         }
     }
 
-    // 辅助方法
+    @Override
+    public int countByUserId(Integer userId) {
+        if (userId == null || userId <= 0) {
+            return 0;
+        }
+
+        QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId);
+        return Math.toIntExact(count(queryWrapper));
+    }
+
+    @Override
+    @Transactional
+    public boolean collectNote(Integer noteId, Integer userId) {
+        try {
+            if (noteId == null || userId == null) {
+                throw new RuntimeException("参数不能为空");
+            }
+
+            TravelNote note = getById(noteId);
+            if (note == null) {
+                throw new RuntimeException("游记不存在");
+            }
+
+            String sql = "INSERT INTO travel_note_collections (note_id, user_id, created_at) VALUES (?, ?, NOW())";
+            jdbcTemplate.update(sql, noteId, userId);
+
+            log.info("收藏游记成功: noteId={}, userId={}", noteId, userId);
+            return true;
+        } catch (Exception e) {
+            if (e.getMessage() != null && e.getMessage().contains("Duplicate")) {
+                throw new RuntimeException("已经收藏过该游记");
+            }
+            log.error("收藏游记失败: noteId={}, userId={}", noteId, userId, e);
+            throw new RuntimeException("收藏失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public boolean uncollectNote(Integer noteId, Integer userId) {
+        try {
+            if (noteId == null || userId == null) {
+                throw new RuntimeException("参数不能为空");
+            }
+
+            String sql = "DELETE FROM travel_note_collections WHERE note_id = ? AND user_id = ?";
+            int rows = jdbcTemplate.update(sql, noteId, userId);
+
+            if (rows == 0) {
+                throw new RuntimeException("未找到收藏记录");
+            }
+
+            log.info("取消收藏游记成功: noteId={}, userId={}", noteId, userId);
+            return true;
+        } catch (Exception e) {
+            log.error("取消收藏游记失败: noteId={}, userId={}", noteId, userId, e);
+            throw new RuntimeException("取消收藏失败: " + e.getMessage());
+        }
+    }
     private void saveTag(TravelNoteTag tag) {
-        // 这里可以使用标签的Service或Mapper来保存
-        // 为了简化，这里假设直接保存
+        String sql = "INSERT INTO travel_note_tags (note_id, tag_name) VALUES (?, ?)";
+        jdbcTemplate.update(sql, tag.getNoteId(), tag.getTagName());
     }
 
     private void deleteTagsByNoteId(Integer noteId) {
-        // 这里可以使用标签的Service或Mapper来删除
-        // 为了简化，这里假设直接删除
+        String sql = "DELETE FROM travel_note_tags WHERE note_id = ?";
+        jdbcTemplate.update(sql, noteId);
     }
 }

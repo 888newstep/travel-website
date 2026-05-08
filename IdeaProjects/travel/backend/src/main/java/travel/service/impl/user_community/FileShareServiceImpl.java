@@ -1,11 +1,11 @@
 package travel.service.impl.user_community;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.entity.travel_recommendation.ResourceFile;
 import travel.service.user_community.FileShareService;
 import travel.service.travel_recommendation.ResourceFileService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -14,10 +14,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class FileShareServiceImpl implements FileShareService {
 
-    @Autowired
-    private ResourceFileService resourceFileService;
+    private final ResourceFileService resourceFileService;
 
     // 内存缓存分享记录，实际项目中应使用Redis
     private final Map<String, ShareRecord> shareCache = new ConcurrentHashMap<>();

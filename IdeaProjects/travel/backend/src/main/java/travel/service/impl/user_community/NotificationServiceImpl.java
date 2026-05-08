@@ -60,8 +60,8 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         LambdaQueryWrapper<Notification> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Notification::getUserId, userId);
         queryWrapper.orderByDesc(Notification::getCreatedAt);
-        // 分页查询
-        return page((page - 1) * size, size, queryWrapper);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> pageParam = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        return page(pageParam, queryWrapper).getRecords();
     }
 
     @Override
@@ -72,14 +72,13 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean markAsRead(Integer id) {
+    public boolean markAsRead(Integer id, Integer userId) {
         Notification notification = getById(id);
         if (notification == null) {
             throw new BusinessException(ErrorCodeEnum.NOTIFICATION_NOT_EXIST);
         }
 
-        User currentUser = userService.getCurrentUser();
-        if (!notification.getUserId().equals(currentUser.getId())) {
+        if (!notification.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
         }
 
@@ -105,14 +104,13 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public boolean deleteNotification(Integer id) {
+    public boolean deleteNotification(Integer id, Integer userId) {
         Notification notification = getById(id);
         if (notification == null) {
             throw new BusinessException(ErrorCodeEnum.NOTIFICATION_NOT_EXIST);
         }
 
-        User currentUser = userService.getCurrentUser();
-        if (!notification.getUserId().equals(currentUser.getId())) {
+        if (!notification.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
         }
 

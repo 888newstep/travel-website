@@ -31,7 +31,7 @@ public class TravelPlanServiceImpl extends ServiceImpl<TravelPlanMapper, TravelP
         plan.setUserId(currentUser.getId());
         plan.setCreatedAt(LocalDateTime.now());
         plan.setUpdatedAt(LocalDateTime.now());
-        plan.setStatus("pending");
+        plan.setStatus("planning");
 
         save(plan);
         return plan;
@@ -130,7 +130,7 @@ public class TravelPlanServiceImpl extends ServiceImpl<TravelPlanMapper, TravelP
         newPlan.setStartDate(originalPlan.getStartDate());
         newPlan.setEndDate(originalPlan.getEndDate());
         newPlan.setDestinations(originalPlan.getDestinations());
-        newPlan.setStatus("pending");
+        newPlan.setStatus("planning");
         newPlan.setCoverImage(originalPlan.getCoverImage());
         newPlan.setCreatedAt(LocalDateTime.now());
         newPlan.setUpdatedAt(LocalDateTime.now());

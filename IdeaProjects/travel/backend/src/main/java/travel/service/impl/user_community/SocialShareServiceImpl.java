@@ -6,7 +6,6 @@ import travel.entity.route_planning.Route;
 import travel.service.route_planning.RouteService;
 import travel.service.user_community.SocialShareService;
 import travel.utils.CacheUtil;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -18,11 +17,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class SocialShareServiceImpl implements SocialShareService {
 
-    @Autowired
-    private RouteService routeService;
-
-    @Autowired
-    private CacheUtil cacheUtil;
+    private final RouteService routeService;
+    private final CacheUtil cacheUtil;
 
     private static final String SHARE_PREFIX = "social:share:";
     private static final String LIKE_PREFIX = "social:like:";

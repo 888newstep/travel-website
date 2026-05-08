@@ -19,7 +19,7 @@
     "jsxImportSource": "vue",
     "paths": {
       "@/*": [
-        "./src/*"
+        "./*"
       ]
     },
     "allowImportingTsExtensions": true,

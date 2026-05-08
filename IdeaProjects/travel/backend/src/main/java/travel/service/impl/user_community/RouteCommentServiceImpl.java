@@ -18,6 +18,7 @@ import travel.service.user_community.UserService;
 import travel.utils.CacheUtil;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -67,13 +68,17 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
 
         // 6. 创建评论
         RouteComment routeComment = new RouteComment();
-        routeComment.setRoute(route);
-        routeComment.setUser(user);
+        routeComment.setRouteId(routeId);
+        routeComment.setUserId(userId);
         routeComment.setRating(rating);
         routeComment.setContent(content);
         routeComment.setImages(images);
         routeComment.setIsAnonymous(isAnonymous != null && isAnonymous);
         routeComment.setReplyTo(replyTo);
+        routeComment.setIsPublished(true);
+        routeComment.setLikesCount(0);
+        routeComment.setCreatedAt(LocalDateTime.now());
+        routeComment.setUpdatedAt(LocalDateTime.now());
 
         // 7. 保存到数据库
         save(routeComment);
@@ -149,6 +154,7 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
 
         // 从数据库获取
         LambdaQueryWrapper<RouteComment> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteComment::getUserId, userId);
         queryWrapper.orderByDesc(RouteComment::getCreatedAt);
 
         IPage<RouteComment> pageResult = page(new Page<>(page, size), queryWrapper);
@@ -185,8 +191,8 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
             // 缓存点赞记录
             cacheUtil.set(likeCacheKey, true, 365, TimeUnit.DAYS);
             // 清除缓存
-            if (routeComment.getRoute() != null) {
-                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRoute().getId());
+            if (routeComment.getRouteId() != null) {
+                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId());
                 cacheUtil.delete(routeCommentsCacheKey);
             }
             log.info("点赞评论成功: commentId={}, userId={}", commentId, userId);
@@ -222,8 +228,8 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
             // 删除点赞记录
             cacheUtil.delete(likeCacheKey);
             // 清除缓存
-            if (routeComment.getRoute() != null) {
-                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRoute().getId());
+            if (routeComment.getRouteId() != null) {
+                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId());
                 cacheUtil.delete(routeCommentsCacheKey);
             }
             log.info("取消点赞评论成功: commentId={}, userId={}", commentId, userId);
@@ -244,7 +250,7 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
         }
 
         // 校验归属
-        if (routeComment.getUser() == null || !routeComment.getUser().getId().equals(userId)) {
+        if (!routeComment.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCodeEnum.NO_COMMENT_PERMISSION);
         }
 
@@ -253,10 +259,10 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
 
         if (result) {
             // 清除缓存
-            if (routeComment.getRoute() != null) {
-                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRoute().getId());
+            if (routeComment.getRouteId() != null) {
+                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId());
                 cacheUtil.delete(routeCommentsCacheKey);
-                String routeStatsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "stats", routeComment.getRoute().getId());
+                String routeStatsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "stats", routeComment.getRouteId());
                 cacheUtil.delete(routeStatsCacheKey);
             }
             String userCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "user", userId);
