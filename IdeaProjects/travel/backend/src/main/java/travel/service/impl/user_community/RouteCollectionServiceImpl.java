@@ -49,6 +49,65 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
         }
     }
 
+    private void invalidateCollectedCache(Integer routeId, Integer userId) {
+        String collectedCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "collected", routeId, userId);
+        cacheUtil.delete(collectedCacheKey);
+    }
+
+    @Override
+    public List<String> getUserCollectionCategories(Integer userId) {
+        if (userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        log.info("获取用户收藏分类: userId={}", userId);
+
+        LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteCollection::getUserId, userId)
+                .select(RouteCollection::getCategory)
+                .groupBy(RouteCollection::getCategory);
+
+        List<RouteCollection> collections = list(queryWrapper);
+        List<String> categories = collections.stream()
+                .map(RouteCollection::getCategory)
+                .filter(category -> category != null && !category.isEmpty())
+                .distinct()
+                .collect(Collectors.toList());
+
+        if (categories.isEmpty()) {
+            categories.add("默认分类");
+        }
+
+        log.info("用户收藏分类: userId={}, categories={}", userId, categories);
+        return categories;
+    }
+
+    @Override
+    public int batchRemoveCollections(List<Integer> ids) {
+        if (ids == null || ids.isEmpty()) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        log.info("批量删除收藏: count={}", ids.size());
+
+        LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.in(RouteCollection::getId, ids);
+
+        List<RouteCollection> collections = list(queryWrapper);
+
+        boolean result = remove(queryWrapper);
+
+        if (result) {
+            for (RouteCollection collection : collections) {
+                invalidateUserCache(collection.getUserId());
+                invalidateRouteCountCache(collection.getRouteId());
+            }
+            log.info("批量删除收藏成功: count={}", ids.size());
+        }
+
+        return collections.size();
+    }
+
     @Override
     public boolean uncollectRoute(Integer routeId, Integer userId) {
         return cancelCollect(routeId, userId);
@@ -316,8 +375,4 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
         cacheUtil.delete(routeCollectionCountCacheKey);
     }
 
-    private void invalidateCollectedCache(Integer routeId, Integer userId) {
-        String collectedCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "collected", routeId, userId);
-        cacheUtil.delete(collectedCacheKey);
-    }
 }

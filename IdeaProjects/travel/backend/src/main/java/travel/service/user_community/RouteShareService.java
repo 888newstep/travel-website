@@ -14,6 +14,16 @@ public interface RouteShareService extends IService<RouteShare> {
     RouteShare shareRoute(Integer routeId, Integer userId, String platform, String shareContent);
 
     /**
+     * 生成分享码
+     */
+    RouteShare generateShareCode(RouteShare share);
+
+    /**
+     * 验证分享码是否有效
+     */
+    boolean validateShareCode(String shareCode);
+
+    /**
      * 获取路线的分享列表
      */
     List<Map<String, Object>> getRouteShares(Integer routeId, int page, int size);

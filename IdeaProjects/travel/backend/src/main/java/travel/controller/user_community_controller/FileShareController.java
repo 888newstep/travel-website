@@ -38,6 +38,26 @@ public class FileShareController {
         }
     }
 
+    @PostMapping("/generate")
+    public Result<RouteShare> generateFileShareCode(@RequestBody Map<String, Object> request) {
+        try {
+            Integer fileId = (Integer) request.get("fileId");
+
+            log.info("生成文件分享码请求: fileId={}", fileId);
+
+            RouteShare share = new RouteShare();
+            share.setItemId(fileId);
+            share.setItemType("file");
+            share.setUserId(null);
+
+            RouteShare result = routeShareService.generateShareCode(share);
+            return Result.success("生成分享码成功", result);
+        } catch (Exception e) {
+            log.error("生成文件分享码失败: error={}", e.getMessage());
+            return Result.error("生成分享码失败: " + e.getMessage());
+        }
+    }
+
     /**
      * 通过分享码获取文件信息
      * GET /api/file-share/info/{shareCode}
