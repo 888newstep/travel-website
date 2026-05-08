@@ -25,7 +25,7 @@ public interface NotificationService extends IService<Notification> {
     /**
      * 标记通知为已读
      */
-    boolean markAsRead(Integer id);
+    boolean markAsRead(Integer id, Integer userId);
 
     /**
      * 标记所有通知为已读
@@ -35,7 +35,7 @@ public interface NotificationService extends IService<Notification> {
     /**
      * 删除通知
      */
-    boolean deleteNotification(Integer id);
+    boolean deleteNotification(Integer id, Integer userId);
 
     /**
      * 获取未读通知数量

@@ -2,11 +2,11 @@ package travel.service.impl.user_community;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.entity.user_community.FileComment;
 import travel.mapper.user_community_mapper.FileCommentMapper;
 import travel.service.user_community.FileCommentService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -15,10 +15,8 @@ import java.util.Optional;
 
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class FileCommentServiceImpl extends ServiceImpl<FileCommentMapper, FileComment> implements FileCommentService {
-
-    @Autowired
-    private FileCommentMapper fileCommentMapper;
 
     @Override
     public List<FileComment> getByFileId(Integer fileId) {
@@ -27,7 +25,7 @@ public class FileCommentServiceImpl extends ServiceImpl<FileCommentMapper, FileC
             queryWrapper.eq(FileComment::getFileId, fileId)
                     .eq(FileComment::getStatus, 1)
                     .orderByDesc(FileComment::getCreateTime);
-            List<FileComment> comments = fileCommentMapper.selectList(queryWrapper);
+            List<FileComment> comments = list(queryWrapper);
             log.info("获取文件评论成功: fileId={}, count={}", fileId, comments.size());
             return comments;
         } catch (Exception e) {
@@ -43,7 +41,7 @@ public class FileCommentServiceImpl extends ServiceImpl<FileCommentMapper, FileC
             queryWrapper.eq(FileComment::getUserId, userId)
                     .eq(FileComment::getStatus, 1)
                     .orderByDesc(FileComment::getCreateTime);
-            List<FileComment> comments = fileCommentMapper.selectList(queryWrapper);
+            List<FileComment> comments = list(queryWrapper);
             log.info("获取用户评论成功: userId={}, count={}", userId, comments.size());
             return comments;
         } catch (Exception e) {
@@ -59,7 +57,7 @@ public class FileCommentServiceImpl extends ServiceImpl<FileCommentMapper, FileC
             queryWrapper.eq(FileComment::getParentId, parentId)
                     .eq(FileComment::getStatus, 1)
                     .orderByAsc(FileComment::getCreateTime);
-            List<FileComment> comments = fileCommentMapper.selectList(queryWrapper);
+            List<FileComment> comments = list(queryWrapper);
             log.info("获取评论回复成功: parentId={}, count={}", parentId, comments.size());
             return comments;
         } catch (Exception e) {
@@ -76,7 +74,7 @@ public class FileCommentServiceImpl extends ServiceImpl<FileCommentMapper, FileC
                     .eq(FileComment::getParentId, 0)
                     .orderByDesc(FileComment::getCreateTime)
                     .last("LIMIT " + limit);
-            List<FileComment> comments = fileCommentMapper.selectList(queryWrapper);
+            List<FileComment> comments = list(queryWrapper);
             log.info("获取最近评论成功: limit={}, count={}", limit, comments.size());
             return comments;
         } catch (Exception e) {
@@ -188,7 +186,7 @@ public class FileCommentServiceImpl extends ServiceImpl<FileCommentMapper, FileC
                     .eq(FileComment::getStatus, 1)
                     .gt(FileComment::getRating, 0);
 
-            List<FileComment> comments = fileCommentMapper.selectList(queryWrapper);
+            List<FileComment> comments = list(queryWrapper);
             if (comments.isEmpty()) {
                 return 0.0;
             }
@@ -213,9 +211,9 @@ public class FileCommentServiceImpl extends ServiceImpl<FileCommentMapper, FileC
             queryWrapper.eq(FileComment::getFileId, fileId)
                     .eq(FileComment::getStatus, 1);
 
-            Long count = fileCommentMapper.selectCount(queryWrapper);
+            long count = count(queryWrapper);
             log.info("获取文件评论数成功: fileId={}, count={}", fileId, count);
-            return count.intValue();
+            return (int) count;
         } catch (Exception e) {
             log.error("获取文件评论数失败: fileId={}, error={}", fileId, e.getMessage());
             throw new RuntimeException("获取评论数失败: " + e.getMessage());

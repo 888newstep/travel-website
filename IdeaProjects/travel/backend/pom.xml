@@ -47,6 +47,13 @@
             <version>${spring-boot.version}</version>
         </dependency>
 
+        <!-- OpenAI Java Client -->
+        <dependency>
+            <groupId>com.theokanning.openai-gpt3-java</groupId>
+            <artifactId>service</artifactId>
+            <version>0.18.2</version>
+        </dependency>
+
         <!-- Spring Boot Starter Web (核心Web依赖，必须放在最前面) -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -177,6 +184,12 @@
             <version>3.5.8</version>
         </dependency>
 
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <version>0.12.5</version>
+            <scope>runtime</scope>
+        </dependency>
         <!-- 强制使用 mybatis-spring 3.x 版本 -->
         <dependency>
             <groupId>org.mybatis</groupId>

@@ -81,8 +81,7 @@ public class FeedbackController {
         try {
             log.info("回复反馈请求: id={}", id);
             String replyContent = replyData.get("replyContent");
-            String replyUser = replyData.get("replyUser");
-            boolean result = feedbackService.replyFeedback(id, replyContent, replyUser);
+            boolean result = feedbackService.replyFeedback(id, replyContent);
             return Result.success("回复反馈成功", result);
         } catch (Exception e) {
             log.error("回复反馈失败: id={}, error={}", id, e.getMessage());

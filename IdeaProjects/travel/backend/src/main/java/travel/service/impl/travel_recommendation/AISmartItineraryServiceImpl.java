@@ -6,7 +6,6 @@ import travel.entity.route_planning.Route;
 import travel.service.route_planning.RouteService;
 import travel.service.travel_recommendation.AISmartItineraryService;
 import travel.utils.CacheUtil;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -21,11 +20,8 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class AISmartItineraryServiceImpl implements AISmartItineraryService {
 
-    @Autowired
-    private RouteService routeService;
-
-    @Autowired
-    private CacheUtil cacheUtil;
+    private final RouteService routeService;
+    private final CacheUtil cacheUtil;
 
     private static final String ITINERARY_PREFIX = "ai:itinerary:";
 

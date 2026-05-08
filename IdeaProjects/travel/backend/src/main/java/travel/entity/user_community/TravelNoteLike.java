@@ -15,8 +15,8 @@ public class TravelNoteLike {
     @TableId(type = IdType.AUTO)
     private Integer id;
 
-    @TableField("travel_note_id")
-    private Integer travelNoteId;
+    @TableField("note_id")
+    private Integer noteId;
 
     @TableField("user_id")
     private Integer userId;
@@ -24,7 +24,6 @@ public class TravelNoteLike {
     @TableField("created_at")
     private LocalDateTime createdAt;
 
-    // 关联关系
     @TableField(exist = false)
     private TravelNote travelNote;
 

@@ -14,11 +14,6 @@ public interface FeedbackService extends IService<Feedback> {
     Feedback submitFeedback(Feedback feedback);
 
     /**
-     * 获取用户的反馈列表
-     */
-    List<Feedback> getByUserId(Integer userId, Integer page, Integer size);
-
-    /**
      * 获取当前用户的反馈列表
      */
     List<Feedback> getCurrentUserFeedbacks(Integer page, Integer size);
@@ -53,39 +48,18 @@ public interface FeedbackService extends IService<Feedback> {
      */
     Map<String, Object> getFeedbackStatistics();
 
-    // 以下是Controller中使用的方法
-
     /**
      * 获取用户反馈列表
-     * @param userId 用户ID
-     * @param page 页码
-     * @param size 每页数量
-     * @return 反馈列表
      */
     List<Feedback> getUserFeedbackList(Integer userId, int page, int size);
 
     /**
-     * 回复反馈
-     * @param feedbackId 反馈ID
-     * @param replyContent 回复内容
-     * @param replyUserId 回复用户ID
-     * @return 是否成功
-     */
-    boolean replyFeedback(Long feedbackId, String replyContent, String replyUserId);
-
-    /**
      * 标记为已处理
-     * @param feedbackId 反馈ID
-     * @return 是否成功
      */
     boolean markAsProcessed(Long feedbackId);
 
     /**
      * 根据类型获取反馈
-     * @param type 类型
-     * @param page 页码
-     * @param size 每页数量
-     * @return 反馈列表
      */
     List<Feedback> getFeedbackByType(String type, int page, int size);
 }

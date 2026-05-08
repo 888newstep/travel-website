@@ -2,7 +2,11 @@ package travel.controller.user_community_controller;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import travel.entity.user_community.Feedback;
+import travel.entity.user_community.Notification;
 import travel.entity.user_community.User;
+import travel.service.impl.user_community.NotificationServiceImpl;
+import travel.service.user_community.FeedbackService;
 import travel.service.user_community.UserService;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -10,8 +14,11 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import travel.utils.Result;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @RestController
@@ -21,6 +28,8 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final NotificationServiceImpl notificationService;
+    private final FeedbackService feedbackService;
 
     @PostMapping("/register")
     public User register(@RequestBody @Valid RegisterRequest request) {
@@ -98,38 +107,58 @@ public class UserController {
 
     // 通知相关接口
     @GetMapping("/notifications")
-    public List<NotificationResponse> getNotifications(@RequestParam(defaultValue = "0") Integer page, 
-                                                      @RequestParam(defaultValue = "20") Integer size) {
-        // 这里需要实现通知列表查询
-        // 暂时返回空列表
-        return new ArrayList<>();
+    public Result<List<Notification>> getNotifications(@RequestParam(defaultValue = "1") Integer page,
+                                                       @RequestParam(defaultValue = "20") Integer size) {
+        User currentUser = userService.getCurrentUser();
+        List<Notification> notifications = notificationService.getByUserId(currentUser.getId(), page, size);
+        return Result.success("获取通知列表成功", notifications);
     }
 
     @PutMapping("/notifications/{id}/read")
-    public boolean markNotificationAsRead(@PathVariable Integer id) {
-        // 这里需要实现标记通知为已读
-        return true;
+    public Result<Boolean> markNotificationAsRead(@PathVariable Integer id) {
+        User currentUser = userService.getCurrentUser();
+        notificationService.markAsRead(id, currentUser.getId());
+        return Result.success("标记为已读成功", true);
     }
 
     @DeleteMapping("/notifications/{id}")
-    public boolean deleteNotification(@PathVariable Integer id) {
-        // 这里需要实现删除通知
-        return true;
+    public Result<Boolean> deleteNotification(@PathVariable Integer id) {
+        User currentUser = userService.getCurrentUser();
+        notificationService.deleteNotification(id, currentUser.getId());
+        return Result.success("删除通知成功", true);
     }
 
-    // 反馈相关接口
+    @GetMapping("/notifications/unread-count")
+    public Result<Integer> getUnreadCount() {
+        int count = notificationService.getUnreadCount();
+        return Result.success("获取未读数量成功", count);
+    }
+
+    @PostMapping("/notifications/mark-all-read")
+    public Result<Boolean> markAllAsRead() {
+        notificationService.markAllAsRead();
+        return Result.success("全部标记为已读成功", true);
+    }
+
     @PostMapping("/feedback")
-    public boolean submitFeedback(@RequestBody @Valid FeedbackRequest request) {
-        // 这里需要实现提交反馈
-        return true;
+    public Result<Feedback> submitFeedback(@RequestBody @Valid FeedbackRequest request) {
+        User currentUser = userService.getCurrentUser();
+
+        Feedback feedback = new Feedback();
+        feedback.setType(request.getType());
+        feedback.setContent(request.getContent());
+        feedback.setContactInfo(request.getContactInfo());
+
+        Feedback result = feedbackService.submitFeedback(feedback);
+        return Result.success("提交反馈成功", result);
     }
 
     @GetMapping("/feedback/list")
-    public List<FeedbackResponse> getFeedbackList(@RequestParam(defaultValue = "0") Integer page, 
+    public Result<List<Feedback>> getFeedbackList(@RequestParam(defaultValue = "1") Integer page,
                                                   @RequestParam(defaultValue = "20") Integer size) {
-        // 这里需要实现反馈列表查询
-        // 暂时返回空列表
-        return new ArrayList<>();
+        User currentUser = userService.getCurrentUser();
+        List<Feedback> feedbackList = feedbackService.getCurrentUserFeedbacks(page, size);
+        return Result.success("获取反馈列表成功", feedbackList);
     }
 
     // 请求和响应对象

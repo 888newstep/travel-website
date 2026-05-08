@@ -1,14 +1,19 @@
 package travel.controller.user_community_controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.entity.user_community.RouteShare;
+import travel.enums.ErrorCodeEnum;
+import travel.exception.BusinessException;
 import travel.service.user_community.RouteShareService;
 import travel.utils.Result;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+
+import static com.baomidou.mybatisplus.extension.toolkit.Db.count;
 
 /**
  * 路线分享控制器
@@ -69,6 +74,8 @@ public class RouteShareController {
             return Result.error("访问失败: " + e.getMessage());
         }
     }
+
+
 
     /**
      * 查询用户的分享列表
