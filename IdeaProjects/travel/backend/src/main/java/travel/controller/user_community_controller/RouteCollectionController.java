@@ -1,5 +1,6 @@
 package travel.controller.user_community_controller;
 
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -9,9 +10,10 @@ import travel.service.user_community.RouteCollectionService;
 import travel.utils.Result;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/route-collections")
+@RequestMapping("/v1/route-collections")
 @RequiredArgsConstructor
 public class RouteCollectionController {
 
@@ -19,10 +21,10 @@ public class RouteCollectionController {
     private final RouteCollectionService routeCollectionService;
 
     @PostMapping("/collect")
-    public Result<Boolean> collectRoute(@RequestParam Integer routeId, @RequestParam Integer userId) {
+    public Result<Boolean> collectRoute(@RequestBody CollectRequest request) {
         try {
-            log.info("收藏路线请求: routeId={}, userId={}", routeId, userId);
-            boolean result = routeCollectionService.collectRoute(routeId, userId);
+            log.info("收藏路线请求: routeId={}, userId={}", request.getRouteId(), request.getUserId());
+            boolean result = routeCollectionService.collectRoute(request.getRouteId(), request.getUserId());
             return Result.success("收藏成功", result);
         } catch (Exception e) {
             log.error("收藏路线失败: error={}", e.getMessage());
@@ -31,10 +33,10 @@ public class RouteCollectionController {
     }
 
     @DeleteMapping("/uncollect")
-    public Result<Boolean> uncollectRoute(@RequestParam Integer routeId, @RequestParam Integer userId) {
+    public Result<Boolean> uncollectRoute(@RequestBody CollectRequest request) {
         try {
-            log.info("取消路线收藏请求: routeId={}, userId={}", routeId, userId);
-            boolean result = routeCollectionService.uncollectRoute(routeId, userId);
+            log.info("取消路线收藏请求: routeId={}, userId={}", request.getRouteId(), request.getUserId());
+            boolean result = routeCollectionService.uncollectRoute(request.getRouteId(), request.getUserId());
             return Result.success("取消收藏成功", result);
         } catch (Exception e) {
             log.error("取消路线收藏失败: error={}", e.getMessage());
@@ -44,7 +46,7 @@ public class RouteCollectionController {
 
     @GetMapping("/list/{userId}")
     public Result<List<RouteCollectionVO>> getUserCollections(@PathVariable Integer userId,
-                                                              @RequestParam(defaultValue = "1") int page,
+                                                              @RequestParam(defaultValue = "0") int page,
                                                               @RequestParam(defaultValue = "10") int size) {
         try {
             log.info("查询用户收藏列表请求: userId={}, page={}, size={}", userId, page, size);
@@ -70,11 +72,10 @@ public class RouteCollectionController {
 
     @PutMapping("/{collectionId}/notes")
     public Result<Boolean> updateCollectionNotes(@PathVariable Integer collectionId,
-                                                 @RequestParam Integer userId,
-                                                 @RequestParam String notes) {
+                                                 @RequestBody UpdateNotesRequest request) {
         try {
-            log.info("更新收藏备注请求: collectionId={}, userId={}", collectionId, userId);
-            boolean result = routeCollectionService.updateCollectionNotes(collectionId, userId, notes);
+            log.info("更新收藏备注请求: collectionId={}, userId={}", collectionId, request.getUserId());
+            boolean result = routeCollectionService.updateCollectionNotes(collectionId, request.getUserId(), request.getNotes());
             return Result.success("更新备注成功", result);
         } catch (Exception e) {
             log.error("更新收藏备注失败: collectionId={}, error={}", collectionId, e.getMessage());
@@ -84,11 +85,10 @@ public class RouteCollectionController {
 
     @PutMapping("/{collectionId}/public-status")
     public Result<Boolean> updatePublicStatus(@PathVariable Integer collectionId,
-                                              @RequestParam Integer userId,
-                                              @RequestParam Boolean isPublic) {
+                                              @RequestBody UpdatePublicStatusRequest request) {
         try {
-            log.info("更新收藏公开状态请求: collectionId={}, userId={}", collectionId, userId);
-            boolean result = routeCollectionService.updateCollectionPublicStatus(collectionId, userId, isPublic);
+            log.info("更新收藏公开状态请求: collectionId={}, userId={}", collectionId, request.getUserId());
+            boolean result = routeCollectionService.updateCollectionPublicStatus(collectionId, request.getUserId(), request.getIsPublic());
             return Result.success("更新状态成功", result);
         } catch (Exception e) {
             log.error("更新收藏公开状态失败: collectionId={}, error={}", collectionId, e.getMessage());
@@ -98,7 +98,7 @@ public class RouteCollectionController {
 
     @GetMapping("/public")
     public Result<List<travel.entity.user_community.RouteCollection>> getPublicCollections(
-            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
         try {
             log.info("获取公开收藏列表请求: page={}, size={}", page, size);
@@ -108,5 +108,25 @@ public class RouteCollectionController {
             log.error("获取公开收藏列表失败: error={}", e.getMessage());
             return Result.error("查询失败: " + e.getMessage());
         }
+    }
+
+    // ==================== 请求DTO ====================
+
+    @Data
+    public static class CollectRequest {
+        private Integer routeId;
+        private Integer userId;
+    }
+
+    @Data
+    public static class UpdateNotesRequest {
+        private Integer userId;
+        private String notes;
+    }
+
+    @Data
+    public static class UpdatePublicStatusRequest {
+        private Integer userId;
+        private Boolean isPublic;
     }
 }

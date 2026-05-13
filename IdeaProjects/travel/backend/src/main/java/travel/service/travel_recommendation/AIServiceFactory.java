@@ -73,9 +73,33 @@ public class AIServiceFactory {
     }
 
     /**
+     * 检查通义千问服务是否可用
+     */
+    public boolean isQwenAvailable() {
+        return aiConfig.getQwen() != null
+                && aiConfig.getQwen().getEnabled()
+                && aiConfig.getQwen().getApiKey() != null
+                && !aiConfig.getQwen().getApiKey().isEmpty();
+    }
+
+    /**
      * 检查百度AI服务是否可用
      */
     public boolean isBaiduAiAvailable() {
         return baiduImageClassify != null && baiduOcr != null;
+    }
+
+    /**
+     * 获取首选AI服务类型
+     * 优先级：通义千问 > OpenAI > 模拟
+     */
+    public String getPreferredAIService() {
+        if (isQwenAvailable()) {
+            return "qwen";
+        } else if (isOpenAiAvailable()) {
+            return "openai";
+        } else {
+            return "simulation";
+        }
     }
 }

@@ -1,33 +1,70 @@
 import apiClient from '../utils/api';
 
 export interface RouteCollection {
-    id: number;
+    id?: number;
     userId: number;
     routeId: number;
     note?: string;
     category?: string;
+    isPublic?: boolean;
     createTime?: string;
 }
 
+export interface RouteCollectionVO extends RouteCollection {
+    routeTitle?: string;
+    routeDescription?: string;
+    routeImage?: string;
+}
+
 export const collectionApi = {
+    collectRoute(routeId: number, userId: number) {
+        return apiClient.post<boolean>('/api/v1/route-collections/collect', null, {
+            params: { routeId, userId },
+        });
+    },
+
+    uncollectRoute(routeId: number, userId: number) {
+        return apiClient.delete<boolean>('/api/v1/route-collections/uncollect', {
+            params: { routeId, userId },
+        });
+    },
+
+    getUserCollections(userId: number, page: number = 1, size: number = 10) {
+        return apiClient.get<RouteCollectionVO[]>(`/api/v1/route-collections/list/${userId}`, {
+            params: { page, size },
+        });
+    },
+
+    checkCollected(userId: number, routeId: number) {
+        return apiClient.get<boolean>('/api/v1/route-collections/check', {
+            params: { userId, routeId },
+        });
+    },
+
+    updateCollectionNotes(collectionId: number, userId: number, notes: string) {
+        return apiClient.put<boolean>(`/api/v1/route-collections/${collectionId}/notes`, null, {
+            params: { collectionId, userId, notes },
+        });
+    },
+
+    updatePublicStatus(collectionId: number, userId: number, isPublic: boolean) {
+        return apiClient.put<boolean>(`/api/v1/route-collections/${collectionId}/public-status`, null, {
+            params: { collectionId, userId, isPublic },
+        });
+    },
+
+    getPublicCollections(page: number = 1, size: number = 10) {
+        return apiClient.get<RouteCollection[]>('/api/v1/route-collections/public', {
+            params: { page, size },
+        });
+    },
+
     addCollection(collection: Omit<RouteCollection, 'id' | 'createTime'>) {
         return apiClient.post<RouteCollection>('/route-collection/add', collection);
     },
 
     removeCollection(userId: number, routeId: number) {
         return apiClient.delete('/route-collection/remove', {
-            params: { userId, routeId },
-        });
-    },
-
-    getUserCollections(userId: number, page: number = 0, size: number = 10) {
-        return apiClient.get<RouteCollection[]>(`/route-collection/list/${userId}`, {
-            params: { page, size },
-        });
-    },
-
-    checkCollected(userId: number, routeId: number) {
-        return apiClient.get<boolean>('/route-collection/check', {
             params: { userId, routeId },
         });
     },

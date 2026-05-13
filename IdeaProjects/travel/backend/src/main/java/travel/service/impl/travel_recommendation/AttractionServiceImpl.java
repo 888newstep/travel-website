@@ -23,7 +23,7 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
     @Override
     public List<Attraction> getByCityId(Integer cityId) {
         LambdaQueryWrapper<Attraction> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Attraction::getCity, cityId);
+        queryWrapper.eq(Attraction::getCityId, cityId);
         return list(queryWrapper);
     }
 
@@ -49,7 +49,7 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
     @Override
     public List<Attraction> getTopRated(Integer cityId, int limit) {
         LambdaQueryWrapper<Attraction> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Attraction::getCity, cityId);
+        queryWrapper.eq(Attraction::getCityId, cityId);
         queryWrapper.orderByDesc(Attraction::getRating);
         queryWrapper.last("LIMIT " + limit);
         return list(queryWrapper);
@@ -58,7 +58,7 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
     @Override
     public List<Map<String, Object>> search(Integer cityId, String keyword) {
         LambdaQueryWrapper<Attraction> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Attraction::getCity, cityId);
+        queryWrapper.eq(Attraction::getCityId, cityId);
         queryWrapper.and(wrapper -> {
             wrapper.like(Attraction::getName, keyword)
                    .or().like(Attraction::getDescription, keyword)
@@ -83,7 +83,7 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
     @Override
     public List<Attraction> getRecommendations(Integer cityId, int limit) {
         LambdaQueryWrapper<Attraction> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Attraction::getCity, cityId);
+        queryWrapper.eq(Attraction::getCityId, cityId);
         queryWrapper.orderByDesc(Attraction::getRating);
         queryWrapper.last("LIMIT " + limit);
         return list(queryWrapper);
