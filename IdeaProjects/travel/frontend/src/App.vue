@@ -210,7 +210,10 @@ const handleChangePassword = async () => {
   }
 
   try {
-    await userApi.changePassword(passwordForm.value.oldPassword, passwordForm.value.newPassword);
+    await userApi.changePassword({
+      oldPassword: passwordForm.value.oldPassword,
+      newPassword: passwordForm.value.newPassword
+    });
     alert('密码修改成功');
     showChangePasswordModal.value = false;
     passwordForm.value = { oldPassword: '', newPassword: '', confirmPassword: '' };
@@ -347,8 +350,6 @@ const generateShareCode = async (item: any) => {
   } catch (error) {
     console.error('生成分享码失败:', error);
     alert('生成分享码失败，请重试');
-  } finally {
-    isGeneratingShareCode.value = false;
   }
 };
   
@@ -723,11 +724,11 @@ const likeNote = async (note: any) => {
 
   try {
     if (!note.isLiked) {
-      await noteApi.likeNote(note.id);
+      await noteApi.likeNote(note.id, currentUser.value!.id);
       note.isLiked = true;
       note.likes += 1;
     } else {
-      await noteApi.unlikeNote(note.id);
+      await noteApi.unlikeNote(note.id, currentUser.value!.id);
       note.isLiked = false;
       note.likes -= 1;
     }
@@ -827,14 +828,18 @@ const postNote = async () => {
 
   try {
     const response: any = await noteApi.createNote({
-      title: newNoteData.value.title,
-      author: currentUser.value?.username || '我',
-      image: newNoteData.value.image || `https://picsum.photos/seed/${Date.now()}/800/600`,
-      excerpt: newNoteData.value.excerpt,
-      isLiked: false,
-      isCollected: false,
-      commentList: []
+      travelNote: {
+        title: newNoteData.value.title,
+        author: currentUser.value?.username || '我',
+        image: newNoteData.value.image || `https://picsum.photos/seed/${Date.now()}/800/600`,
+        excerpt: newNoteData.value.excerpt,
+        isLiked: false,
+        isCollected: false,
+        commentList: []
+      },
+      tags: []
     });
+
 
     const newNote = response.data || response;
     travelNotes.value.unshift(newNote);
@@ -852,7 +857,7 @@ const deleteNote = async (noteId: number) => {
   if (!confirm('确定要删除这条笔记吗？')) return;
 
   try {
-    await noteApi.deleteNote(noteId);
+    await noteApi.deleteNote(noteId, currentUser.value!.id);
     travelNotes.value = travelNotes.value.filter(n => n.id !== noteId);
     alert('删除成功');
   } catch (error) {
@@ -1095,6 +1100,163 @@ const generateSmartItinerary = async () => {
   }, 1500);
 };
 
+const selectItineraryPlan = (plan: any) => {
+  if (!currentUser.value) {
+    alert('请先登录');
+    return;
+  }
+  const newItinerary = {
+    id: Date.now(),
+    title: plan.title,
+    destination: '智能推荐',
+    dates: '待确认',
+    image: `https://picsum.photos/seed/${plan.id}/800/600`,
+    status: '规划中',
+    days: plan.duration,
+    activities: plan.stops,
+    isPublic: false,
+    collaborators: 1,
+    completionRate: 0,
+    isCollected: false
+  };
+  PLANNED_ITINERARIES.value.push(newItinerary);
+  alert('行程已添加到您的列表');
+  currentView.value = 'itineraries';
+};
+
+const handleGeneratePersonalizedRoute = async () => {
+  if (!currentUser.value) {
+    alert('请先登录');
+    return;
+  }
+  try {
+    const { intelligentRouteApi } = await import('./api/route.api');
+    await intelligentRouteApi.generatePersonalizedRoute({
+      userPreferences: {
+        interests: userStyles.value,
+        budget: budgetRange.value,
+        transportMode: transportMode.value
+      },
+      constraints: {
+        avoidPeakHours: true,
+        publicTransportOnly: false,
+        includeLocalFood: true
+      }
+    });
+    alert('个性化路线生成成功！');
+  } catch (error) {
+    console.error('生成路线失败:', error);
+    alert('生成失败，请重试');
+  }
+};
+
+const handleGenerateGuide = async () => {
+  try {
+    const cityInput = document.querySelector('input[placeholder="例如：京都"]') as HTMLInputElement;
+    const daysInput = document.querySelector('input[placeholder="例如：5"]') as HTMLInputElement;
+    const city = cityInput?.value || '京都';
+    const days = parseInt(daysInput?.value || '5');
+
+    const { intelligentRouteApi } = await import('./api/route.api');
+    await intelligentRouteApi.getThemeRoutes('文化', 1, days);
+    alert(`已为您生成 ${city} ${days}天的旅游攻略！`);
+  } catch (error) {
+    console.error('生成攻略失败:', error);
+    alert('生成攻略失败，请重试');
+  }
+};
+
+const handleEstimateBudget = async () => {
+  try {
+    const destInput = document.querySelector('input[placeholder="例如：巴黎"]') as HTMLInputElement;
+    const destination = destInput?.value || '巴黎';
+
+    const { aiApi } = await import('./api/ai.api');
+    await aiApi.getTravelRecommendation({
+      location: destination,
+      budget: budgetRange.value,
+      duration: tripDuration.value
+    });
+    alert(`预算估算完成：${destination} ${tripDuration.value}天旅行约需 ¥${(budgetRange.value * tripDuration.value).toLocaleString()}`);
+  } catch (error) {
+    console.error('预算估算失败:', error);
+    alert('预算估算失败，请重试');
+  }
+};
+
+const handleClearNotifications = () => {
+  if (confirm('确定要清除所有通知吗？')) {
+    notifications.value = [];
+  }
+};
+
+const handleViewMap = () => {
+  alert('地图功能开发中');
+};
+
+const handleAddCategory = () => {
+  const name = prompt('请输入新分类名称：');
+  if (name) {
+    fileCategories.value.push({
+      id: Date.now(),
+      tagName: name,
+      parentId: null
+    });
+  }
+};
+
+const handleShowStats = () => {
+  alert('统计功能开发中');
+};
+
+const handleFileSettings = () => {
+  alert('设置功能开发中');
+};
+
+const handleDownloadFile = async (file: any) => {
+  try {
+    alert(`开始下载：${file.fileName}`);
+  } catch (error) {
+    console.error('下载失败:', error);
+    alert('下载失败');
+  }
+};
+
+const handleDeleteFile = async (fileId: number) => {
+  if (!confirm('确定要删除这个文件吗？')) return;
+  resourceFiles.value = resourceFiles.value.filter(f => f.id !== fileId);
+  alert('文件已删除');
+};
+
+const handleSelectDestination = (spot: any) => {
+  searchQuery.value = spot.name;
+  showPlacePreview.value = false;
+};
+
+const handleCopyLink = () => {
+  if (shareCodeResponse.value) {
+    navigator.clipboard.writeText(shareCodeResponse.value);
+    alert('分享码已复制到剪贴板');
+  }
+};
+
+const handleApplyOptimization = (suggestion: any) => {
+  if (confirm(`确定要应用优化建议"${suggestion.title}"吗？`)) {
+    applyOptimization(suggestion);
+    optimizationHistory.value.push({
+      id: Date.now(),
+      date: new Date().toISOString().split('T')[0],
+      type: suggestion.type === 'time' ? '时间' : suggestion.type === 'cost' ? '成本' : '路线',
+      result: suggestion.impact
+    });
+    alert('优化建议已应用');
+  }
+};
+
+const handleOptimizationHistory = () => {
+  showOptimizationHistory.value = true;
+};
+
 onMounted(async () => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -1173,8 +1335,8 @@ onMounted(async () => {
                 <div v-if="filteredSpots.length > 0">
                   <h4 class="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-3">热门地点</h4>
                   <div class="space-y-2">
-                    <div v-for="spot in filteredSpots" :key="spot.name" class="flex items-center gap-3 p-2 rounded-xl hover:bg-stone-50 cursor-pointer transition-colors group">
-                      <div class="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                    <div v-for="spot in filteredSpots" :key="spot.name" @click="handleSelectDestination(spot)" class="flex items-center gap-3 p-2 rounded-xl hover:bg-stone-50 cursor-pointer transition-colors group">
+                    <div class="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
                         <img :src="spot.image" class="w-full h-full object-cover" referrerPolicy="no-referrer" />
                       </div>
                       <div class="flex-1">
@@ -1216,7 +1378,7 @@ onMounted(async () => {
                 >
                   <div class="flex justify-between items-center mb-3">
                     <h4 class="text-xs font-bold text-stone-900">通知</h4>
-                    <button class="text-[9px] text-emerald-600 font-bold uppercase">全部清除</button>
+                    <button @click="handleClearNotifications" class="text-[9px] text-emerald-600 font-bold uppercase">全部清除</button>
                   </div>
                   <div class="space-y-3">
                     <div v-for="i in 2" :key="i" class="flex gap-3 p-2 rounded-xl hover:bg-stone-50 cursor-pointer transition-colors">
@@ -1326,7 +1488,7 @@ onMounted(async () => {
                     </label>
                   </div>
                 </div>
-                <button class="w-full bg-emerald-600 text-white py-3 rounded-2xl text-xs font-bold shadow-lg shadow-emerald-600/20">
+                <button @click="handleGeneratePersonalizedRoute" class="w-full bg-emerald-600 text-white py-3 rounded-2xl text-xs font-bold shadow-lg shadow-emerald-600/20">
                   生成我的专属路线
                 </button>
               </div>
@@ -1410,7 +1572,7 @@ onMounted(async () => {
                   <input type="number" placeholder="例如：5" class="w-full bg-stone-50 border border-stone-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-emerald-600 transition-all" />
                 </div>
               </div>
-              <button class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
+              <button @click="handleGenerateGuide" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2">
                 <BookOpen class="w-5 h-5" /> 立即生成攻略
               </button>
             </div>
@@ -1437,7 +1599,7 @@ onMounted(async () => {
                   </select>
                 </div>
               </div>
-              <button class="w-full bg-amber-500 text-white py-4 rounded-2xl font-bold hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
+              <button @click="handleEstimateBudget" class="w-full bg-amber-500 text-white py-4 rounded-2xl font-bold hover:bg-amber-600 transition-all shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2">
                 <Wallet class="w-5 h-5" /> 开始估算预算
               </button>
             </div>
@@ -1546,7 +1708,7 @@ onMounted(async () => {
                       <div class="flex gap-2">
                         <span v-for="tag in alt.tags" :key="tag" class="text-[9px] font-bold text-stone-400 bg-stone-50 px-2 py-1 rounded-md">#{{ tag }}</span>
                       </div>
-                      <button class="bg-stone-900 text-white px-6 py-2 rounded-xl text-xs font-bold hover:bg-stone-800 transition-all">选择此方案</button>
+                      <button @click="selectItineraryPlan(alt)" class="bg-stone-900 text-white px-6 py-2 rounded-xl text-xs font-bold hover:bg-stone-800 transition-all">选择此方案</button>
                     </div>
                   </div>
                 </div>
@@ -2074,7 +2236,7 @@ onMounted(async () => {
                   </div>
                   <ChevronRight class="w-4 h-4" />
                 </button>
-                <button class="w-full flex items-center justify-between p-3 rounded-2xl text-red-600 hover:bg-red-50 transition-colors">
+                <button @click="handleLogout" class="w-full flex items-center justify-between p-3 rounded-2xl text-red-600 hover:bg-red-50 transition-colors">
                   <div class="flex items-center gap-3">
                     <LogOut class="w-4 h-4" />
                     <span class="text-xs font-bold">退出登录</span>
@@ -2090,7 +2252,7 @@ onMounted(async () => {
             <div class="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex-1 overflow-hidden flex flex-col">
               <div class="flex justify-between items-center mb-4">
                 <h3 class="text-lg font-serif font-bold text-stone-900">即将到来的行程</h3>
-                <button class="text-xs font-bold text-emerald-600 flex items-center gap-1">
+                <button @click="handleViewMap" class="text-xs font-bold text-emerald-600 flex items-center gap-1">
                   <Map class="w-4 h-4" /> 查看地图
                 </button>
               </div>
@@ -2204,7 +2366,7 @@ onMounted(async () => {
             <div class="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col overflow-hidden">
               <div class="flex items-center justify-between mb-4">
                 <h3 class="text-sm font-bold text-stone-900">文件分类</h3>
-                <button class="text-emerald-600"><FolderPlus class="w-4 h-4" /></button>
+                <button @click="handleAddCategory" class="text-emerald-600"><FolderPlus class="w-4 h-4" /></button>
               </div>
               
               <div class="space-y-1 overflow-y-auto scrollbar-hide">
@@ -2273,8 +2435,8 @@ onMounted(async () => {
                   />
                 </div>
                 <div class="flex items-center gap-2">
-                  <button class="p-2 text-stone-400 hover:text-stone-600"><BarChart3 class="w-4 h-4" /></button>
-                  <button class="p-2 text-stone-400 hover:text-stone-600"><Settings class="w-4 h-4" /></button>
+                  <button @click="handleShowStats" class="p-2 text-stone-400 hover:text-stone-600"><BarChart3 class="w-4 h-4" /></button>
+                  <button @click="handleFileSettings" class="p-2 text-stone-400 hover:text-stone-600"><Settings class="w-4 h-4" /></button>
                 </div>
               </div>
 
@@ -2319,10 +2481,10 @@ onMounted(async () => {
                           <button @click="generateShareCode(file)" class="p-2 text-stone-400 hover:text-emerald-600 transition-colors" title="分享文件">
                             <Share2 class="w-4 h-4" />
                           </button>
-                          <button class="p-2 text-stone-400 hover:text-emerald-600 transition-colors" title="下载文件">
-                            <Download class="w-4 h-4" />
+                          <button @click="handleDownloadFile(file)" class="p-2 text-stone-400 hover:text-emerald-600 transition-colors" title="下载文件">
+                          <Download class="w-4 h-4" />
                           </button>
-                          <button class="p-2 text-stone-400 hover:text-red-600 transition-colors" title="删除文件">
+                          <button @click="handleDeleteFile(file.id)" class="p-2 text-stone-400 hover:text-red-600 transition-colors" title="删除文件">
                             <Trash2 class="w-4 h-4" />
                           </button>
                         </div>
@@ -3198,23 +3360,6 @@ onMounted(async () => {
               <input v-model="registerForm.username" type="text" placeholder="起个好听的名字" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-600 transition-all" />
             </div>
             <div class="space-y-1">
-              <label class="text-[10px] font-bold text-stone-400 uppercase tracking-widest">手机号</label>
-              <div class="flex gap-2">
-                <input v-model="registerForm.phone" type="text" placeholder="用于接收验证码" class="flex-1 bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-600 transition-all" />
-                <button
-                    @click="handleSendCaptcha"
-                    :disabled="captchaTimer > 0"
-                    :class="['px-4 py-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap', captchaTimer > 0 ? 'bg-stone-200 text-stone-400' : 'bg-emerald-600 text-white hover:bg-emerald-700']"
-                >
-                  {{ captchaTimer > 0 ? `${captchaTimer}s` : '获取验证码' }}
-                </button>
-              </div>
-            </div>
-            <div class="space-y-1">
-              <label class="text-[10px] font-bold text-stone-400 uppercase tracking-widest">验证码</label>
-              <input v-model="registerForm.captcha" type="text" placeholder="输入验证码" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-600 transition-all" />
-            </div>
-            <div class="space-y-1">
               <label class="text-[10px] font-bold text-stone-400 uppercase tracking-widest">密码</label>
               <input v-model="registerForm.password" type="password" placeholder="设置安全密码" class="w-full bg-stone-50 border border-stone-100 rounded-xl px-4 py-3 text-sm outline-none focus:border-emerald-600 transition-all" />
             </div>
@@ -3353,7 +3498,7 @@ onMounted(async () => {
             <p class="text-[10px] text-stone-400 px-4">分享码有效期为 7 天。您可以开启密码保护以提高安全性。</p>
             <div class="flex gap-3">
               <button @click="showShareModal = false" class="flex-1 py-3 rounded-xl text-xs font-bold text-stone-600 bg-stone-100 hover:bg-stone-200">关闭</button>
-              <button class="flex-1 bg-emerald-600 text-white py-3 rounded-xl text-xs font-bold hover:bg-emerald-700">复制链接</button>
+              <button @click="handleCopyLink" class="flex-1 bg-emerald-600 text-white py-3 rounded-xl text-xs font-bold hover:bg-emerald-700">复制链接</button>
             </div>
           </div>
         </Motion>

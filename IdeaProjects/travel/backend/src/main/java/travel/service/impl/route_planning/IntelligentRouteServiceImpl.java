@@ -349,12 +349,21 @@ public class IntelligentRouteServiceImpl implements IntelligentRouteService {
                 log.info("从缓存获取个性化路线");
                 return cachedRoute;
             }
-            
             log.info("生成个性化路线: userPreferences={}, constraints={}", userPreferences, constraints);
 
             Integer cityId = (Integer) userPreferences.get("cityId");
             int days = (int) userPreferences.getOrDefault("days", 3);
-            BigDecimal budget = (BigDecimal) userPreferences.getOrDefault("budget", BigDecimal.valueOf(1000));
+
+            Object budgetObj = userPreferences.getOrDefault("budget", BigDecimal.valueOf(1000));
+            BigDecimal budget;
+            if (budgetObj instanceof BigDecimal) {
+                budget = (BigDecimal) budgetObj;
+            } else if (budgetObj instanceof Number) {
+                budget = BigDecimal.valueOf(((Number) budgetObj).doubleValue());
+            } else {
+                budget = BigDecimal.valueOf(1000);
+            }
+
             String preference = (String) userPreferences.getOrDefault("preference", "balanced");
             // 安全获取兴趣列表
             Object interestsObj = userPreferences.getOrDefault("interests", Collections.emptyList());

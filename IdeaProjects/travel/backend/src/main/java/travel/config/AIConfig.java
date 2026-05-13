@@ -23,10 +23,21 @@ public class AIConfig {
 
     private BaiduConfig baidu;
 
+    private QwenConfig qwen;
+
     @Data
     public static class BaiduConfig {
         private String appId;
         private String apiKey;
         private String secretKey;
+    }
+
+    @Data
+    public static class QwenConfig {
+        private String apiKey;
+        private String model = "qwen3.6-35b-a3b";
+        private Boolean enabled = false;
+        private Double temperature = 0.7;
+        private Integer maxTokens = 2000;
     }
 }
