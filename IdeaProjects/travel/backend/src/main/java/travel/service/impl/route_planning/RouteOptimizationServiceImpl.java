@@ -8,20 +8,19 @@ import travel.entity.route_planning.RouteAttraction;
 import travel.entity.route_planning.Transport;
 import travel.entity.route_planning.TransportType;
 import travel.repository.RoutePlanRepository;
+import travel.service.route_planning.*;
 import travel.service.travel_recommendation.AttractionService;
-import travel.service.route_planning.RouteAttractionService;
-import travel.service.route_planning.RouteOptimizationService;
-import travel.service.route_planning.RoutePlanAlgorithm;
-import travel.service.route_planning.RouteService;
-import travel.service.route_planning.TransportService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import travel.utils.AMapRouteService;
+import travel.utils.CommonUtil;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -50,6 +49,15 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     @Autowired(required = false)
     private RedisTemplate<String, Object> redisTemplate;
 
+    @Autowired
+    private AMapRouteService aMapRouteService;
+
+    @Autowired
+    private GeneticAlgorithmTSP geneticAlgorithmTSP;
+
+    @Autowired
+    private RouteFeedbackService routeFeedbackService;
+
     // 兴趣标签与景点类型映射
     private final Map<String, List<String>> interestAttractionMap = new HashMap<>();
 
@@ -62,63 +70,159 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
         interestAttractionMap.put("娱乐", Arrays.asList("乐园", "娱乐", "休闲", "活动"));
     }
 
+    @Override
     public RoutePlanAlgorithm.OptimalRoute planOptimalRoute(List<Integer> attractionIds, int maxDays, BigDecimal budget, String preference) {
-        log.info("开始规划路线: 景点数={}, 天数={}, 预算={}, 偏好={}",
+        log.info("开始智能规划路线: 景点数={}, 天数={}, 预算={}, 偏好={}",
                 attractionIds.size(), maxDays, budget, preference);
 
         RoutePlanAlgorithm.OptimalRoute optimalRoute = new RoutePlanAlgorithm.OptimalRoute();
 
-        // 简化实现：将景点平均分配到每天
-        List<Attraction> attractions = new ArrayList<>();
-        for (Integer attractionId : attractionIds) {
-            Attraction attraction = attractionService.getById(attractionId);
-            if (attraction != null) {
-                attractions.add(attraction);
-            }
-        }
+        try {
+            List<Attraction> attractions = attractionIds.stream()
+                    .map(attractionService::getById)
+                    .filter(Objects::nonNull)
+                    .toList();
 
-        // 创建每日计划
-        int attractionsPerDay = Math.max(1, attractions.size() / maxDays);
-        for (int day = 1; day <= maxDays; day++) {
-            RoutePlanAlgorithm.RouteDayPlan dayPlan = new RoutePlanAlgorithm.RouteDayPlan();
-            dayPlan.setDayNumber(day);
-
-            int startIndex = (day - 1) * attractionsPerDay;
-            int endIndex = Math.min(startIndex + attractionsPerDay, attractions.size());
-
-            for (int i = startIndex; i < endIndex; i++) {
-                dayPlan.getAttractionIds().add(attractions.get(i).getId());
-
-                RoutePlanAlgorithm.RoutePoint point = new RoutePlanAlgorithm.RoutePoint();
-                point.setAttractionId(attractions.get(i).getId());
-                dayPlan.getPoints().add(point);
+            if (attractions.isEmpty()) {
+                throw new RuntimeException("没有有效的景点数据");
             }
 
-            // 设置默认值
-            dayPlan.setDistance(10.0);
-            dayPlan.setCost(100.0);
-            dayPlan.setTime(480.0); // 8小时
+            Map<String, Double> weights = calculateWeights(preference);
+            Map<Integer, List<Attraction>> dailyAttractions = distributeAttractionsToDays(attractions, maxDays);
 
-            optimalRoute.getDayPlans().add(dayPlan);
+            double totalDistance = 0.0;
+            double totalCost = 0.0;
+            double totalTime = 0.0;
+
+            for (Map.Entry<Integer, List<Attraction>> entry : dailyAttractions.entrySet()) {
+                int dayNumber = entry.getKey();
+                List<Attraction> dayAttractionList = entry.getValue();
+
+                List<Attraction> optimizedOrder = geneticAlgorithmTSP.optimizeRoute(dayAttractionList, preference);
+                RoutePlanAlgorithm.RouteDayPlan dayPlan = createDayPlanWithRealData(dayNumber, optimizedOrder);
+                optimalRoute.getDayPlans().add(dayPlan);
+
+                totalDistance += dayPlan.getDistance();
+                totalCost += dayPlan.getCost();
+                totalTime += dayPlan.getTime();
+            }
+
+            double fitness = calculateFitness(totalDistance, totalCost, totalTime, budget.doubleValue(), weights);
+            optimalRoute.setTotalDistance(totalDistance);
+            optimalRoute.setTotalCost(totalCost);
+            optimalRoute.setTotalTime(totalTime);
+            optimalRoute.setTotalFitness(fitness);
+
+            log.info("智能路线规划完成: days={}, 总距离={}km, 总成本={}元, 总时间={}分钟, 适应度={}",
+                    maxDays, totalDistance, totalCost, totalTime, fitness);
+
+        } catch (Exception e) {
+            log.error("智能路线规划失败: {}", e.getMessage(), e);
+            throw new RuntimeException("路线规划失败: " + e.getMessage());
         }
-
-        // 计算总计
-        optimalRoute.setTotalDistance(optimalRoute.getDayPlans().stream()
-                .mapToDouble(RoutePlanAlgorithm.RouteDayPlan::getDistance).sum());
-        optimalRoute.setTotalCost(optimalRoute.getDayPlans().stream()
-                .mapToDouble(RoutePlanAlgorithm.RouteDayPlan::getCost).sum());
-        optimalRoute.setTotalTime(optimalRoute.getDayPlans().stream()
-                .mapToDouble(RoutePlanAlgorithm.RouteDayPlan::getTime).sum());
-        optimalRoute.setTotalFitness(85.0); // 默认评分
-
-        log.info("路线规划完成: 总距离={}km, 总成本={}元, 总时间={}分钟",
-                optimalRoute.getTotalDistance(),
-                optimalRoute.getTotalCost(),
-                optimalRoute.getTotalTime());
 
         return optimalRoute;
     }
+    private RoutePlanAlgorithm.RouteDayPlan createDayPlanWithRealData(int dayNumber, List<Attraction> attractions) {
+        RoutePlanAlgorithm.RouteDayPlan dayPlan = new RoutePlanAlgorithm.RouteDayPlan();
+        dayPlan.setDayNumber(dayNumber);
 
+        List<Integer> attractionIds = new ArrayList<>();
+        List<RoutePlanAlgorithm.RoutePoint> points = new ArrayList<>();
+        double totalDistance = 0.0;
+        double totalTime = 0.0;
+        double totalCost = 0.0;
+
+        List<double[]> coordinates = attractions.stream()
+                .filter(a -> a.getLatitude() != null && a.getLongitude() != null)
+                .map(a -> new double[]{a.getLongitude().doubleValue(), a.getLatitude().doubleValue()})
+                .toList();
+
+        AMapRouteService.RouteInfo routeInfo = coordinates.size() >= 2
+                ? aMapRouteService.calculateMultiPointRoute(coordinates)
+                : null;
+
+        for (int i = 0; i < attractions.size(); i++) {
+            Attraction attraction = attractions.get(i);
+            attractionIds.add(attraction.getId());
+
+            RoutePlanAlgorithm.RoutePoint point = new RoutePlanAlgorithm.RoutePoint();
+            point.setAttractionId(attraction.getId());
+
+            if (i > 0 && routeInfo != null && !routeInfo.getSteps().isEmpty()) {
+                AMapRouteService.RouteStep step = routeInfo.getSteps().get(Math.min(i - 1, routeInfo.getSteps().size() - 1));
+                point.setDistance(step.getDistance());
+                point.setTime(step.getDuration());
+                totalDistance += step.getDistance();
+                totalTime += step.getDuration();
+            } else if (i > 0) {
+                Attraction prevAttraction = attractions.get(i - 1);
+                double distance = CommonUtil.calculateDistance(
+                        prevAttraction.getLatitude().doubleValue(), prevAttraction.getLongitude().doubleValue(),
+                        attraction.getLatitude().doubleValue(), attraction.getLongitude().doubleValue());
+                double time = estimateTravelTime(distance);
+                point.setDistance(distance);
+                point.setTime(time);
+                totalDistance += distance;
+                totalTime += time;
+            }
+
+            totalCost += attraction.getTicketPrice().doubleValue();
+            points.add(point);
+        }
+
+        if (routeInfo != null) {
+            totalCost += routeInfo.getCost();
+        }
+
+        dayPlan.setAttractionIds(attractionIds);
+        dayPlan.setPoints(points);
+        dayPlan.setDistance(totalDistance);
+        dayPlan.setTime(totalTime);
+        dayPlan.setCost(totalCost);
+
+        return dayPlan;
+    }
+
+    private Map<String, Double> calculateWeights(String preference) {
+        return switch (preference.toLowerCase()) {
+            case "lowcost" -> Map.of("distance", 0.2, "cost", 0.6, "time", 0.2);
+            case "fast" -> Map.of("distance", 0.3, "cost", 0.2, "time", 0.5);
+            case "lowcarbon" -> Map.of("distance", 0.5, "cost", 0.3, "time", 0.2);
+            default -> Map.of("distance", 0.33, "cost", 0.33, "time", 0.34);
+        };
+    }
+
+    private Map<Integer, List<Attraction>> distributeAttractionsToDays(List<Attraction> attractions, int maxDays) {
+        Map<Integer, List<Attraction>> dailyAttractions = new HashMap<>();
+        int attractionsPerDay = (int) Math.ceil((double) attractions.size() / maxDays);
+
+        for (int day = 1; day <= maxDays; day++) {
+            int startIndex = (day - 1) * attractionsPerDay;
+            int endIndex = Math.min(startIndex + attractionsPerDay, attractions.size());
+
+            if (startIndex < attractions.size()) {
+                dailyAttractions.put(day, attractions.subList(startIndex, endIndex));
+            }
+        }
+
+        return dailyAttractions;
+    }
+
+    private double calculateFitness(double distance, double cost, double time, double budget, Map<String, Double> weights) {
+        double distanceScore = 1.0 / (1.0 + distance);
+        double costScore = 1.0 / (1.0 + cost / budget);
+        double timeScore = 1.0 / (1.0 + time);
+
+        return distanceScore * weights.getOrDefault("distance", 0.33) +
+                costScore * weights.getOrDefault("cost", 0.33) +
+                timeScore * weights.getOrDefault("time", 0.34);
+    }
+
+    private double estimateTravelTime(double distanceKm) {
+        return distanceKm / 30.0 * 60;
+    }
+    
     @Override
     public Map<String, Object> adjustRoute(Integer routeId, String adjustmentType, Map<String, Object> adjustmentParams) {
         try {
@@ -247,7 +351,6 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     @Override
     public List<Map<String, Object>> getRouteRecommendations(Integer cityId, int days, List<String> interests, BigDecimal budget) {
         try {
-            // 1. 根据兴趣标签筛选景点
             List<Attraction> attractions = attractionService.getByCityId(cityId);
             List<Attraction> filteredAttractions = filterAttractionsByInterests(attractions, interests);
 
@@ -255,15 +358,12 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                 filteredAttractions = attractions;
             }
 
-            // 2. 提取景点ID
             List<Integer> attractionIds = filteredAttractions.stream()
                     .map(Attraction::getId)
-                    .collect(Collectors.toList());
+                    .toList();
 
-            // 3. 生成多个推荐方案
             List<Map<String, Object>> recommendations = new ArrayList<>();
 
-            // 生成不同偏好的路线
             List<String> preferences = Arrays.asList("balanced", "lowCost", "fast", "lowCarbon");
             for (String preference : preferences) {
                 try {
@@ -275,12 +375,9 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                 }
             }
 
-            // 4. 按适应度排序
-            recommendations.sort((a, b) -> {
-                double fitnessA = (double) a.getOrDefault("fitness", 0.0);
-                double fitnessB = (double) b.getOrDefault("fitness", 0.0);
-                return Double.compare(fitnessB, fitnessA);
-            });
+            recommendations.sort((a, b) -> Double.compare(
+                    (double) b.getOrDefault("fitness", 0.0),
+                    (double) a.getOrDefault("fitness", 0.0)));
 
             log.info("获取路线推荐成功: cityId={}, days={}, interests={}, count={}", cityId, days, interests, recommendations.size());
             return recommendations;
@@ -289,7 +386,6 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
             throw new RuntimeException("获取路线推荐失败: " + e.getMessage());
         }
     }
-
     @Override
     public double calculateRouteSimilarity(Integer routeId1, Integer routeId2) {
         try {
@@ -409,115 +505,6 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     }
 
     @Override
-    public Map<String, Object> optimizeRouteTransport(Integer routeId, String transportPreference) {
-        try {
-            Route route = routeService.getById(routeId);
-            if (route == null) {
-                throw new RuntimeException("路线不存在");
-            }
-
-            // 获取路线景点
-            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-            List<Attraction> attractions = routeAttractions.stream()
-                    .map(ra -> attractionService.getById(ra.getAttractionId()))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-
-            // 获取推荐的交通方式
-            List<Transport> recommendedTransports = getRecommendedTransports(transportPreference);
-
-            // 使用RouteTransportService保存优化后的交通方案
-            if (!recommendedTransports.isEmpty()) {
-                // 为每个景点间的路线创建交通方案
-                for (int i = 0; i < attractions.size() - 1; i++) {
-                    Attraction fromAttraction = attractions.get(i);
-                    Attraction toAttraction = attractions.get(i + 1);
-                    
-                    // 为这段路程选择最合适的交通方式
-                    Transport bestTransport = recommendedTransports.get(0);
-                    for (Transport transport : recommendedTransports) {
-                        // 简单的选择逻辑：根据偏好选择
-                        if (transportPreference.equals("lowCost") && bestTransport.getCostPerKm().compareTo(transport.getCostPerKm()) > 0) {
-                            bestTransport = transport;
-                        } else if (transportPreference.equals("fast") && bestTransport.getAvgSpeedKmh().compareTo(transport.getAvgSpeedKmh()) < 0) {
-                            bestTransport = transport;
-                        }
-                    }
-                    
-                    // 这里可以使用routeTransportService保存交通方案
-                    // 例如：routeTransportService.saveRouteTransport(routeId, fromAttraction.getId(), toAttraction.getId(), bestTransport.getTransportType());
-                    log.info("为路线 {} 保存交通方案: 从景点 {} 到景点 {} 使用 {}", 
-                            routeId, fromAttraction.getName(), toAttraction.getName(), bestTransport.getTransportType());
-                }
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("routeId", routeId);
-            result.put("routeName", route.getTitle());
-            result.put("recommendedTransports", recommendedTransports);
-            result.put("transportPreference", transportPreference);
-
-            log.info("优化路线交通方式成功: routeId={}, preference={}", routeId, transportPreference);
-            return result;
-        } catch (Exception e) {
-            log.error("优化路线交通方式失败: routeId={}, error={}", routeId, e.getMessage());
-            throw new RuntimeException("优化路线交通方式失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public Map<String, Object> predictRouteCrowd(Integer routeId, String date) {
-        try {
-            Route route = routeService.getById(routeId);
-            if (route == null) {
-                throw new RuntimeException("路线不存在");
-            }
-
-            LocalDate predictDate = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-            int dayOfWeek = predictDate.getDayOfWeek().getValue();
-            boolean isWeekend = dayOfWeek == 6 || dayOfWeek == 7;
-            boolean isHoliday = isHoliday(predictDate);
-
-            // 获取路线景点
-            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-            List<Attraction> attractions = routeAttractions.stream()
-                    .map(ra -> attractionService.getById(ra.getAttractionId()))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-
-            // 预测每个景点的人流量
-            List<Map<String, Object>> crowdPredictions = new ArrayList<>();
-            for (Attraction attraction : attractions) {
-                int baseCrowd = (int) (attraction.getViewCount() / 1000);
-                int multiplier = isHoliday ? 3 : (isWeekend ? 2 : 1);
-                int predictedCrowd = baseCrowd * multiplier;
-
-                Map<String, Object> prediction = new HashMap<>();
-                prediction.put("attractionId", attraction.getId());
-                prediction.put("attractionName", attraction.getName());
-                prediction.put("predictedCrowd", predictedCrowd);
-                prediction.put("crowdLevel", getCrowdLevel(predictedCrowd));
-                prediction.put("suggestedTime", getSuggestedTime(predictedCrowd, isWeekend));
-                crowdPredictions.add(prediction);
-            }
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("routeId", routeId);
-            result.put("routeName", route.getTitle());
-            result.put("predictDate", date);
-            result.put("isWeekend", isWeekend);
-            result.put("isHoliday", isHoliday);
-            result.put("crowdPredictions", crowdPredictions);
-
-            log.info("预测路线人流量成功: routeId={}, date={}", routeId, date);
-            return result;
-        } catch (Exception e) {
-            log.error("预测路线人流量失败: routeId={}, error={}", routeId, e.getMessage());
-            throw new RuntimeException("预测路线人流量失败: " + e.getMessage());
-        }
-    }
-
-    @Override
     public Map<String, Object> getRouteAnalysis(Integer routeId) {
         try {
             Route route = routeService.getById(routeId);
@@ -558,170 +545,7 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
             throw new RuntimeException("获取路线详细分析失败: " + e.getMessage());
         }
     }
-
-    @Override
-    public boolean saveUserRoutePreferences(Integer userId, Map<String, Object> preferences) {
-        // 参数验证
-        if (userId == null || userId <= 0) {
-            log.error("保存用户路线偏好失败: userId无效");
-            throw new IllegalArgumentException("userId无效");
-        }
-        if (preferences == null) {
-            log.error("保存用户路线偏好失败: preferences为null");
-            throw new IllegalArgumentException("preferences为null");
-        }
-        
-        try {
-            // 使用Redis保存用户路线偏好
-            String redisKey = "user:route:preferences:" + userId;
-            if (redisTemplate != null) {
-                redisTemplate.opsForValue().set(redisKey, preferences);
-                // 设置过期时间为30天
-                redisTemplate.expire(redisKey, 30, java.util.concurrent.TimeUnit.DAYS);
-            }
-
-            log.info("保存用户路线偏好成功: userId={}, preferences={}", userId, preferences);
-            return true;
-        } catch (Exception e) {
-            log.error("保存用户路线偏好失败: userId={}, error={}", userId, e.getMessage());
-            throw new RuntimeException("保存用户路线偏好失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public List<Map<String, Object>> getPersonalizedRouteRecommendations(Integer userId, Integer cityId, int days) {
-        // 参数验证
-        if (userId == null || userId <= 0) {
-            log.error("获取用户个性化路线推荐失败: userId无效");
-            throw new IllegalArgumentException("userId无效");
-        }
-        if (cityId == null || cityId <= 0) {
-            log.error("获取用户个性化路线推荐失败: cityId无效");
-            throw new IllegalArgumentException("cityId无效");
-        }
-        if (days <= 0 || days > 30) {
-            log.error("获取用户个性化路线推荐失败: days无效");
-            throw new IllegalArgumentException("days无效，应为1-30天");
-        }
-        
-        try {
-            // 从Redis获取用户路线偏好
-            String redisKey = "user:route:preferences:" + userId;
-            Map<String, Object> preferences = null;
-            if (redisTemplate != null) {
-                Object preferencesObj = redisTemplate.opsForValue().get(redisKey);
-                if (preferencesObj instanceof Map) {
-                    Map<?, ?> map = (Map<?, ?>) preferencesObj;
-                    preferences = new HashMap<>();
-                    for (Map.Entry<?, ?> entry : map.entrySet()) {
-                        if (entry.getKey() instanceof String) {
-                            preferences.put((String) entry.getKey(), entry.getValue());
-                        }
-                    }
-                }
-            }
-
-            // 获取城市景点
-            List<Attraction> attractions = attractionService.getByCityId(cityId);
-            
-            // 检查景点列表是否为空
-            if (attractions == null || attractions.isEmpty()) {
-                log.warn("获取用户个性化路线推荐: 城市无景点数据: cityId={}", cityId);
-                return Collections.emptyList();
-            }
-            
-            // 根据用户偏好筛选景点
-            List<Attraction> filteredAttractions = attractions;
-            List<String> interests = new ArrayList<>();
-            if (preferences != null) {
-                // 安全获取兴趣列表
-                Object interestsObj = preferences.getOrDefault("interests", Collections.emptyList());
-                interests = interestsObj instanceof List ? ((List<?>) interestsObj).stream()
-                        .filter(item -> item instanceof String)
-                        .map(item -> (String) item)
-                        .collect(Collectors.toList()) : Collections.emptyList();
-                
-                if (!interests.isEmpty()) {
-                    filteredAttractions = filterAttractionsByInterests(attractions, interests);
-                }
-            }
-            
-            if (filteredAttractions.isEmpty()) {
-                filteredAttractions = attractions;
-            }
-            
-            // 使用RoutePlanRepository获取推荐路线
-            List<Route> recommendedRoutes = routePlanRepository.recommendRoutesByPreferences(cityId.longValue(), interests);
-            
-            // 提取景点ID
-            List<Integer> attractionIds = filteredAttractions.stream()
-                    .map(Attraction::getId)
-                    .collect(Collectors.toList());
-            
-            // 生成个性化路线推荐
-            List<Map<String, Object>> recommendations = new ArrayList<>();
-            
-            // 首先添加基于用户偏好的推荐路线
-            for (Route route : recommendedRoutes) {
-                Map<String, Object> recommendation = new HashMap<>();
-                recommendation.put("routeId", route.getId());
-                recommendation.put("routeName", route.getTitle());
-                recommendation.put("preference", "user_preferred");
-                recommendation.put("days", route.getDurationDays());
-                recommendation.put("userId", userId);
-                recommendations.add(recommendation);
-            }
-            
-            // 生成不同偏好的路线
-            List<String> preferenceList = Arrays.asList("balanced", "lowCost", "fast", "lowCarbon");
-            for (String pref : preferenceList) {
-                try {
-                    RoutePlanAlgorithm.OptimalRoute optimalRoute = routePlanAlgorithm.planOptimalRoute(attractionIds, days, new BigDecimal(1000), pref);
-                    Map<String, Object> recommendation = convertToRecommendation(optimalRoute, filteredAttractions, pref);
-                    recommendation.put("userId", userId);
-                    recommendations.add(recommendation);
-                } catch (Exception e) {
-                    log.warn("生成个性化路线推荐失败: userId={}, preference={}, error={}", userId, pref, e.getMessage());
-                }
-            }
-            
-            // 按适应度排序
-            recommendations.sort((a, b) -> {
-                double fitnessA = (double) a.getOrDefault("fitness", 0.0);
-                double fitnessB = (double) b.getOrDefault("fitness", 0.0);
-                return Double.compare(fitnessB, fitnessA);
-            });
-            
-            log.info("获取用户个性化路线推荐成功: userId={}, cityId={}, days={}, count={}", userId, cityId, days, recommendations.size());
-            return recommendations;
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("获取用户个性化路线推荐失败: userId={}, error={}", userId, e.getMessage());
-            throw new RuntimeException("获取用户个性化路线推荐失败: " + e.getMessage());
-        }
-    }
-
-    // 辅助方法
-    private List<Attraction> filterAttractionsByInterests(List<Attraction> attractions, List<String> interests) {
-        if (interests == null || interests.isEmpty()) {
-            return attractions;
-        }
-
-        return attractions.stream()
-                .filter(attraction -> {
-                    String description = attraction.getDescription();
-                    if (description == null) {
-                        return false;
-                    }
-                    return interests.stream().anyMatch(interest -> {
-                        List<String> keywords = interestAttractionMap.getOrDefault(interest, Collections.emptyList());
-                        return keywords.stream().anyMatch(description::contains);
-                    });
-                })
-                .collect(Collectors.toList());
-    }
-
+    
     private Map<String, Object> convertToRecommendation(RoutePlanAlgorithm.OptimalRoute optimalRoute, List<Attraction> attractions, String preference) {
         Map<String, Object> recommendation = new HashMap<>();
         recommendation.put("preference", preference);
@@ -870,6 +694,98 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
         return R * c;
     }
 
+    @Override
+    public Map<String, Object> optimizeRouteTransport(Integer routeId, String transportPreference) {
+        try {
+            Route route = routeService.getById(routeId);
+            if (route == null) {
+                throw new RuntimeException("路线不存在");
+            }
+
+            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
+            List<Attraction> attractions = routeAttractions.stream()
+                    .map(ra -> attractionService.getById(ra.getAttractionId()))
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            List<Transport> recommendedTransports = getRecommendedTransports(transportPreference);
+
+            if (!recommendedTransports.isEmpty()) {
+                for (int i = 0; i < attractions.size() - 1; i++) {
+                    Attraction fromAttraction = attractions.get(i);
+                    Attraction toAttraction = attractions.get(i + 1);
+
+                    Transport bestTransport = selectBestTransport(recommendedTransports, transportPreference);
+
+                    log.info("为路线 {} 保存交通方案: 从景点 {} 到景点 {} 使用 {}",
+                            routeId, fromAttraction.getName(), toAttraction.getName(), bestTransport.getTransportType());
+                }
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("routeId", routeId);
+            result.put("routeName", route.getTitle());
+            result.put("recommendedTransports", recommendedTransports);
+            result.put("transportPreference", transportPreference);
+
+            log.info("优化路线交通方式成功: routeId={}, preference={}", routeId, transportPreference);
+            return result;
+        } catch (Exception e) {
+            log.error("优化路线交通方式失败: routeId={}, error={}", routeId, e.getMessage());
+            throw new RuntimeException("优化路线交通方式失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public Map<String, Object> predictRouteCrowd(Integer routeId, String date) {
+        try {
+            Route route = routeService.getById(routeId);
+            if (route == null) {
+                throw new RuntimeException("路线不存在");
+            }
+
+            LocalDate predictDate = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            boolean isWeekend = predictDate.getDayOfWeek().getValue() >= 6;
+            boolean isHoliday = isHoliday(predictDate);
+
+            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
+            List<Attraction> attractions = routeAttractions.stream()
+                    .map(ra -> attractionService.getById(ra.getAttractionId()))
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            List<Map<String, Object>> crowdPredictions = attractions.stream()
+                    .map(attraction -> {
+                        int baseCrowd = attraction.getViewCount() / 1000;
+                        int multiplier = isHoliday ? 3 : (isWeekend ? 2 : 1);
+                        int predictedCrowd = baseCrowd * multiplier;
+
+                        Map<String, Object> prediction = new HashMap<>();
+                        prediction.put("attractionId", attraction.getId());
+                        prediction.put("attractionName", attraction.getName());
+                        prediction.put("predictedCrowd", predictedCrowd);
+                        prediction.put("crowdLevel", getCrowdLevel(predictedCrowd));
+                        prediction.put("suggestedTime", getSuggestedTime(predictedCrowd, isWeekend));
+                        return prediction;
+                    })
+                    .toList();
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("routeId", routeId);
+            result.put("routeName", route.getTitle());
+            result.put("predictDate", date);
+            result.put("isWeekend", isWeekend);
+            result.put("isHoliday", isHoliday);
+            result.put("crowdPredictions", crowdPredictions);
+
+            log.info("预测路线人流量成功: routeId={}, date={}", routeId, date);
+            return result;
+        } catch (Exception e) {
+            log.error("预测路线人流量失败: routeId={}, error={}", routeId, e.getMessage());
+            throw new RuntimeException("预测路线人流量失败: " + e.getMessage());
+        }
+    }
+    
     private double calculateEstimatedCost(List<Attraction> attractions) {
         if (attractions == null || attractions.isEmpty()) {
             return 0.0;
@@ -940,59 +856,61 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     }
 
     @Override
+    public boolean saveUserRoutePreferences(Integer userId, Map<String, Object> preferences) {
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("userId无效");
+        }
+        if (preferences == null) {
+            throw new IllegalArgumentException("preferences为null");
+        }
+
+        try {
+            String redisKey = "user:route:preferences:" + userId;
+            redisTemplate.opsForValue().set(redisKey, preferences);
+            redisTemplate.expire(redisKey, 30, TimeUnit.DAYS);
+
+            log.info("保存用户路线偏好成功: userId={}", userId);
+            return true;
+        } catch (Exception e) {
+            log.error("保存用户路线偏好失败: userId={}, error={}", userId, e.getMessage());
+            throw new RuntimeException("保存用户路线偏好失败: " + e.getMessage());
+        }
+    }
+
+    @Override
     public Map<String, Object> optimizeRoute(Map<String, Object> routeData) {
         log.info("优化路线: routeData={}", routeData);
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "路线优化成功");
-        return result;
+        return Map.of("success", true, "message", "路线优化成功");
     }
 
     @Override
     public List<Map<String, Object>> getOptimizationSuggestions(Integer routeId) {
         log.info("获取优化建议: routeId={}", routeId);
-        List<Map<String, Object>> suggestions = new ArrayList<>();
-        Map<String, Object> suggestion = new HashMap<>();
-        suggestion.put("type", "general");
-        suggestion.put("message", "建议合理安排景点游览顺序");
-        suggestions.add(suggestion);
-        return suggestions;
+        return List.of(Map.of("type", "general", "message", "建议合理安排景点游览顺序"));
     }
 
     @Override
     public Map<String, Object> optimizeTime(Map<String, Object> routeData) {
         log.info("优化时间: routeData={}", routeData);
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "时间优化成功");
-        return result;
+        return Map.of("success", true, "message", "时间优化成功");
     }
 
     @Override
     public Map<String, Object> optimizeCost(Map<String, Object> routeData) {
         log.info("优化成本: routeData={}", routeData);
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "成本优化成功");
-        return result;
+        return Map.of("success", true, "message", "成本优化成功");
     }
 
     @Override
     public Map<String, Object> optimizeDistance(Map<String, Object> routeData) {
         log.info("优化距离: routeData={}", routeData);
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("message", "距离优化成功");
-        return result;
+        return Map.of("success", true, "message", "距离优化成功");
     }
 
     @Override
     public Map<String, Object> getOptimizationComparison(Integer routeId) {
         log.info("获取优化对比: routeId={}", routeId);
-        Map<String, Object> comparison = new HashMap<>();
-        comparison.put("before", "原始路线");
-        comparison.put("after", "优化后路线");
-        return comparison;
+        return Map.of("before", "原始路线", "after", "优化后路线");
     }
 
     @Override
@@ -1004,16 +922,142 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     @Override
     public List<Map<String, Object>> getOptimizationHistory(Integer routeId) {
         log.info("获取优化历史: routeId={}", routeId);
-        List<Map<String, Object>> history = new ArrayList<>();
-        return history;
+        return Collections.emptyList();
     }
 
     @Override
     public Map<String, Object> batchOptimizeRoutes(List<Integer> routeIds) {
         log.info("批量优化路线: routeIds={}", routeIds);
-        Map<String, Object> result = new HashMap<>();
-        result.put("success", true);
-        result.put("count", routeIds.size());
-        return result;
+        return Map.of("success", true, "count", routeIds.size());
+    }
+    
+    @Override
+    public List<Map<String, Object>> getPersonalizedRouteRecommendations(Integer userId, Integer cityId, int days) {
+        if (userId == null || userId <= 0) {
+            throw new IllegalArgumentException("userId无效");
+        }
+        if (cityId == null || cityId <= 0) {
+            throw new IllegalArgumentException("cityId无效");
+        }
+        if (days <= 0 || days > 30) {
+            throw new IllegalArgumentException("days无效，应为1-30天");
+        }
+
+        try {
+            String redisKey = "user:route:preferences:" + userId;
+            Map<String, Object> preferences = null;
+
+            Object preferencesObj = redisTemplate.opsForValue().get(redisKey);
+            if (preferencesObj instanceof Map<?, ?> map) {
+                preferences = new HashMap<>();
+                for (Map.Entry<?, ?> entry : map.entrySet()) {
+                    if (entry.getKey() instanceof String key) {
+                        preferences.put(key, entry.getValue());
+                    }
+                }
+            }
+
+            List<Attraction> attractions = attractionService.getByCityId(cityId);
+
+            if (attractions == null || attractions.isEmpty()) {
+                log.warn("获取用户个性化路线推荐: 城市无景点数据: cityId={}", cityId);
+                return Collections.emptyList();
+            }
+
+            List<String> interests = Optional.ofNullable(preferences)
+                    .map(p -> p.get("interests"))
+                    .filter(obj -> obj instanceof List<?>)
+                    .map(obj -> ((List<?>) obj).stream()
+                            .filter(item -> item instanceof String)
+                            .map(item -> (String) item)
+                            .toList())
+                    .orElse(Collections.emptyList());
+
+            List<Attraction> filteredAttractions = interests.isEmpty()
+                    ? attractions
+                    : filterAttractionsByInterests(attractions, interests);
+
+            if (filteredAttractions.isEmpty()) {
+                filteredAttractions = attractions;
+            }
+
+            List<Route> recommendedRoutes = routePlanRepository.recommendRoutesByPreferences(cityId.longValue(), interests);
+
+            List<Integer> attractionIds = filteredAttractions.stream()
+                    .map(Attraction::getId)
+                    .toList();
+
+            List<Map<String, Object>> recommendations = recommendedRoutes.stream()
+                    .map(route -> {
+                        Map<String, Object> rec = new HashMap<>();
+                        rec.put("routeId", route.getId());
+                        rec.put("routeName", route.getTitle());
+                        rec.put("preference", "user_preferred");
+                        rec.put("days", route.getDurationDays());
+                        rec.put("userId", userId);
+                        return rec;
+                    })
+                    .collect(Collectors.toCollection(ArrayList::new));
+
+            List<String> preferenceList = Arrays.asList("balanced", "lowCost", "fast", "lowCarbon");
+            for (String pref : preferenceList) {
+                try {
+                    RoutePlanAlgorithm.OptimalRoute optimalRoute = routePlanAlgorithm.planOptimalRoute(
+                            attractionIds, days, new BigDecimal(1000), pref);
+                    Map<String, Object> recommendation = convertToRecommendation(optimalRoute, filteredAttractions, pref);
+                    recommendation.put("userId", userId);
+                    recommendations.add(recommendation);
+                } catch (Exception e) {
+                    log.warn("生成个性化路线推荐失败: userId={}, preference={}, error={}", userId, pref, e.getMessage());
+                }
+            }
+
+            recommendations.sort((a, b) -> Double.compare(
+                    (double) b.getOrDefault("fitness", 0.0),
+                    (double) a.getOrDefault("fitness", 0.0)));
+
+            log.info("获取用户个性化路线推荐成功: userId={}, cityId={}, days={}, count={}", userId, cityId, days, recommendations.size());
+            return recommendations;
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("获取用户个性化路线推荐失败: userId={}, error={}", userId, e.getMessage());
+            throw new RuntimeException("获取用户个性化路线推荐失败: " + e.getMessage());
+        }
+    }
+
+    private Transport selectBestTransport(List<Transport> transports, String preference) {
+        if (transports.isEmpty()) {
+            throw new IllegalArgumentException("交通方式列表不能为空");
+        }
+
+        return switch (preference.toLowerCase()) {
+            case "lowcost" -> transports.stream()
+                    .min(Comparator.comparing(Transport::getCostPerKm))
+                    .orElse(transports.get(0));
+            case "fast" -> transports.stream()
+                    .max(Comparator.comparing(Transport::getAvgSpeedKmh))
+                    .orElse(transports.get(0));
+            default -> transports.get(0);
+        };
+    }
+
+    private List<Attraction> filterAttractionsByInterests(List<Attraction> attractions, List<String> interests) {
+        if (interests == null || interests.isEmpty()) {
+            return attractions;
+        }
+
+        return attractions.stream()
+                .filter(attraction -> {
+                    String description = attraction.getDescription();
+                    if (description == null) {
+                        return false;
+                    }
+                    return interests.stream().anyMatch(interest -> {
+                        List<String> keywords = interestAttractionMap.getOrDefault(interest, Collections.emptyList());
+                        return keywords.stream().anyMatch(description::contains);
+                    });
+                })
+                .toList();
     }
 }

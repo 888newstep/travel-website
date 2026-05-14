@@ -184,6 +184,13 @@
             <version>2.14.0</version>
         </dependency>
 
+        <!-- RabbitMQ 消息队列 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+            <version>${spring-boot.version}</version>
+        </dependency>
+
         <!-- MyBatis-Plus 扩展依赖（包含分页插件等） -->
         <dependency>
             <groupId>com.baomidou</groupId>

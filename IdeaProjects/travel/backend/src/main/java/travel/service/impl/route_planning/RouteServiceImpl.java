@@ -28,7 +28,26 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
 
     @Override
     public Route getById(Integer id) {
-        return baseMapper.selectById(id);
+        if (id == null || id <= 0) {
+            return null;
+        }
+
+        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "detail", id);
+        Route cached = cacheUtil.get(cacheKey, Route.class);
+
+        if (cached != null) {
+            log.debug("从缓存获取路线详情: id={}", id);
+            cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_hits"), 1);
+            return cached;
+        }
+
+        cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_misses"), 1);
+        Route route = baseMapper.selectById(id);
+        if (route != null) {
+            cacheUtil.set(cacheKey, route, 1, TimeUnit.HOURS);
+            log.debug("缓存路线详情: id={}", id);
+        }
+        return route;
     }
 
     @Override
@@ -48,12 +67,16 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
                 }
             }
             if (!cachedRoutes.isEmpty()) {
+                log.debug("从缓存获取用户路线: userId={}", userId);
+                cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_hits"), 1);
                 return cachedRoutes;
             }
         }
 
+        cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_misses"), 1);
         List<Route> routes = routeRepository.findByUserId(userId);
         cacheUtil.set(cacheKey, routes, 30, TimeUnit.MINUTES);
+        log.debug("缓存用户路线: userId={}, count={}", userId, routes.size());
         return routes;
     }
 
@@ -78,11 +101,26 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
         if (title == null || title.isBlank()) {
             return List.of();
         }
+
+        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "search", title);
+        List<Route> cached = cacheUtil.get(cacheKey, List.class);
+
+        if (cached != null && !cached.isEmpty()) {
+            log.debug("从缓存获取路线搜索: title={}", title);
+            cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_hits"), 1);
+            return cached;
+        }
+
+        cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_misses"), 1);
         QueryWrapper<Route> queryWrapper = new QueryWrapper<>();
         queryWrapper.like("title", title)
                 .eq("is_public", true)
                 .orderByDesc("view_count");
-        return routeRepository.findByCondition(queryWrapper);
+        List<Route> routes = routeRepository.findByCondition(queryWrapper);
+
+        cacheUtil.set(cacheKey, routes, 30, TimeUnit.MINUTES);
+        log.debug("缓存路线搜索: title={}, count={}", title, routes.size());
+        return routes;
     }
 
     @Override
@@ -99,26 +137,70 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
         if (cityId == null || cityId <= 0) {
             return List.of();
         }
+
+        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "city", cityId);
+        List<Route> cached = cacheUtil.get(cacheKey, List.class);
+
+        if (cached != null && !cached.isEmpty()) {
+            log.debug("从缓存获取城市路线: cityId={}", cityId);
+            cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_hits"), 1);
+            return cached;
+        }
+
+        cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_misses"), 1);
         QueryWrapper<Route> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("city_id", cityId)
                 .eq("is_public", true)
                 .orderByDesc("view_count");
-        return routeRepository.findByCondition(queryWrapper);
+        List<Route> routes = routeRepository.findByCondition(queryWrapper);
+
+        cacheUtil.set(cacheKey, routes, 1, TimeUnit.HOURS);
+        log.debug("缓存城市路线: cityId={}, count={}", cityId, routes.size());
+        return routes;
     }
 
     @Override
     public boolean save(Route route) {
-        return routeRepository.save(route) != null;
+        boolean result = routeRepository.save(route) != null;
+        if (result) {
+            invalidateRouteCache(route.getUserId().longValue(), route.getCityId());
+        }
+        return result;
     }
 
     @Override
     public boolean updateById(Route route) {
-        return routeRepository.update(route);
+        boolean result = routeRepository.update(route);
+        if (result) {
+            invalidateRouteCache(route.getUserId().longValue(), route.getCityId());
+            String detailKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "detail", route.getId());
+            cacheUtil.delete(detailKey);
+        }
+        return result;
     }
 
     @Override
     public boolean removeById(Integer id) {
-        return routeRepository.deleteById(id.longValue());
+        Route route = getById(id);
+        boolean result = routeRepository.deleteById(id.longValue());
+        if (result && route != null) {
+            invalidateRouteCache(route.getUserId().longValue(), route.getCityId());
+            String detailKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "detail", id);
+            cacheUtil.delete(detailKey);
+        }
+        return result;
+    }
+
+    private void invalidateRouteCache(Long userId, Integer cityId) {
+        if (userId != null) {
+            cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "user", userId));
+        }
+        if (cityId != null) {
+            cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "city", cityId));
+        }
+        cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "all"));
+        cacheUtil.deleteByPattern(CacheUtil.ROUTE_KEY_PREFIX + ":search:*");
+        log.info("路线缓存已失效: userId={}, cityId={}", userId, cityId);
     }
 
     @Override

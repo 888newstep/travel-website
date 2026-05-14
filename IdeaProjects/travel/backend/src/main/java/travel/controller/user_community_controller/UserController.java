@@ -1,5 +1,6 @@
 package travel.controller.user_community_controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.entity.user_community.Feedback;
@@ -15,8 +16,8 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import travel.utils.Result;
-
-import java.util.ArrayList;
+import travel.service.MessageProducerService;
+import travel.utils.RateLimiter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,8 @@ public class UserController {
     private final UserService userService;
     private final NotificationServiceImpl notificationService;
     private final FeedbackService feedbackService;
+    private final MessageProducerService messageProducerService;
+    private final RateLimiter rateLimiter;
 
     @PostMapping("/register")
     public Result<User> register(@RequestBody @Valid RegisterRequest request) {
@@ -42,16 +45,24 @@ public class UserController {
         return Result.success("注册成功", registered);
     }
 
-    /*@PostMapping("/login")
-    public LoginResponse login(@RequestBody @Valid LoginRequest request) {
-        String token = userService.login(request.getUsername(), request.getPassword());
-        LoginResponse response = new LoginResponse();
-        response.setToken(token);
-        return response;
-    }*/
     @PostMapping("/login")
     public Result<Map<String, String>> login(@RequestBody @Valid LoginRequest request) {
         String token = userService.login(request.getUsername(), request.getPassword());
+        LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(User::getUsername, request.getUsername())
+                .or()
+                .eq(User::getPhone, request.getUsername());
+        User user = userService.getOne(queryWrapper);
+
+        if (user != null) {
+            messageProducerService.sendNotification(
+                    user.getId(),
+                    "system",
+                    "登录提醒",
+                    "您的账号于 " + java.time.LocalDateTime.now() + " 登录"
+            );
+        }
+
         Map<String, String> response = new HashMap<>();
         response.put("token", token);
         return Result.success("登录成功", response);
@@ -124,6 +135,10 @@ public class UserController {
     @GetMapping("/notifications")
     public Result<List<Notification>> getNotifications(@RequestParam(defaultValue = "1") Integer page,
                                                        @RequestParam(defaultValue = "20") Integer size) {
+        if (!rateLimiter.tryAcquire("user:notifications:" + userService.getCurrentUser().getId(), 10, 60)) {
+            return Result.error("请求过于频繁，请稍后再试");
+        }
+
         User currentUser = userService.getCurrentUser();
         List<Notification> notifications = notificationService.getByUserId(currentUser.getId(), page, size);
         return Result.success("获取通知列表成功", notifications);

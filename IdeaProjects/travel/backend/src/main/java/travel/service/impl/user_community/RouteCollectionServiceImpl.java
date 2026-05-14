@@ -20,9 +20,9 @@ import travel.utils.CacheUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import travel.service.DistributedLockService;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -34,21 +34,39 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     private static final Logger log = LoggerFactory.getLogger(RouteCollectionServiceImpl.class);
 
     private final RouteService routeService;
+    private final DistributedLockService distributedLockService;
     @Lazy
     private final UserService userService;
     private final CacheUtil cacheUtil;
 
     @Override
     public boolean collectRoute(Integer routeId, Integer userId) {
-        try {
-            RouteCollection collection = createCollection(routeId, userId, false, null);
-            return collection != null;
-        } catch (Exception e) {
-            log.error("收藏路线失败: {}", e.getMessage());
-            return false;
-        }
+        String lockKey = "collect:" + userId + ":" + routeId;
+
+        return distributedLockService.executeWithLock(lockKey, () -> {
+            try {
+                RouteCollection collection = createCollection(routeId, userId, false, null);
+                return collection != null;
+            } catch (Exception e) {
+                log.error("收藏路线失败: {}", e.getMessage());
+                return false;
+            }
+        });
     }
 
+    @Override
+    public boolean uncollectRoute(Integer routeId, Integer userId) {
+        String lockKey = "uncollect:" + userId + ":" + routeId;
+
+        return distributedLockService.executeWithLock(lockKey, () -> {
+            try {
+                return cancelCollect(routeId, userId);
+            } catch (Exception e) {
+                log.error("取消收藏失败: {}", e.getMessage());
+                return false;
+            }
+        });
+    }
     private void invalidateCollectedCache(Integer routeId, Integer userId) {
         String collectedCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "collected", routeId, userId);
         cacheUtil.delete(collectedCacheKey);
@@ -108,10 +126,7 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
         return collections.size();
     }
 
-    @Override
-    public boolean uncollectRoute(Integer routeId, Integer userId) {
-        return cancelCollect(routeId, userId);
-    }
+
 
     @Override
     public boolean isCollected(Integer routeId, Integer userId) {
