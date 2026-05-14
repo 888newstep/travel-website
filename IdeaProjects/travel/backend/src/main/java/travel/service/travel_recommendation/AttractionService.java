@@ -8,6 +8,8 @@ import java.util.Map;
 
 public interface AttractionService extends IService<Attraction> {
 
+    Attraction getById(Integer id);
+
     List<Attraction> getByCityId(Integer cityId);
 
     List<Attraction> getByCityIdAndType(Integer cityId, String type);
@@ -23,4 +25,6 @@ public interface AttractionService extends IService<Attraction> {
     List<Attraction> getRecommendations(Integer cityId, int limit);
 
     List<Attraction> search(String keyword);
+
+    boolean removeById(Integer id);
 }
