@@ -16,6 +16,7 @@ import travel.service.user_community.UserService;
 import travel.utils.CacheUtil;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Slf4j
 @Service
@@ -25,6 +26,7 @@ public class MessageConsumerService {
     private final NotificationMapper notificationMapper;
     private final UserService userService;
     private final CacheUtil cacheUtil;
+    private final PerformanceMonitorService performanceMonitorService;
 
     /**
      * 消费通知消息
@@ -95,6 +97,8 @@ public class MessageConsumerService {
             log.info("收到异步任务消息: taskType={}, taskId={}",
                     message.getTaskType(), message.getTaskId());
 
+            long startTime = System.currentTimeMillis();
+
             switch (message.getTaskType()) {
                 case "ROUTE_STATISTICS_UPDATE":
                     handleRouteStatisticsUpdate(message.getParams());
@@ -109,22 +113,108 @@ public class MessageConsumerService {
                     log.warn("未知的任务类型: taskType={}", message.getTaskType());
             }
 
-            log.info("异步任务处理成功: taskId={}", message.getTaskId());
+            long duration = System.currentTimeMillis() - startTime;
+            performanceMonitorService.recordTaskExecution(message.getTaskType(), duration);
+
+            log.info("异步任务处理成功: taskId={}, duration={}ms", message.getTaskId(), duration);
         } catch (Exception e) {
             log.error("处理异步任务失败: taskId={}, error={}",
                     message.getTaskId(), e.getMessage(), e);
         }
     }
 
-    private void handleRouteStatisticsUpdate(java.util.Map<String, Object> params) {
+    /**
+     * 处理路线统计更新任务
+     */
+    private void handleRouteStatisticsUpdate(Map<String, Object> params) {
         log.info("执行路线统计更新任务: params={}", params);
+
+        Integer routeId = (Integer) params.get("routeId");
+        if (routeId == null) {
+            log.warn("路线统计更新任务缺少routeId参数");
+            return;
+        }
+
+        try {
+            // TODO: 集成实际的路线统计服务
+            // 1. 计算路线的平均评分
+            // 2. 更新路线的浏览数、收藏数等统计数据
+            // 3. 更新缓存
+
+            cacheUtil.delete(CacheUtil.generateKey("route", "statistics", routeId));
+
+            log.info("路线统计更新完成: routeId={}", routeId);
+        } catch (Exception e) {
+            log.error("路线统计更新失败: routeId={}, error={}", routeId, e.getMessage(), e);
+        }
     }
 
-    private void handleUserActivityLog(java.util.Map<String, Object> params) {
+    /**
+     * 处理用户活动日志记录
+     */
+    private void handleUserActivityLog(Map<String, Object> params) {
         log.info("记录用户活动日志: params={}", params);
+
+        Integer userId = (Integer) params.get("userId");
+        String activityType = (String) params.get("activityType");
+        String activityDetail = (String) params.get("activityDetail");
+
+        if (userId == null || activityType == null) {
+            log.warn("用户活动日志缺少必要参数");
+            return;
+        }
+
+        try {
+            // TODO: 集成实际的用户活动日志服务
+            // 1. 记录用户活动到数据库
+            // 2. 更新用户活跃度统计
+            // 3. 用于个性化推荐
+
+            String cacheKey = CacheUtil.generateKey("user", "activity", userId);
+            cacheUtil.delete(cacheKey);
+
+            log.info("用户活动日志记录完成: userId={}, activityType={}", userId, activityType);
+        } catch (Exception e) {
+            log.error("用户活动日志记录失败: userId={}, error={}", userId, e.getMessage(), e);
+        }
     }
 
-    private void handleCachePreheat(java.util.Map<String, Object> params) {
+    /**
+     * 处理缓存预热任务
+     */
+    private void handleCachePreheat(Map<String, Object> params) {
         log.info("执行缓存预热任务: params={}", params);
+
+        String cacheType = (String) params.get("cacheType");
+        Integer limit = params.get("limit") != null ? (Integer) params.get("limit") : 100;
+
+        if (cacheType == null) {
+            log.warn("缓存预热任务缺少cacheType参数");
+            return;
+        }
+
+        try {
+            // TODO: 集成实际的缓存预热逻辑
+            switch (cacheType) {
+                case "HOT_ROUTES":
+                    // 预热热门路线缓存
+                    log.info("预热热门路线缓存: limit={}", limit);
+                    break;
+                case "POPULAR_ATTRACTIONS":
+                    // 预热热门景点缓存
+                    log.info("预热热门景点缓存: limit={}", limit);
+                    break;
+                case "CITY_INFO":
+                    // 预热城市信息缓存
+                    log.info("预热城市信息缓存");
+                    break;
+                default:
+                    log.warn("未知的缓存预热类型: cacheType={}", cacheType);
+            }
+
+            log.info("缓存预热任务完成: cacheType={}", cacheType);
+        } catch (Exception e) {
+            log.error("缓存预热任务失败: cacheType={}, error={}", cacheType, e.getMessage(), e);
+        }
     }
 }

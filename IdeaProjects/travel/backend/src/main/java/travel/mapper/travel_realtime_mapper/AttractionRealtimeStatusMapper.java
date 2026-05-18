@@ -1,38 +1,50 @@
 package travel.mapper.travel_realtime_mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 import travel.entity.travel_realtime.AttractionRealtimeStatus;
-import org.springframework.stereotype.Repository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 景点实时状态Mapper（Repository层）
+ * 景点实时状态Mapper
  */
-@Repository
 public interface AttractionRealtimeStatusMapper extends BaseMapper<AttractionRealtimeStatus> {
 
     /**
      * 根据景点ID查询实时状态
      */
     @Select("SELECT * FROM attraction_realtime_status WHERE attraction_id = #{attractionId} AND deleted = 0 LIMIT 1")
-    AttractionRealtimeStatus selectByAttractionId(@Param("attractionId") Long attractionId);
+    AttractionRealtimeStatus selectByAttractionId(Long attractionId);
 
     /**
-     * 查询拥挤景点列表
+     * 根据拥挤等级查询景点列表
      */
     @Select("SELECT * FROM attraction_realtime_status WHERE crowd_level >= #{minCrowdLevel} AND deleted = 0 ORDER BY crowd_level DESC")
-    List<AttractionRealtimeStatus> selectByCrowdLevel(@Param("minCrowdLevel") int minCrowdLevel);
+    List<AttractionRealtimeStatus> selectByCrowdLevel(int minCrowdLevel);
 
     /**
-     * 自定义SQL：查询景点近7天人流均值（降级备用）
+     * 查询需要同步的景点状态
      */
-    Integer selectAvgCrowdCount(@Param("attractionId") Long attractionId);
+    @Select("SELECT * FROM attraction_realtime_status WHERE update_time < #{threshold} AND deleted = 0")
+    List<AttractionRealtimeStatus> selectNeedSync(LocalDateTime threshold);
+
+    /**
+     * 查询景点历史平均人流
+     */
+    @Select("SELECT AVG(crowd_count) FROM attraction_realtime_status WHERE attraction_id = #{attractionId} AND deleted = 0")
+    Integer selectAvgCrowdCount(Long attractionId);
 
     /**
      * 批量更新同步时间
      */
-    int batchUpdateSyncTime(@Param("attractionIds") Long[] attractionIds);
+    @Update("<script>" +
+            "UPDATE attraction_realtime_status SET update_time = NOW() WHERE id IN " +
+            "<foreach collection='ids' item='id' open='(' separator=',' close=')'>" +
+            "#{id}" +
+            "</foreach>" +
+            "</script>")
+    int batchUpdateSyncTime(Long[] ids);
 }

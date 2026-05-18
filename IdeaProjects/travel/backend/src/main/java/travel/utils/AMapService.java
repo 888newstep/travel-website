@@ -2,21 +2,24 @@ package travel.utils;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-@Component
+/**
+ * 高德地图服务类
+ */
+@Slf4j
+@Service
 public class AMapService {
-
-    private static final Logger log = LoggerFactory.getLogger(AMapService.class);
 
     @Value("${amap.api-key}")
     private String apiKey;
@@ -24,306 +27,351 @@ public class AMapService {
     @Value("${amap.api-url:https://restapi.amap.com/v3}")
     private String apiUrl;
 
-    private final OkHttpClient httpClient = new OkHttpClient();
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final OkHttpClient httpClient;
+    private final ObjectMapper objectMapper;
+    private final AICacheManager cacheManager;
+
+    public AMapService(AICacheManager cacheManager) {
+        this.httpClient = new OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(10, TimeUnit.SECONDS)
+                .build();
+        this.objectMapper = new ObjectMapper();
+        this.cacheManager = cacheManager;
+    }
 
     /**
-     * 地理编码：地址转经纬度
+     * 获取天气信息（通过城市编码）- 带缓存
      */
-    public Map<String, Object> geocode(String address) {
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getWeather(String cityCode) {
+        return (Map<String, Object>) cacheManager.getOrSetWeatherCache(cityCode, () -> {
+            try {
+                String url = String.format("%s/weather/weatherInfo?city=%s&key=%s&extensions=base",
+                        apiUrl, cityCode, apiKey);
+
+                Request request = new Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String responseBody = response.body().string();
+                        JsonNode jsonNode = objectMapper.readTree(responseBody);
+
+                        if ("1".equals(jsonNode.get("status").asText())) {
+                            JsonNode lives = jsonNode.get("lives").get(0);
+                            Map<String, Object> weather = new HashMap<>();
+                            weather.put("city", lives.get("city").asText());
+                            weather.put("weather", lives.get("weather").asText());
+                            weather.put("temperature", lives.get("temperature").asInt());
+                            weather.put("winddirection", lives.get("winddirection").asText());
+                            weather.put("windpower", lives.get("windpower").asText());
+                            weather.put("humidity", lives.get("humidity").asText());
+                            log.info("从高德API获取天气成功: cityCode={}", cityCode);
+                            return weather;
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                log.error("获取天气信息失败: {}", e.getMessage(), e);
+            }
+            return null;
+        });
+    }
+
+    /**
+     * 根据经纬度获取天气信息 - 带缓存
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getWeatherByLocation(String location) {
         try {
-            String url = String.format("%s/geocode/geo?address=%s&key=%s",
-                    apiUrl, address, apiKey);
+            // 先通过逆地理编码获取城市编码（带缓存）
+            String[] coords = location.split(",");
+            double lng = Double.parseDouble(coords[0]);
+            double lat = Double.parseDouble(coords[1]);
 
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
+            Map<String, Object> geoResult = reverseGeocode(lng, lat);
+            if (geoResult != null) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> addressComponent = (Map<String, Object>) geoResult.get("addressComponent");
+                if (addressComponent != null && addressComponent.get("adcode") != null) {
+                    String adcode = addressComponent.get("adcode").toString();
+                    return getWeather(adcode);
+                }
+            }
+        } catch (Exception e) {
+            log.error("根据位置获取天气失败: {}", e.getMessage(), e);
+        }
+        return null;
+    }
 
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
+    /**
+     * 驾车路径规划 - 带缓存
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> drivingRoute(double originLng, double originLat,
+                                            double destLng, double destLat) {
+        return (Map<String, Object>) cacheManager.getOrSetRouteCache(
+                originLng, originLat, destLng, destLat, "driving", () -> {
+                    try {
+                        String url = String.format("%s/direction/driving?origin=%f,%f&destination=%f,%f&key=%s",
+                                apiUrl, originLng, originLat, destLng, destLat, apiKey);
 
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode geocodes = jsonNode.get("geocodes");
-                        if (geocodes.isArray() && geocodes.size() > 0) {
-                            JsonNode location = geocodes.get(0).get("location");
-                            String[] coords = location.asText().split(",");
+                        Request request = new Request.Builder()
+                                .url(url)
+                                .get()
+                                .build();
 
+                        try (Response response = httpClient.newCall(request).execute()) {
+                            if (response.isSuccessful() && response.body() != null) {
+                                String responseBody = response.body().string();
+                                JsonNode jsonNode = objectMapper.readTree(responseBody);
+
+                                if ("1".equals(jsonNode.get("status").asText())) {
+                                    JsonNode route = jsonNode.get("route").get("paths").get(0);
+                                    Map<String, Object> result = new HashMap<>();
+                                    result.put("distance", route.get("distance").asInt());
+                                    result.put("duration", route.get("duration").asInt());
+                                    result.put("steps", route.get("steps"));
+                                    log.info("从高德API获取驾车路线成功");
+                                    return result;
+                                }
+                            }
+                        }
+                    } catch (IOException e) {
+                        log.error("驾车路径规划失败: {}", e.getMessage(), e);
+                    }
+                    return null;
+                });
+    }
+
+    /**
+     * 步行路径规划 - 带缓存
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> walkingRoute(double originLng, double originLat,
+                                            double destLng, double destLat) {
+        return (Map<String, Object>) cacheManager.getOrSetRouteCache(
+                originLng, originLat, destLng, destLat, "walking", () -> {
+                    try {
+                        String url = String.format("%s/direction/walking?origin=%f,%f&destination=%f,%f&key=%s",
+                                apiUrl, originLng, originLat, destLng, destLat, apiKey);
+
+                        Request request = new Request.Builder()
+                                .url(url)
+                                .get()
+                                .build();
+
+                        try (Response response = httpClient.newCall(request).execute()) {
+                            if (response.isSuccessful() && response.body() != null) {
+                                String responseBody = response.body().string();
+                                JsonNode jsonNode = objectMapper.readTree(responseBody);
+
+                                if ("1".equals(jsonNode.get("status").asText())) {
+                                    JsonNode route = jsonNode.get("route").get("paths").get(0);
+                                    Map<String, Object> result = new HashMap<>();
+                                    result.put("distance", route.get("distance").asInt());
+                                    result.put("duration", route.get("duration").asInt());
+                                    result.put("steps", route.get("steps"));
+                                    log.info("从高德API获取步行路线成功");
+                                    return result;
+                                }
+                            }
+                        }
+                    } catch (IOException e) {
+                        log.error("步行路径规划失败: {}", e.getMessage(), e);
+                    }
+                    return null;
+                });
+    }
+
+    /**
+     * 公共交通路径规划 - 带缓存
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> transitRoute(double originLng, double originLat,
+                                            double destLng, double destLat, String city) {
+        return (Map<String, Object>) cacheManager.getOrSetRouteCache(
+                originLng, originLat, destLng, destLat, "transit_" + city, () -> {
+                    try {
+                        String url = String.format("%s/direction/transit/integrated?origin=%f,%f&destination=%f,%f&city=%s&key=%s",
+                                apiUrl, originLng, originLat, destLng, destLat, city, apiKey);
+
+                        Request request = new Request.Builder()
+                                .url(url)
+                                .get()
+                                .build();
+
+                        try (Response response = httpClient.newCall(request).execute()) {
+                            if (response.isSuccessful() && response.body() != null) {
+                                String responseBody = response.body().string();
+                                JsonNode jsonNode = objectMapper.readTree(responseBody);
+
+                                if ("1".equals(jsonNode.get("status").asText())) {
+                                    JsonNode route = jsonNode.get("route").get("transits").get(0);
+                                    Map<String, Object> result = new HashMap<>();
+                                    result.put("distance", route.get("distance").asInt());
+                                    result.put("duration", route.get("duration").asInt());
+                                    result.put("cost", route.get("cost").asText());
+                                    log.info("从高德API获取公交路线成功");
+                                    return result;
+                                }
+                            }
+                        }
+                    } catch (IOException e) {
+                        log.error("公共交通路径规划失败: {}", e.getMessage(), e);
+                    }
+                    return null;
+                });
+    }
+
+    /**
+     * 地点搜索 - 带缓存
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> searchPlaces(String keywords, String city, int page) {
+        return (Map<String, Object>) cacheManager.getOrSetPlaceCache(keywords, city, page, () -> {
+            try {
+                String url = String.format("%s/place/text?keywords=%s&city=%s&page=%d&key=%s",
+                        apiUrl, keywords, city, page, apiKey);
+
+                Request request = new Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
+
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String responseBody = response.body().string();
+                        JsonNode jsonNode = objectMapper.readTree(responseBody);
+
+                        if ("1".equals(jsonNode.get("status").asText())) {
                             Map<String, Object> result = new HashMap<>();
-                            result.put("longitude", Double.parseDouble(coords[0]));
-                            result.put("latitude", Double.parseDouble(coords[1]));
-                            result.put("formattedAddress", geocodes.get(0).get("formatted_address").asText());
+                            result.put("count", jsonNode.get("count").asInt());
+                            result.put("pois", jsonNode.get("pois"));
+                            log.info("从高德API搜索地点成功: keywords={}, city={}", keywords, city);
                             return result;
                         }
                     }
                 }
+            } catch (IOException e) {
+                log.error("地点搜索失败: {}", e.getMessage(), e);
             }
-        } catch (IOException e) {
-            log.error("地理编码失败: {}", e.getMessage(), e);
-        }
-        return null;
+            return null;
+        });
     }
 
     /**
-     * 逆地理编码：经纬度转地址
+     * 获取实时交通状况 - 带缓存
      */
-    public Map<String, Object> reverseGeocode(double longitude, double latitude) {
-        try {
-            String url = String.format("%s/geocode/regeo?location=%f,%f&key=%s",
-                    apiUrl, longitude, latitude, apiKey);
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getTrafficStatus(String cityCode) {
+        return (Map<String, Object>) cacheManager.getOrSetTrafficCache(cityCode, () -> {
+            try {
+                String url = String.format("%s/traffic/status/road?city=%s&key=%s",
+                        apiUrl, cityCode, apiKey);
 
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
+                Request request = new Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String responseBody = response.body().string();
+                        JsonNode jsonNode = objectMapper.readTree(responseBody);
 
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode regeocode = jsonNode.get("regeocode");
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("formattedAddress", regeocode.get("formatted_address").asText());
-                        result.put("addressComponent", regeocode.get("addressComponent"));
-                        return result;
-                    }
-                }
-            }
-        } catch (IOException e) {
-            log.error("逆地理编码失败: {}", e.getMessage(), e);
-        }
-        return null;
-    }
-
-    /**
-     * 路径规划：驾车路线
-     */
-    public Map<String, Object> drivingRoute(double originLng, double originLat,
-                                            double destLng, double destLat) {
-        try {
-            String url = String.format("%s/direction/driving?origin=%f,%f&destination=%f,%f&key=%s",
-                    apiUrl, originLng, originLat, destLng, destLat, apiKey);
-
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
-
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode route = jsonNode.get("route").get("paths").get(0);
-
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("distance", route.get("distance").asDouble());
-                        result.put("duration", route.get("duration").asInt());
-                        result.put("steps", route.get("steps"));
-                        return result;
-                    }
-                }
-            }
-        } catch (IOException e) {
-            log.error("路径规划失败: {}", e.getMessage(), e);
-        }
-        return null;
-    }
-
-    /**
-     * 步行路径规划
-     */
-    public Map<String, Object> walkingRoute(double originLng, double originLat,
-                                            double destLng, double destLat) {
-        try {
-            String url = String.format("%s/direction/walking?origin=%f,%f&destination=%f,%f&key=%s",
-                    apiUrl, originLng, originLat, destLng, destLat, apiKey);
-
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
-
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode route = jsonNode.get("route").get("paths").get(0);
-
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("distance", route.get("distance").asDouble());
-                        result.put("duration", route.get("duration").asInt());
-                        result.put("steps", route.get("steps"));
-                        return result;
-                    }
-                }
-            }
-        } catch (IOException e) {
-            log.error("步行路径规划失败: {}", e.getMessage(), e);
-        }
-        return null;
-    }
-
-    /**
-     * 公交路径规划
-     */
-    public Map<String, Object> transitRoute(double originLng, double originLat,
-                                            double destLng, double destLat, String city) {
-        try {
-            String url = String.format("%s/direction/transit/integrated?origin=%f,%f&destination=%f,%f&city=%s&key=%s",
-                    apiUrl, originLng, originLat, destLng, destLat, city, apiKey);
-
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
-
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode route = jsonNode.get("route").get("transits").get(0);
-
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("distance", route.get("distance").asDouble());
-                        result.put("duration", route.get("duration").asInt());
-                        result.put("cost", route.get("cost").asText());
-                        result.put("segments", route.get("segments"));
-                        return result;
-                    }
-                }
-            }
-        } catch (IOException e) {
-            log.error("公交路径规划失败: {}", e.getMessage(), e);
-        }
-        return null;
-    }
-
-    /**
-     * 搜索周边POI
-     */
-    public List<Map<String, Object>> searchNearby(String keyword, double longitude,
-                                                  double latitude, int radius) {
-        List<Map<String, Object>> results = new ArrayList<>();
-        try {
-            String url = String.format("%s/place/around?keywords=%s&location=%f,%f&radius=%d&key=%s",
-                    apiUrl, keyword, longitude, latitude, radius, apiKey);
-
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
-
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
-
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode pois = jsonNode.get("pois");
-                        if (pois.isArray()) {
-                            for (JsonNode poi : pois) {
-                                Map<String, Object> item = new HashMap<>();
-                                item.put("id", poi.get("id").asText());
-                                item.put("name", poi.get("name").asText());
-                                item.put("type", poi.get("type").asText());
-                                item.put("address", poi.get("address").asText());
-
-                                String location = poi.get("location").asText();
-                                String[] coords = location.split(",");
-                                item.put("longitude", Double.parseDouble(coords[0]));
-                                item.put("latitude", Double.parseDouble(coords[1]));
-
-                                item.put("distance", poi.has("distance") ? poi.get("distance").asInt() : 0);
-
-                                results.add(item);
-                            }
+                        if ("1".equals(jsonNode.get("status").asText())) {
+                            Map<String, Object> result = new HashMap<>();
+                            result.put("trafficinfo", jsonNode.get("trafficinfo"));
+                            log.info("从高德API获取交通状况成功: cityCode={}", cityCode);
+                            return result;
                         }
                     }
                 }
+            } catch (IOException e) {
+                log.error("获取交通状况失败: {}", e.getMessage(), e);
             }
-        } catch (IOException e) {
-            log.error("周边搜索失败: {}", e.getMessage(), e);
-        }
-        return results;
+            return null;
+        });
     }
 
     /**
-     * 计算两点间距离
+     * 逆地理编码（经纬度转地址）- 带缓存
      */
-    public double calculateDistance(double lng1, double lat1, double lng2, double lat2) {
-        try {
-            String url = String.format("%s/distance?origins=%f,%f&destination=%f,%f&type=1&key=%s",
-                    apiUrl, lng1, lat1, lng2, lat2, apiKey);
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> reverseGeocode(double longitude, double latitude) {
+        String locationKey = String.format("%.6f,%.6f", longitude, latitude);
+        return (Map<String, Object>) cacheManager.getOrSetPlaceCache(locationKey, "geo", 1, () -> {
+            try {
+                String url = String.format("%s/geocode/regeo?location=%f,%f&key=%s&extensions=base",
+                        apiUrl, longitude, latitude, apiKey);
 
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
+                Request request = new Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String responseBody = response.body().string();
+                        JsonNode jsonNode = objectMapper.readTree(responseBody);
 
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode result = jsonNode.get("results").get(0);
-                        return result.get("distance").asDouble();
+                        if ("1".equals(jsonNode.get("status").asText())) {
+                            JsonNode regeocode = jsonNode.get("regeocode");
+                            Map<String, Object> result = new HashMap<>();
+                            result.put("formattedAddress", regeocode.get("formattedAddress").asText());
+                            result.put("addressComponent", regeocode.get("addressComponent"));
+                            log.info("从高德API逆地理编码成功");
+                            return result;
+                        }
                     }
                 }
+            } catch (IOException e) {
+                log.error("逆地理编码失败: {}", e.getMessage(), e);
             }
-        } catch (IOException e) {
-            log.error("距离计算失败: {}", e.getMessage(), e);
-        }
-        return 0;
+            return null;
+        });
     }
 
     /**
-     * 获取实时天气
+     * 获取景点周边设施 - 带缓存
      */
-    public Map<String, Object> getWeather(String cityCode) {
-        try {
-            String url = String.format("%s/weather/weatherInfo?city=%s&key=%s&extensions=all",
-                    apiUrl, cityCode, apiKey);
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getNearbyPlaces(double longitude, double latitude,
+                                               String types, int radius) {
+        String locationKey = String.format("%.6f,%.6f_%s_%d", longitude, latitude, types, radius);
+        return (Map<String, Object>) cacheManager.getOrSetPlaceCache(locationKey, "nearby", 1, () -> {
+            try {
+                String url = String.format("%s/place/around?location=%f,%f&types=%s&radius=%d&key=%s",
+                        apiUrl, longitude, latitude, types, radius, apiKey);
 
-            Request request = new Request.Builder()
-                    .url(url)
-                    .get()
-                    .build();
+                Request request = new Request.Builder()
+                        .url(url)
+                        .get()
+                        .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
-                    JsonNode jsonNode = objectMapper.readTree(responseBody);
+                try (Response response = httpClient.newCall(request).execute()) {
+                    if (response.isSuccessful() && response.body() != null) {
+                        String responseBody = response.body().string();
+                        JsonNode jsonNode = objectMapper.readTree(responseBody);
 
-                    if ("1".equals(jsonNode.get("status").asText())) {
-                        JsonNode forecast = jsonNode.get("forecasts").get(0).get("casts").get(0);
-
-                        Map<String, Object> result = new HashMap<>();
-                        result.put("date", forecast.get("date").asText());
-                        result.put("week", forecast.get("week").asText());
-                        result.put("dayweather", forecast.get("dayweather").asText());
-                        result.put("nightweather", forecast.get("nightweather").asText());
-                        result.put("daytemp", forecast.get("daytemp").asInt());
-                        result.put("nighttemp", forecast.get("nighttemp").asInt());
-                        result.put("daywind", forecast.get("daywind").asText());
-                        result.put("nightwind", forecast.get("nightwind").asText());
-                        return result;
+                        if ("1".equals(jsonNode.get("status").asText())) {
+                            Map<String, Object> result = new HashMap<>();
+                            result.put("count", jsonNode.get("count").asInt());
+                            result.put("pois", jsonNode.get("pois"));
+                            log.info("从高德API获取周边设施成功");
+                            return result;
+                        }
                     }
                 }
+            } catch (IOException e) {
+                log.error("获取周边设施失败: {}", e.getMessage(), e);
             }
-        } catch (IOException e) {
-            log.error("天气查询失败: {}", e.getMessage(), e);
-        }
-        return null;
+            return null;
+        });
     }
+
 }

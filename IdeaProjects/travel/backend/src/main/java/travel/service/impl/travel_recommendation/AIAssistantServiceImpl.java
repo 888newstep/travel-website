@@ -18,7 +18,6 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
-@Primary
 @RequiredArgsConstructor
 public class AIAssistantServiceImpl implements AIAssistantService {
 
