@@ -19,30 +19,6 @@ public class PerformanceMonitorService {
     private final Map<String, Long> metrics = new ConcurrentHashMap<>();
 
     /**
-     * 记录API调用
-     */
-    public void recordApiCall(String apiName, long duration) {
-        metrics.compute(apiName, (k, v) -> v == null ? duration : v + duration);
-
-        cacheUtil.increment(
-                CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "api_calls", apiName),
-                1
-        );
-    }
-
-    /**
-     * 定时输出性能指标
-     */
-    @Scheduled(fixedRate = 60000)
-    public void reportMetrics() {
-        log.info("=== 性能指标报告 ===");
-        metrics.forEach((api, duration) -> {
-            log.info("API: {}, 总耗时: {}ms", api, duration);
-        });
-        metrics.clear();
-    }
-
-    /**
      * 获取缓存命中率
      */
     public Map<String, Object> getCacheStats() {
@@ -62,4 +38,43 @@ public class PerformanceMonitorService {
 
         return stats;
     }
+
+    /**
+     * 记录API调用
+     */
+    public void recordApiCall(String apiName, long duration) {
+        metrics.compute(apiName, (k, v) -> v == null ? duration : v + duration);
+
+        cacheUtil.increment(
+                CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "api_calls", apiName),
+                1
+        );
+    }
+
+    /**
+     * 记录任务执行
+     */
+    public void recordTaskExecution(String taskType, long duration) {
+        metrics.compute("TASK_" + taskType, (k, v) -> v == null ? duration : v + duration);
+
+        cacheUtil.increment(
+                CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "task_executions", taskType),
+                1
+        );
+
+        log.debug("记录任务执行: taskType={}, duration={}ms", taskType, duration);
+    }
+
+    /**
+     * 定时输出性能指标
+     */
+    @Scheduled(fixedRate = 60000)
+    public void reportMetrics() {
+        log.info("=== 性能指标报告 ===");
+        metrics.forEach((api, duration) -> {
+            log.info("API/Task: {}, 总耗时: {}ms", api, duration);
+        });
+        metrics.clear();
+    }
+
 }
