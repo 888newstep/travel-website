@@ -34,6 +34,10 @@ export const aiApi = {
         return apiClient.post<any>('/ai/image-analysis', data);
     },
 
+    getImageAnalysisTypes() {
+        return apiClient.get<{ value: string; label: string }[]>('/ai/image-analysis/types');
+    },
+
     generateItinerary(data: {
         destination: string;
         days: number;
@@ -53,16 +57,32 @@ export const aiApi = {
     },
 
     smartAssistant(query: string, context?: Record<string, any>) {
-        return apiClient.post<AIChatResponse>('/ai/assistant/query', {
+        return apiClient.post<AIChatResponse>('/ai/assistant/chat', {
             query,
             context,
         });
     },
 
     advancedChatbot(message: string, conversationId?: string) {
-        return apiClient.post<AIChatResponse>('/ai/advanced/chatbot', {
+        return apiClient.post<AIChatResponse>('/ai/advanced/chat', {
             message,
             conversationId,
         });
+    },
+
+    getBudgetEstimation(data: Record<string, any>) {
+        return apiClient.post<any>('/ai/advanced/budget', data);
+    },
+
+    planSmartRoute(data: Record<string, any>) {
+        return apiClient.post<any>('/ai/advanced/plan', data);
+    },
+
+    getSafetyAdvice(cityId: number) {
+        return apiClient.get<any>(`/ai/advanced/safety/${cityId}`);
+    },
+
+    processVoice(data: { audioData: string | null; text: string }) {
+        return apiClient.post<any>('/ai/advanced/voice', data);
     },
 };

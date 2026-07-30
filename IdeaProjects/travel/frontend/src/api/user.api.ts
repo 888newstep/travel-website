@@ -1,4 +1,5 @@
 import apiClient from '../utils/api';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../constants';
 
 export interface LoginRequest {
     username: string;
@@ -67,7 +68,7 @@ export const userApi = {
     },
 
     async updateUser(user: Partial<User>) {
-        const response: any = await apiClient.put('/users', user);
+        const response: any = await apiClient.put('/users/profile', user);
         return response as boolean;
     },
 
@@ -118,10 +119,30 @@ export const userApi = {
         return response as RefreshTokenResponse;
     },
 
-    async getNotifications(page: number = 1, size: number = 20) {
-        const response: any = await apiClient.get('/users/notifications', {
+    async getNotifications(page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
+        const response: any = await apiClient.get('/v1/notifications', {
             params: { page, size },
         });
         return response;
+    },
+
+    async markNotificationRead(notificationId: number) {
+        const response: any = await apiClient.put(`/v1/notifications/${notificationId}/read`);
+        return response as boolean;
+    },
+
+    async deleteNotification(notificationId: number) {
+        const response: any = await apiClient.delete(`/v1/notifications/${notificationId}`);
+        return response as boolean;
+    },
+
+    async getUnreadNotificationCount() {
+        const response: any = await apiClient.get('/v1/notifications/unread-count');
+        return response as number;
+    },
+
+    async markAllAsRead() {
+        const response: any = await apiClient.put('/v1/notifications/read-all');
+        return response as boolean;
     },
 };

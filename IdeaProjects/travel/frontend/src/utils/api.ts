@@ -1,8 +1,10 @@
 import axios from 'axios';
-import type { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
-const apiClient: AxiosInstance = axios.create({
-    baseURL: '/api',
-    timeout: 30000,
+import type { AxiosResponse, AxiosError } from 'axios';
+
+// 响应拦截器已解包 data，方法直接返回 Promise<T>
+const apiClient = axios.create({
+    baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+    timeout: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
     headers: {
         'Content-Type': 'application/json; charset=utf-8',
     },
@@ -38,7 +40,7 @@ apiClient.interceptors.response.use(
                 case 401:
                     console.error('未授权，请重新登录');
                     localStorage.removeItem('token');
-                    window.location.href = '/login';
+                    window.location.href = '/';
                     break;
                 case 403:
                     console.error('拒绝访问');
@@ -59,4 +61,9 @@ apiClient.interceptors.response.use(
     }
 );
 
-export default apiClient;
+export default apiClient as {
+    get<T>(url: string, config?: Record<string, any>): Promise<T>;
+    post<T>(url: string, data?: any, config?: Record<string, any>): Promise<T>;
+    put<T>(url: string, data?: any, config?: Record<string, any>): Promise<T>;
+    delete<T>(url: string, config?: Record<string, any>): Promise<T>;
+};
