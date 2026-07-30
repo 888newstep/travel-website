@@ -1,4 +1,5 @@
 import apiClient from '../utils/api';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, DEFAULT_LIMIT, DEFAULT_LIMIT_SMALL } from '../constants';
 
 export interface RouteComment {
     id?: number;
@@ -19,13 +20,13 @@ export const commentApi = {
         return apiClient.post<RouteComment>('/route-comments', comment);
     },
 
-    getRouteComments(routeId: number, page: number = 1, size: number = 20) {
+    getRouteComments(routeId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
         return apiClient.get<RouteComment[]>(`/route-comments/route/${routeId}`, {
             params: { page, size },
         });
     },
 
-    getUserComments(userId: number, page: number = 1, size: number = 20) {
+    getUserComments(userId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
         return apiClient.get<RouteComment[]>(`/route-comments/user/${userId}`, {
             params: { page, size },
         });
@@ -49,11 +50,19 @@ export const commentApi = {
         });
     },
 
+    toggleLikeComment(commentId: number, userId: number) {
+        return apiClient.post<{ liked: boolean; likeCount: number }>(
+            `/route-comments/${commentId}/toggle-like`,
+            null,
+            { params: { userId } }
+        );
+    },
+
     getCommentStatistics(routeId: number) {
         return apiClient.get<Record<string, any>>(`/route-comments/statistics/${routeId}`);
     },
 
-    getCommentReplies(commentId: number, page: number = 1, size: number = 20) {
+    getCommentReplies(commentId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
         return apiClient.get<RouteComment[]>(`/route-comments/${commentId}/replies`, {
             params: { page, size },
         });
@@ -63,25 +72,25 @@ export const commentApi = {
         return apiClient.post<RouteComment[]>('/route-comments/batch', commentIds);
     },
 
-    getHotComments(routeId: number, limit: number = 5) {
+    getHotComments(routeId: number, limit: number = DEFAULT_LIMIT_SMALL) {
         return apiClient.get<RouteComment[]>(`/route-comments/hot/${routeId}`, {
             params: { limit },
         });
     },
 
-    getLatestComments(routeId: number, limit: number = 5) {
+    getLatestComments(routeId: number, limit: number = DEFAULT_LIMIT_SMALL) {
         return apiClient.get<RouteComment[]>(`/route-comments/latest/${routeId}`, {
             params: { limit },
         });
     },
 
-    searchComments(routeId: number, keyword: string, page: number = 1, size: number = 20) {
+    searchComments(routeId: number, keyword: string, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
         return apiClient.get<RouteComment[]>('/route-comments/search', {
             params: { routeId, keyword, page, size },
         });
     },
 
-    getHighRatingComments(routeId: number, minRating: number = 4.0, limit: number = 5) {
+    getHighRatingComments(routeId: number, minRating: number = 4.0, limit: number = DEFAULT_LIMIT_SMALL) {
         return apiClient.get<RouteComment[]>(`/route-comments/high-rating/${routeId}`, {
             params: { minRating, limit },
         });

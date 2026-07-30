@@ -14,7 +14,7 @@ services:
       - "3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
-      - ../../src/main/resources/db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ../../src/main/resources/db/init_complete.sql:/docker-entrypoint-initdb.d/init_complete.sql
     networks:
       - travel-network
     healthcheck:

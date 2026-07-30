@@ -3,6 +3,9 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
+const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:8082';
+const devPort = Number(process.env.VITE_APP_PORT) || 3000;
+
 export default defineConfig({
   plugins: [vue(), tailwindcss()],
   resolve: {
@@ -11,12 +14,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    port: devPort,
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: proxyTarget,
         changeOrigin: true,
-        // Deleted:rewrite: (path) => path.replace(/^\/api/, ''),
         headers: {
           'Content-Type': 'application/json; charset=utf-8'
         }

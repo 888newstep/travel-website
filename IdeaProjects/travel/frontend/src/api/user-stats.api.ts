@@ -13,10 +13,10 @@ export interface UserStats {
 
 export const userStatsApi = {
     getCurrentUserStats() {
-        return apiClient.get<UserStats>('/api/v1/user/stats');
+        return apiClient.get<UserStats>('/v1/user/stats');
     },
 
     getUserStatsById(userId: number) {
-        return apiClient.get<UserStats>(`/api/v1/user/stats/${userId}`);
+        return apiClient.get<UserStats>(`/v1/user/stats/${userId}`);
     },
 };

@@ -1,0 +1,351 @@
+# .claude/settings.yaml
+project:
+  name: "智慧旅游系统 (Smart Travel System)"
+  version: "0.0.1-SNAPSHOT"
+  description: "基于Spring Boot和Vue的智慧旅游线路规划与推荐系统（前后端分离）"
+  
+architecture:
+  type: "monorepo"
+  structure: "frontend-backend-separated"
+  
+  backend:
+    path: "backend"
+    framework: "spring-boot-3.5.8"
+    language: "java-17"
+    main_class: "travel.TravelApplication"
+    build_tool: "maven"
+    port: 8080
+    context_path: "/api"
+    
+  frontend:
+    path: "frontend"
+    framework: "vue-3.5.13"
+    language: "typescript-5.8"
+    build_tool: "vite-6.2.0"
+    dev_port: 3000
+    api_base_url: "http://localhost:8080/api"
+
+tech_stack:
+  backend:
+    core:
+      - "spring-boot-starter-web"
+      - "mybatis-plus-3.5.8"
+      - "spring-security"
+      - "jwt-authentication"
+      
+    database:
+      - "mysql-9.5.0"
+      - "redis"
+      - "mybatis-plus-extension"
+      
+    messaging:
+      - "rabbitmq"
+      
+    documentation:
+      - "swagger-openapi-2.5.0"
+      - "knife4j-4.5.0"
+      
+    monitoring:
+      - "spring-boot-actuator"
+      - "micrometer-prometheus"
+    
+  frontend:
+    core:
+      - "vue-3.5.13"
+      - "typescript-5.8"
+      - "vite-6.2.0"
+      
+    ui:
+      - "tailwindcss-4.2.4"
+      - "lucide-vue-next-0.477.0"
+      - "motion-12.23.24"
+      
+    http:
+      - "axios-1.16.0"
+      
+    ai:
+      - "@google/genai-1.29.0"
+      
+  ai_providers:
+    - name: "qwen"
+      config_key: "ai.qwen"
+      model: "qwen3.6-35b-a3b"
+      enabled: true
+      purpose: "智能路线推荐、内容生成"
+      
+    - name: "baidu"
+      config_key: "ai.baidu"
+      app_id: "7705667"
+      purpose: "图像识别、内容审核"
+      
+    - name: "openai"
+      config_key: "ai"
+      model: "gpt-3.5-turbo"
+      purpose: "备用AI服务"
+      
+  external_apis:
+    - name: "amap"
+      purpose: "地图与路径规划、地理位置服务"
+      config_key: "amap"
+      api_url: "https://restapi.amap.com/v3"
+
+database:
+  primary:
+    type: "mysql"
+    name: "travel_website"
+    host: "127.0.0.1"
+    port: 3306
+    timezone: "Asia/Shanghai"
+    
+  cache:
+    type: "redis"
+    host: "localhost"
+    port: 6379
+    database: 0
+    
+  message_queue:
+    type: "rabbitmq"
+    host: "localhost"
+    port: 5672
+    virtual_host: "/"
+
+modules:
+  route_planning:
+    description: "路线规划与管理"
+    backend:
+      controllers:
+        - "RouteController"
+        - "AttractionController"
+        - "RoutePlanController"
+      services:
+        - "RoutePlanService"
+        - "RoutePlanAlgorithm"
+      entities:
+        - "Route"
+        - "Attraction"
+        - "RouteAttraction"
+        
+  travel_recommendation:
+    description: "智能旅行推荐"
+    backend:
+      controllers:
+        - "RecommendationController"
+        - "AIRecommendationController"
+      services:
+        - "RecommendationService"
+        - "AIService"
+        
+  user_community:
+    description: "用户社区功能"
+    backend:
+      controllers:
+        - "UserController"
+        - "NoteController"
+        - "CommentController"
+        - "CollectionController"
+      services:
+        - "UserService"
+        - "NoteService"
+        - "CommentService"
+      entities:
+        - "User"
+        - "TravelNote"
+        - "Comment"
+        - "Collection"
+        
+  travel_realtime:
+    description: "实时数据监控"
+    backend:
+      controllers:
+        - "RealtimeStatusController"
+      services:
+        - "AttractionRealtimeStatusService"
+        - "RealtimeWarnService"
+        - "SyncRealtimeDataTask"
+        
+  frontend_pages:
+    description: "前端页面结构"
+    frontend:
+      api_layer:
+        - "src/api/ai.api.ts"
+        - "src/api/attraction.api.ts"
+        - "src/api/route.api.ts"
+        - "src/api/note.api.ts"
+        - "src/api/user.api.ts"
+        - "src/api/collection.api.ts"
+        - "src/api/comment.api.ts"
+        - "src/api/realtime.api.ts"
+      utils:
+        - "src/utils/api.ts"
+      main_files:
+        - "src/App.vue"
+        - "src/main.ts"
+        - "src/index.css"
+
+coding_standards:
+  java:
+    mybatis_plus:
+      use_lambda_wrapper: true
+      avoid_string_field_names: true
+      example: "LambdaQueryWrapper<Route> wrapper = new LambdaQueryWrapper<>().eq(Route::getCityId, cityId)"
+      
+    pagination:
+      standard: "Page<T> page = new Page<>(current, size)"
+      package: "com.baomidou.mybatisplus.extension.plugins.pagination.Page"
+      
+    service_layer:
+      transactional: true
+      read_only_default: true
+      cache_optimization: true
+      
+    performance:
+      no_n_plus_one_queries: true
+      batch_queries_preferred: true
+      use_cache_for_frequent_reads: true
+      
+    exception_handling:
+      use_custom_exceptions: true
+      global_exception_handler: true
+      
+  typescript:
+    api_calls:
+      use_axios: true
+      centralized_api_config: "src/utils/api.ts"
+      error_handling: "try-catch with proper error messages"
+      
+    component_style:
+      use_composition_api: true
+      use_typescript_interfaces: true
+      follow_vue3_best_practices: true
+      
+    naming:
+      api_files: "*.api.ts"
+      components: "PascalCase.vue"
+      composables: "use*.ts"
+      
+  naming:
+    entity_package: "travel.entity.{module}"
+    mapper_package: "travel.mapper.{module}_mapper"
+    service_package: "travel.service.{module}_service"
+    controller_package: "travel.controller.{module}_controller"
+    
+    frontend:
+      api_directory: "frontend/src/api"
+      components_directory: "frontend/src/components"
+      views_directory: "frontend/src/views"
+      utils_directory: "frontend/src/utils"
+
+testing:
+  backend:
+    framework: "junit-5.11.3"
+    mocking: "mockito-5.14.2"
+    test_database: "h2-2.2.224"
+    test_config: "src/test/resources/application-test.yml"
+    
+  frontend:
+    # 根据项目实际情况添加前端测试框架
+    note: "当前package.json未配置测试框架，建议添加 Vitest 或 Jest"
+
+documentation:
+  backend:
+    api_docs: "swagger-ui"
+    endpoint: "http://localhost:8080/api/swagger-ui.html"
+    openapi_version: "3.0"
+    
+  frontend:
+    readme: "frontend/README.md"
+    api_documentation: "参考后端Swagger文档"
+
+development_workflow:
+  expansion_plan: ".trae/documents/智慧旅游线路系统扩展计划.md"
+  priorities:
+    - "完善路线规划算法（遗传算法+蚁群算法）"
+    - "实现实时数据处理系统"
+    - "优化用户功能（注册、登录、认证）"
+    - "集成交通系统"
+    - "前端页面完善与API对接"
+    
+  common_tasks:
+    backend:
+      - "创建新的Controller（遵循RESTful规范）"
+      - "实现Service层（添加事务和缓存）"
+      - "编写Mapper接口（使用MyBatis-Plus）"
+      - "生成单元测试（JUnit 5 + Mockito）"
+      - "添加Swagger文档注解"
+      
+    frontend:
+      - "创建Vue组件（Composition API）"
+      - "编写API调用函数（在src/api目录下）"
+      - "添加TypeScript类型定义"
+      - "对接后端API（使用axios）"
+      - "实现响应式UI（TailwindCSS）"
+
+api_integration:
+  base_url: "http://localhost:8080/api"
+  authentication:
+    type: "JWT"
+    header: "Authorization"
+    prefix: "Bearer"
+    
+  common_endpoints:
+    routes: "/api/v1/routes"
+    attractions: "/api/v1/attractions"
+    users: "/api/v1/users"
+    notes: "/api/v1/notes"
+    recommendations: "/api/v1/recommendations"
+    realtime: "/api/v1/realtime"
+
+debugging:
+  backend:
+    actuator_endpoints:
+      health: "/actuator/health"
+      metrics: "/actuator/metrics"
+      info: "/actuator/info"
+      
+    logging:
+      level: "debug"
+      packages:
+        - "travel"
+        - "org.springframework.web"
+        
+  frontend:
+    dev_server: "http://localhost:3000"
+    hot_reload: true
+    dev_tools: "Vue DevTools recommended"
+
+security:
+  warnings:
+    - "不要暴露 application.properties 中的敏感信息（API Keys、密码等）"
+    - "前端 .env 文件不要提交到版本控制"
+    - "JWT Token 需要正确验证和刷新"
+    - "CORS 配置已存在于 WebMvcConfig 和 WebSecurityConfig"
+    
+  sensitive_files:
+    - "backend/src/main/resources/application.properties"
+    - "frontend/.env"
+    - ".claude/settings.yaml (如果包含密钥)"
+
+performance_tips:
+  backend:
+    - "大数据量查询必须分页（使用MyBatis-Plus Page）"
+    - "频繁访问的数据使用Redis缓存（@Cacheable）"
+    - "异步处理耗时操作（使用RabbitMQ）"
+    - "避免N+1查询，使用批量查询"
+    - "数据库查询添加适当索引"
+    
+  frontend:
+    - "使用懒加载优化首屏加载"
+    - "API响应数据进行缓存"
+    - "图片使用懒加载和压缩"
+    - "路由级别代码分割"
+
+environment_variables:
+  backend:
+    required:
+      - "OPENAI_API_KEY"
+      - "Database credentials (建议使用环境变量而非硬编码)"
+      
+  frontend:
+    suggested:
+      - "VITE_API_BASE_URL"
+      - "VITE_AMAP_API_KEY"

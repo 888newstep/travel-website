@@ -1,0 +1,48 @@
+server:
+  port: 8090
+
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/user/**, /api/notification/**, /api/statistics/**
+        - id: attraction-service
+          uri: lb://attraction-service
+          predicates:
+            - Path=/api/attraction/**, /api/city/**, /api/restaurant/**, /api/realtime/**
+        - id: route-service
+          uri: lb://route-service
+          predicates:
+            - Path=/api/route/**, /api/route-optimization/**, /api/ai/**, /api/route-share/**
+        - id: collection-service
+          uri: lb://collection-service
+          predicates:
+            - Path=/api/collection/**, /api/comment/**, /api/note/**, /api/feedback/**
+        - id: file-service
+          uri: lb://file-service
+          predicates:
+            - Path=/api/file/**, /api/resource/**
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin
+
+    # Sentinel
+    sentinel:
+      transport:
+        dashboard: localhost:8080
+      eager: true
+      scg:
+        fallback:
+          mode: response
+          response-status: 429
+          response-body: '{"code":429,"message":"请求过于频繁，请稍后再试"}'
+
+logging:
+  level:
+    travel.gateway: debug

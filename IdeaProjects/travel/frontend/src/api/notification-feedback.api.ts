@@ -1,4 +1,5 @@
 import apiClient from '../utils/api';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../constants';
 
 export interface Notification {
     id?: number;
@@ -7,7 +8,7 @@ export interface Notification {
     title: string;
     content: string;
     isRead?: boolean;
-    createTime?: string;
+    createdAt?: string;
 }
 
 export interface Feedback {
@@ -29,37 +30,41 @@ export interface FeedbackRequest {
 }
 
 export const notificationApi = {
-    getNotifications(page: number = 1, size: number = 20) {
-        return apiClient.get<Notification[]>('/users/notifications', {
+    getNotifications(page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
+        return apiClient.get<Notification[]>('/v1/notifications', {
             params: { page, size },
         });
     },
 
     markAsRead(notificationId: number) {
-        return apiClient.put<boolean>(`/users/notifications/${notificationId}/read`);
+        return apiClient.put<boolean>(`/v1/notifications/${notificationId}/read`);
     },
 
     deleteNotification(notificationId: number) {
-        return apiClient.delete<boolean>(`/users/notifications/${notificationId}`);
+        return apiClient.delete<boolean>(`/v1/notifications/${notificationId}`);
     },
 
     getUnreadCount() {
-        return apiClient.get<number>('/users/notifications/unread-count');
+        return apiClient.get<number>('/v1/notifications/unread-count');
     },
 
     markAllAsRead() {
-        return apiClient.post<boolean>('/users/notifications/mark-all-read');
+        return apiClient.put<boolean>('/v1/notifications/read-all');
     },
 };
 
 export const feedbackApi = {
     submitFeedback(data: FeedbackRequest) {
-        return apiClient.post<Feedback>('/users/feedback', data);
+        return apiClient.post<Feedback>('/feedback/submit', data);
     },
 
-    getFeedbackList(page: number = 1, size: number = 20) {
-        return apiClient.get<Feedback[]>('/users/feedback/list', {
+    getFeedbackList(userId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
+        return apiClient.get<Feedback[]>(`/feedback/list/${userId}`, {
             params: { page, size },
         });
+    },
+
+    getFeedbackTypes() {
+        return apiClient.get<{ value: string; label: string }[]>('/feedback/types');
     },
 };

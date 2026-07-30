@@ -1,4 +1,5 @@
 import apiClient from '../utils/api';
+import { DEFAULT_LIMIT_SMALL, DEFAULT_RADIUS } from '../constants';
 
 export interface Attraction {
     id?: number;
@@ -35,7 +36,7 @@ export const attractionApi = {
         });
     },
 
-    getRecommendations(cityId: number, limit: number = 5) {
+    getRecommendations(cityId: number, limit: number = DEFAULT_LIMIT_SMALL) {
         return apiClient.get<Attraction[]>('/attractions/recommend', {
             params: { cityId, limit },
         });
@@ -51,5 +52,39 @@ export const attractionApi = {
 
     deleteAttraction(id: number) {
         return apiClient.delete(`/attractions/${id}`);
+    },
+
+    getAttractionDetail(id: number) {
+        return apiClient.get<any>(`/attractions/detail/${id}`);
+    },
+
+    getAttractionImages(id: number) {
+        return apiClient.get<string[]>(`/attractions/images/${id}`);
+    },
+
+    getAttractionReviews(id: number, page?: number, size?: number) {
+        return apiClient.get<any[]>(`/attractions/reviews/${id}`, {
+            params: { page, size },
+        });
+    },
+
+    getAttractionRatingStats(id: number) {
+        return apiClient.get<any>(`/attractions/rating-statistics/${id}`);
+    },
+
+    getSimilarAttractions(id: number, limit?: number) {
+        return apiClient.get<any[]>(`/attractions/similar/${id}`, {
+            params: { limit },
+        });
+    },
+
+    getAttractionNearby(id: number, radius: number = DEFAULT_RADIUS) {
+        return apiClient.get<any[]>(`/attractions/${id}/nearby`, {
+            params: { radius },
+        });
+    },
+
+    submitReview(attractionId: number, rating: number, content: string) {
+        return apiClient.post<any>(`/attractions/${attractionId}/review`, { rating, content });
     },
 };
