@@ -63,13 +63,6 @@ export const aiApi = {
         });
     },
 
-    advancedChatbot(message: string, conversationId?: string) {
-        return apiClient.post<AIChatResponse>('/ai/advanced/chat', {
-            message,
-            conversationId,
-        });
-    },
-
     getBudgetEstimation(data: Record<string, any>) {
         return apiClient.post<any>('/ai/advanced/budget', data);
     },

@@ -6,20 +6,55 @@ spring:
     active: dev
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/travel_website?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
-    username: root
-    password: Axiao151888+
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      idle-timeout: 30000
-      max-lifetime: 1800000
-      connection-timeout: 30000
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 30000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      filter:
+        stat:
+          enabled: true
+          db-type: mysql
+          log-slow-sql: true
+          slow-sql-millis: 2000
+          merge-sql: true
+        wall:
+          enabled: true
+          db-type: mysql
+          config:
+            delete-allow: true
+            drop-table-allow: false
+        slf4j:
+          enabled: true
+          statement-executable-sql-log-enable: true
+      web-stat-filter:
+        enabled: true
+        url-pattern: /*
+        exclusions: /druid/*,*.js,*.gif,*.jpg,*.png,*.css,*.ico
+        session-stat-enable: true
+        profile-enable: true
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: ${DRUID_USERNAME:admin}
+        login-password: ${DRUID_PASSWORD:}
+        reset-enable: false
+        allow: 127.0.0.1
   data:
     redis:
-      host: localhost
-      port: 6379
-      password: Axiao151888+
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       database: 0
       lettuce:
         pool:
@@ -28,11 +63,11 @@ spring:
           min-idle: 0
           max-wait: 3000ms
   rabbitmq:
-    host: localhost
-    port: 5672
-    username: admin
-    password: 123456
-    virtual-host: /
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:admin}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: ${RABBITMQ_VHOST:/}
     listener:
       simple:
         concurrency: 3
@@ -59,6 +94,7 @@ spring.cloud.sentinel.eager: true
 
 # Seata
 seata:
+  enabled: false
   tx-service-group: travel-seata-group
   service:
     vgroup-mapping:
@@ -66,8 +102,8 @@ seata:
   registry:
     type: nacos
     nacos:
-      server-addr: localhost:8848
-      namespace: public
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      namespace: ${NACOS_NAMESPACE:public}
       group: SEATA_GROUP
 
 # XXL-Job
@@ -75,7 +111,7 @@ xxl:
   job:
     admin:
       addresses: http://localhost:8080/xxl-job-admin
-    accessToken: default_token
+    accessToken: ${XXL_JOB_ACCESS_TOKEN:}
     executor:
       appname: route-service
       port: 9999

@@ -41,6 +41,7 @@
         <okhttp.version>4.12.0</okhttp.version>
         <jts.version>1.19.0</jts.version>
         <xxl-job.version>2.4.1</xxl-job.version>
+        <druid.version>1.2.23</druid.version>
     </properties>
 
     <dependencyManagement>
@@ -135,7 +136,12 @@
                 <artifactId>xxl-job-core</artifactId>
                 <version>${xxl-job.version}</version>
             </dependency>
-            
+            <!-- Druid 连接池 -->
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>druid-spring-boot-3-starter</artifactId>
+                <version>${druid.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 

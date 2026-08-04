@@ -69,7 +69,6 @@ mvn test jacoco:report
 
 #### 2.2 集成测试
 - 使用 `@SpringBootTest` 进行集成测试
-- 使用 H2 内存数据库进行隔离测试
 - 使用 MockMvc 测试控制器接口
 
 #### 2.3 测试覆盖率
@@ -126,16 +125,16 @@ tail -f /var/log/travel/app.log
 
 ```bash
 # 1. 构建镜像
-docker-compose -f deploy/docker-compose.yml build
+cp deploy/.env.example deploy/.env
 
 # 2. 启动服务
-docker-compose -f deploy/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml up --build -d
 
 # 3. 查看日志
-docker-compose -f deploy/docker-compose.yml logs -f app
+docker compose -f deploy/docker-compose.yml logs -f gateway web
 
 # 4. 停止服务
-docker-compose -f deploy/docker-compose.yml down
+docker compose -f deploy/docker-compose.yml down
 ```
 
 #### 3.3 监控与日志

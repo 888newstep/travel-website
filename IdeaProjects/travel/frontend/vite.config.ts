@@ -3,7 +3,7 @@ import vue from '@vitejs/plugin-vue';
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
 
-const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:8082';
+const proxyTarget = process.env.VITE_PROXY_TARGET || 'http://localhost:8090';
 const devPort = Number(process.env.VITE_APP_PORT) || 3000;
 
 export default defineConfig({

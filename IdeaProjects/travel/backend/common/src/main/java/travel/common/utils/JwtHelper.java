@@ -8,6 +8,8 @@ import java.util.Date;
 import java.util.Base64;
 
 public class JwtHelper {
+    private static final String DEFAULT_JWT_SECRET = "dev-only-jwt-secret-change-me-before-production-32bytes";
+
     // 令牌过期时间：24小时
     private static long tokenExpiration = 24 * 60 * 60 * 1000;
 
@@ -20,7 +22,7 @@ public class JwtHelper {
         if (envVariable != null && !envVariable.isEmpty()) {
             return envVariable;
         }
-        return "TravelPlatform2024!@#$%^&*()_+";
+        return DEFAULT_JWT_SECRET;
     }
     // 生成密钥对象
     private static SecretKey getSecretKey() {
@@ -234,4 +236,3 @@ public class JwtHelper {
         System.out.println("刷新token: " + refreshToken(token));
     }
 }
-

@@ -1,24 +1,75 @@
 <template>
-  <div class="max-w-4xl mx-auto px-6 py-12">
-    <h1 class="text-2xl font-semibold text-stone-900 mb-8">AI 旅行助手</h1>
+  <div class="app-container pb-16 pt-4 md:pt-6">
+    <section class="surface-card mb-8 overflow-hidden rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,251,235,0.92)_45%,rgba(240,249,255,0.9))] px-6 py-8 sm:px-8 sm:py-9">
+      <div class="grid gap-8 xl:grid-cols-[1.1fr_0.9fr] xl:items-center">
+        <div>
+          <div class="mb-4 flex flex-wrap gap-2">
+            <span class="chip">智能对话与问答</span>
+            <span class="chip">路线生成与预算建议</span>
+            <span class="chip">图像、多模态与语音</span>
+          </div>
+          <h1 class="text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">把 AI 助手整理成更清晰的旅行智能工作台</h1>
+          <p class="mt-4 max-w-2xl text-sm leading-7 text-stone-600 md:text-base">
+            统一展示聊天、推荐、行程、图像分析、预算、安全和语音等能力，让用户更快找到合适的 AI 工具入口。
+          </p>
+          <div class="mt-6 grid gap-3 sm:grid-cols-3">
+            <div class="surface-card rounded-2xl px-4 py-4">
+              <div class="text-xs text-stone-500">可用功能</div>
+              <div class="mt-2 text-2xl font-semibold text-stone-900">{{ tabs.length }}</div>
+              <div class="mt-1 text-xs text-stone-400">覆盖规划、问答、分析与建议</div>
+            </div>
+            <div class="surface-card rounded-2xl px-4 py-4">
+              <div class="text-xs text-stone-500">当前标签</div>
+              <div class="mt-2 text-2xl font-semibold text-stone-900">{{ tabs.find(tab => tab.key === activeTab)?.label || 'AI' }}</div>
+              <div class="mt-1 text-xs text-stone-400">切换上方标签即可进入对应能力</div>
+            </div>
+            <div class="surface-card rounded-2xl px-4 py-4">
+              <div class="text-xs text-stone-500">会话消息</div>
+              <div class="mt-2 text-2xl font-semibold text-stone-900">{{ messages.length + assistantMessages.length }}</div>
+              <div class="mt-1 text-xs text-stone-400">对话与智能助手消息累计统计</div>
+            </div>
+          </div>
+        </div>
 
-    <!-- Tab 导航 -->
-    <div class="flex gap-1 mb-6 bg-stone-100 rounded-lg p-1">
-      <button
-        v-for="tab in tabs"
-        :key="tab.key"
-        class="flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-        :class="activeTab === tab.key ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'"
-        @click="activeTab = tab.key"
-      >
-        {{ tab.label }}
-      </button>
-    </div>
+        <div class="surface-card rounded-[1.75rem] p-5 sm:p-6">
+          <div class="mb-4">
+            <div class="text-sm font-medium text-stone-500">快速导航</div>
+            <div class="mt-1 text-xl font-semibold text-stone-900">选择你现在最需要的 AI 能力</div>
+          </div>
+          <div class="grid gap-2 sm:grid-cols-2">
+            <div class="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-600">AI 对话：快速问答、路线建议与旅行灵感</div>
+            <div class="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-600">旅行推荐 / 行程生成：结构化输入换取结构化输出</div>
+            <div class="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-600">图像 / 多模态：处理图片、文本和组合输入</div>
+            <div class="rounded-2xl bg-stone-50 px-4 py-3 text-sm text-stone-600">预算 / 安全 / 语音：补齐出发前的决策细节</div>
+          </div>
+        </div>
+      </div>
+    </section>
 
+    <section class="surface-card mb-6 rounded-[1.75rem] p-4 sm:p-5">
+      <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 class="section-heading text-[1.75rem]">AI 能力面板</h2>
+          <p class="section-subtitle mt-2">统一标签导航和内容卡片，让不同 AI 工具之间切换更自然。</p>
+        </div>
+        <span class="chip">当前：{{ tabs.find(tab => tab.key === activeTab)?.label || 'AI' }}</span>
+      </div>
+      <div class="flex gap-1 overflow-x-auto rounded-full border border-stone-200/80 bg-stone-50/90 p-2 scrollbar-hide">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          class="shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition-all"
+          :class="activeTab === tab.key ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-500 hover:bg-white hover:text-stone-900'"
+          @click="activeTab = tab.key"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+    </section>
     <!-- ==================== Tab 1: AI 对话 ==================== -->
-    <div v-if="activeTab === 'chat'" class="bg-white rounded-xl border border-stone-200 overflow-hidden">
+    <div v-if="activeTab === 'chat'" class="surface-card overflow-hidden rounded-[1.75rem]">
       <!-- Messages -->
-      <div class="h-125 overflow-y-auto p-6 space-y-4 scrollbar-hide" ref="chatBox">
+      <div class="h-125 overflow-y-auto p-6 space-y-4 scrollbar-hide bg-[linear-gradient(180deg,rgba(250,250,249,0.7),rgba(255,255,255,0))]" ref="chatBox">
         <div v-if="!messages.length" class="text-center py-12">
           <div class="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <svg class="w-8 h-8 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -50,7 +101,7 @@
       </div>
 
       <!-- Input -->
-      <div class="border-t border-stone-200 p-4">
+      <div class="border-t border-stone-200/80 bg-white/85 p-4 backdrop-blur-sm">
         <form class="flex gap-3" @submit.prevent="sendMessage">
           <input
             v-model="input"
@@ -71,7 +122,7 @@
     </div>
 
     <!-- ==================== Tab 2: AI 旅行推荐 ==================== -->
-    <div v-if="activeTab === 'recommend'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'recommend'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <form class="space-y-4" @submit.prevent="getRecommendation">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -147,7 +198,7 @@
     </div>
 
     <!-- ==================== Tab 3: AI 行程生成 ==================== -->
-    <div v-if="activeTab === 'itinerary'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'itinerary'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <form class="space-y-4" @submit.prevent="generateItinerary">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -230,7 +281,7 @@
     </div>
 
     <!-- ==================== Tab 4: 图像分析 ==================== -->
-    <div v-if="activeTab === 'image'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'image'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <form class="space-y-4" @submit.prevent="analyzeImage">
         <div>
           <label class="block text-sm font-medium text-stone-700 mb-1">图片 URL</label>
@@ -260,7 +311,7 @@
     </div>
 
     <!-- ==================== Tab 5: 多模态 ==================== -->
-    <div v-if="activeTab === 'multimodal'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'multimodal'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <form class="space-y-4" @submit.prevent="multimodalQuery">
         <div>
           <label class="block text-sm font-medium text-stone-700 mb-1">文字描述</label>
@@ -292,7 +343,7 @@
     </div>
 
     <!-- ==================== Tab 6: 预算助手 ==================== -->
-    <div v-if="activeTab === 'budget'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'budget'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <form class="space-y-4" @submit.prevent="getBudgetAdvice">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
@@ -332,9 +383,9 @@
     </div>
 
     <!-- ==================== Tab 7: AI 智能助手 ==================== -->
-    <div v-if="activeTab === 'assistant'" class="bg-white rounded-xl border border-stone-200 overflow-hidden">
+    <div v-if="activeTab === 'assistant'" class="surface-card overflow-hidden rounded-[1.75rem]">
       <!-- Messages -->
-      <div class="h-125 overflow-y-auto p-6 space-y-4 scrollbar-hide" ref="assistantBox">
+      <div class="h-125 overflow-y-auto p-6 space-y-4 scrollbar-hide bg-[linear-gradient(180deg,rgba(250,250,249,0.7),rgba(255,255,255,0))]" ref="assistantBox">
         <div v-if="!assistantMessages.length" class="text-center py-12">
           <div class="w-16 h-16 bg-stone-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <svg class="w-8 h-8 text-stone-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -366,7 +417,7 @@
       </div>
 
       <!-- Input -->
-      <div class="border-t border-stone-200 p-4">
+      <div class="border-t border-stone-200/80 bg-white/85 p-4 backdrop-blur-sm">
         <form class="flex gap-3" @submit.prevent="sendAssistantQuery">
           <input
             v-model="assistantInput"
@@ -386,7 +437,7 @@
       </div>
     </div>
   <!-- ==================== Tab 8: 智能规划 ==================== -->
-    <div v-if="activeTab === 'plan'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'plan'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <h3 class="text-sm font-medium text-stone-700 mb-4">AI 智能路线规划</h3>
       <form class="space-y-4" @submit.prevent="planRoute">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -416,7 +467,7 @@
     </div>
 
     <!-- ==================== Tab 9: 安全建议 ==================== -->
-    <div v-if="activeTab === 'safety'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'safety'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <h3 class="text-sm font-medium text-stone-700 mb-4">旅游安全建议</h3>
       <div class="flex gap-3">
         <input v-model="safetyCityId" type="number" placeholder="城市 ID" class="flex-1 px-4 py-2 bg-stone-50 border border-stone-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-stone-300" />
@@ -451,7 +502,7 @@
     </div>
 
     <!-- ==================== Tab 10: 语音助手 ==================== -->
-    <div v-if="activeTab === 'voice'" class="bg-white rounded-xl border border-stone-200 p-6">
+    <div v-if="activeTab === 'voice'" class="surface-card rounded-[1.75rem] p-6 sm:p-7">
       <h3 class="text-sm font-medium text-stone-700 mb-4">AI 语音助手</h3>
       <p class="text-xs text-stone-400 mb-4">输入文字，AI 将模拟语音交互体验。支持语音输入的文字转写。</p>
       <form class="space-y-4" @submit.prevent="processVoice">

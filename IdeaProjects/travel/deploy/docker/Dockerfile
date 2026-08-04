@@ -1,60 +1,36 @@
-# 智慧旅游系统 Dockerfile
-# 基于OpenJDK 17构建
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 
-FROM eclipse-temurin:17-jdk-alpine AS builder
+ARG MODULE_NAME
 
-# 设置工作目录
-WORKDIR /app
+WORKDIR /workspace
 
-# 复制Maven包装器
-COPY mvnw .
-COPY .mvn .mvn
+COPY backend backend
 
-# 复制pom.xml并下载依赖（利用Docker缓存）
-COPY pom.xml .
-RUN ./mvnw dependency:go-offline -B
+RUN mvn -f backend/pom.xml -pl ${MODULE_NAME} -am -DskipTests package
 
-# 复制源代码
-COPY src src
-
-# 构建应用
-RUN ./mvnw clean package -DskipTests -B
-
-# 运行阶段
 FROM eclipse-temurin:17-jre-alpine
 
-# 安装必要的工具
-RUN apk add --no-cache curl tzdata
+ARG MODULE_NAME
+ARG APP_PORT
+ARG HEALTH_PATH
 
-# 设置时区
 ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+ENV APP_PORT=${APP_PORT}
+ENV HEALTH_PATH=${HEALTH_PATH}
+ENV JAVA_OPTS="-Xms256m -Xmx768m -XX:+UseContainerSupport -XX:+UseG1GC"
 
-# 创建应用用户
-RUN addgroup -g 1000 -S travel && \
-    adduser -u 1000 -S travel -G travel
-
-# 设置工作目录
 WORKDIR /app
 
-# 从构建阶段复制jar包
-COPY --from=builder /app/target/*.jar app.jar
+RUN apk add --no-cache curl tzdata && \
+    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
+    addgroup -S travel && adduser -S travel -G travel && \
+    mkdir -p /app/logs && chown -R travel:travel /app
 
-# 创建日志目录
-RUN mkdir -p logs && chown -R travel:travel /app
+COPY --from=builder /workspace/backend/${MODULE_NAME}/target/*.jar app.jar
 
-# 切换到应用用户
 USER travel
 
-# 健康检查
-HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:8080/api/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
+    CMD curl -fsS "http://localhost:${APP_PORT}${HEALTH_PATH}" || exit 1
 
-# 暴露端口
-EXPOSE 8080
-
-# JVM参数（可通过环境变量覆盖）
-ENV JAVA_OPTS="-Xms512m -Xmx1024m -XX:+UseG1GC -XX:+UseContainerSupport"
-
-# 启动命令
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

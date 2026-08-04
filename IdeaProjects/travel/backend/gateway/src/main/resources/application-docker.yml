@@ -1,0 +1,39 @@
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        - id: user-service
+          uri: http://user-service:8091/api
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=1
+        - id: attraction-service
+          uri: http://attraction-service:8092/api
+          predicates:
+            - Path=/api/attractions/**, /api/cities/**, /api/restaurants/**, /api/realtime-status/**
+          filters:
+            - StripPrefix=1
+        - id: route-service
+          uri: http://route-service:8093/api
+          predicates:
+            - Path=/api/routes/**, /api/route-optimization/**, /api/ai/**
+          filters:
+            - StripPrefix=1
+        - id: collection-service
+          uri: http://collection-service:8094/api
+          predicates:
+            - Path=/api/v1/route-collections/**, /api/route-comments/**, /api/travel-notes/**, /api/feedback/**, /api/v1/notifications/**, /api/v1/user/stats/**, /api/route-share/**
+          filters:
+            - StripPrefix=1
+        - id: file-service
+          uri: http://file-service:8095/api
+          predicates:
+            - Path=/api/file/**, /api/resource/**, /api/resource-file/**
+          filters:
+            - StripPrefix=1
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin

@@ -12,23 +12,23 @@ spring:
         - id: user-service
           uri: lb://user-service
           predicates:
-            - Path=/api/user/**, /api/notification/**, /api/statistics/**
+            - Path=/api/users/**
         - id: attraction-service
           uri: lb://attraction-service
           predicates:
-            - Path=/api/attraction/**, /api/city/**, /api/restaurant/**, /api/realtime/**
+            - Path=/api/attractions/**, /api/cities/**, /api/restaurants/**, /api/realtime-status/**
         - id: route-service
           uri: lb://route-service
           predicates:
-            - Path=/api/route/**, /api/route-optimization/**, /api/ai/**, /api/route-share/**
+            - Path=/api/routes/**, /api/route-optimization/**, /api/ai/**
         - id: collection-service
           uri: lb://collection-service
           predicates:
-            - Path=/api/collection/**, /api/comment/**, /api/note/**, /api/feedback/**
+            - Path=/api/v1/route-collections/**, /api/route-comments/**, /api/travel-notes/**, /api/feedback/**, /api/v1/notifications/**, /api/v1/user/stats/**, /api/route-share/**
         - id: file-service
           uri: lb://file-service
           predicates:
-            - Path=/api/file/**, /api/resource/**
+            - Path=/api/file/**, /api/resource/**, /api/resource-file/**
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin
 

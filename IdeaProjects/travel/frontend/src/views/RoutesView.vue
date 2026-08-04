@@ -1,106 +1,183 @@
 <template>
-  <div class="max-w-6xl mx-auto px-6 py-12">
-    <!-- 页面标题 -->
-    <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-semibold text-stone-900">路线规划</h1>
-      <div class="flex items-center gap-3">
-        <button
-          @click="showCompare = true"
-          :disabled="selectedForCompare.length < 2"
-          class="text-sm px-4 py-2 border border-stone-200 rounded-lg hover:bg-stone-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        >对比路线 ({{ selectedForCompare.length }})</button>
-        <router-link
-          to="/ai-chat"
-          class="text-sm px-4 py-2 bg-stone-900 text-white rounded-lg hover:bg-stone-800 transition-colors"
-        >AI 智能规划</router-link>
+  <div class="app-container pb-16 pt-4 md:pt-6">
+    <section class="surface-card mb-8 overflow-hidden rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(255,247,237,0.94)_45%,rgba(239,246,255,0.9))] px-6 py-8 sm:px-8 sm:py-9">
+      <div class="grid gap-8 xl:grid-cols-[1.15fr_0.85fr] xl:items-center">
+        <div>
+          <div class="mb-4 flex flex-wrap gap-2">
+            <span class="chip">路线浏览与筛选</span>
+            <span class="chip">路线对比</span>
+            <span class="chip">AI 智能规划</span>
+          </div>
+          <h1 class="text-3xl font-semibold tracking-tight text-stone-900 md:text-4xl">路线规划更聚焦，筛选与比较更顺手</h1>
+          <p class="mt-4 max-w-2xl text-sm leading-7 text-stone-600 md:text-base">
+            把全部、热门、智能、季节和主题路线放进统一入口，同时保留对比、分享、收藏和 AI 优化能力。
+          </p>
+          <div class="mt-6 flex flex-wrap gap-3">
+            <div class="surface-card rounded-2xl px-4 py-3">
+              <div class="text-xs text-stone-500">当前路线</div>
+              <div class="mt-1 text-xl font-semibold text-stone-900">{{ routes.length }}</div>
+            </div>
+            <div class="surface-card rounded-2xl px-4 py-3">
+              <div class="text-xs text-stone-500">已选对比</div>
+              <div class="mt-1 text-xl font-semibold text-stone-900">{{ selectedForCompare.length }}</div>
+            </div>
+            <div class="surface-card rounded-2xl px-4 py-3">
+              <div class="text-xs text-stone-500">当前视图</div>
+              <div class="mt-1 text-xl font-semibold text-stone-900">{{ routeTabs.find(tab => tab.key === activeRouteTab)?.label || '路线' }}</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="surface-card rounded-[1.75rem] p-5 sm:p-6">
+          <div class="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <div class="text-sm font-medium text-stone-500">快捷操作</div>
+              <div class="mt-1 text-xl font-semibold text-stone-900">从浏览直接进入决策</div>
+            </div>
+            <span class="rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-600">AI Ready</span>
+          </div>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <button
+              @click="showCompare = true"
+              :disabled="selectedForCompare.length < 2"
+              class="rounded-2xl border border-stone-200 bg-white px-4 py-4 text-left text-sm transition hover:border-stone-300 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <div class="font-medium text-stone-900">路线对比</div>
+              <div class="mt-1 text-stone-500">至少选择 2 条路线后，比较时长、难度和热度</div>
+            </button>
+            <router-link
+              to="/ai-chat"
+              class="rounded-2xl bg-stone-900 px-4 py-4 text-left text-sm text-white transition hover:bg-stone-800"
+            >
+              <div class="font-medium">AI 智能规划</div>
+              <div class="mt-1 text-stone-300">快速生成、评估或优化路线思路</div>
+            </router-link>
+          </div>
+          <div class="mt-4 grid gap-2 text-sm text-stone-500 sm:grid-cols-2">
+            <div class="rounded-2xl bg-stone-50 px-4 py-3">支持公开 / 私密路线状态识别</div>
+            <div class="rounded-2xl bg-stone-50 px-4 py-3">支持季节与主题路线的上下文筛选</div>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
 
-    <!-- Tab 导航 -->
-    <div class="flex gap-1 mb-6 bg-stone-100 rounded-lg p-1">
-      <button
-        v-for="tab in routeTabs"
-        :key="tab.key"
-        class="flex-1 px-4 py-2 rounded-md text-sm font-medium transition-colors"
-        :class="activeRouteTab === tab.key ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'"
-        @click="switchRouteTab(tab.key)"
-      >{{ tab.label }}</button>
-    </div>
+    <section class="surface-card mb-6 rounded-[1.75rem] p-4 sm:p-5">
+      <div class="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div class="min-w-0">
+          <h2 class="section-heading text-[1.75rem]">路线筛选</h2>
+          <p class="section-subtitle mt-2">切换分类后即时拉取对应路线，保留当前内容密度但提升可读性。</p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-xs text-stone-500">
+          <span class="chip">{{ routes.length }} 条结果</span>
+          <span class="chip">{{ selectedForCompare.length }} 条待对比</span>
+          <span v-if="activeRouteTab === 'seasonal'" class="chip">季节：{{ seasonOptions.find(s => s.value === seasonFilter)?.label || seasonFilter }}</span>
+          <span v-if="activeRouteTab === 'theme'" class="chip">主题：{{ themeOptions.find(t => t.value === themeFilter)?.label || themeFilter }}</span>
+        </div>
+      </div>
 
-    <!-- 季节/主题选择器 -->
-    <div v-if="activeRouteTab === 'seasonal'" class="mb-4 flex items-center gap-3">
-      <select v-model="seasonFilter" @change="fetchSeasonalRoutes" class="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm">
-        <option v-for="s in seasonOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
-      </select>
-    </div>
-    <div v-if="activeRouteTab === 'theme'" class="mb-4 flex items-center gap-3">
-      <select v-model="themeFilter" @change="fetchThemeRoutes" class="px-4 py-2 bg-white border border-stone-200 rounded-lg text-sm">
-        <option v-for="t in themeOptions" :key="t.value" :value="t.value">{{ t.label }}</option>
-      </select>
-    </div>
+      <div class="mt-5 overflow-x-auto pb-1">
+        <div class="inline-flex min-w-full gap-2 rounded-full border border-stone-200/80 bg-stone-50/90 p-2 sm:min-w-0">
+          <button
+            v-for="tab in routeTabs"
+            :key="tab.key"
+            class="shrink-0 rounded-full px-4 py-2.5 text-sm font-medium transition-all"
+            :class="activeRouteTab === tab.key ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-500 hover:bg-white hover:text-stone-900'"
+            @click="switchRouteTab(tab.key)"
+          >{{ tab.label }}</button>
+        </div>
+      </div>
 
-    <!-- 加载状态 -->
+      <div v-if="activeRouteTab === 'seasonal' || activeRouteTab === 'theme'" class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div v-if="activeRouteTab === 'seasonal'" class="flex items-center gap-3">
+          <span class="text-sm font-medium text-stone-600">选择季节</span>
+          <select v-model="seasonFilter" @change="fetchSeasonalRoutes" class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-700 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10">
+            <option v-for="s in seasonOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
+          </select>
+        </div>
+        <div v-if="activeRouteTab === 'theme'" class="flex items-center gap-3">
+          <span class="text-sm font-medium text-stone-600">选择主题</span>
+          <select v-model="themeFilter" @change="fetchThemeRoutes" class="rounded-2xl border border-stone-200 bg-white px-4 py-2.5 text-sm text-stone-700 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-500/10">
+            <option v-for="t in themeOptions" :key="t.value" :value="t.value">{{ t.label }}</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
     <LoadingSpinner v-if="loading" />
 
-    <!-- 路线列表 -->
     <template v-else>
-      <div v-if="routes.length" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div
+      <div v-if="routes.length" class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+        <article
           v-for="item in routes"
           :key="item.id"
-          class="bg-white rounded-xl border border-stone-200 overflow-hidden hover:shadow-md hover:border-amber-200 transition-all cursor-pointer group"
+          class="surface-card surface-card-hover group cursor-pointer overflow-hidden rounded-[1.75rem]"
           @click="openDetail(item)"
         >
-          <!-- 封面图 -->
-          <div class="h-40 bg-stone-100 overflow-hidden relative">
+          <div class="relative h-48 overflow-hidden bg-stone-100">
             <img
               v-if="item.coverImage"
               :src="item.coverImage"
               :alt="item.title"
-              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              class="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               @error="($event.target as HTMLImageElement).style.display='none'"
             />
-            <div v-else class="h-full flex items-center justify-center text-stone-300">
-              <svg class="w-14 h-14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+            <div v-else class="flex h-full items-center justify-center text-stone-300">
+              <svg class="h-14 w-14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
               </svg>
             </div>
-            <!-- 对比勾选 -->
-            <label class="absolute top-2 right-2 z-10" @click.stop>
-              <input
-                type="checkbox"
-                :checked="selectedForCompare.includes(item.id)"
-                @change="toggleCompare(item.id)"
-                class="w-4 h-4 rounded border-stone-300 text-stone-900 focus:ring-stone-500"
-              />
+            <div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/35 to-transparent"></div>
+            <div class="absolute left-4 top-4 flex flex-wrap gap-2">
+              <span class="rounded-full bg-white/88 px-3 py-1 text-xs font-medium text-stone-700 shadow-sm">{{ item.difficulty || '轻松' }}</span>
+              <span class="rounded-full bg-white/88 px-3 py-1 text-xs font-medium text-stone-700 shadow-sm">{{ item.durationDays ? `${item.durationDays} 天` : '灵活行程' }}</span>
+            </div>
+            <label class="absolute right-4 top-4 z-10" @click.stop>
+              <span class="flex items-center gap-2 rounded-full bg-white/88 px-3 py-1.5 text-xs font-medium text-stone-700 shadow-sm">
+                <input
+                  type="checkbox"
+                  :checked="selectedForCompare.includes(item.id)"
+                  @change="toggleCompare(item.id)"
+                  class="h-4 w-4 rounded border-stone-300 text-stone-900 focus:ring-stone-500"
+                />
+                对比
+              </span>
             </label>
           </div>
-          <div class="p-4">
-            <div class="flex items-start justify-between mb-2">
-              <h3 class="font-medium text-stone-900">{{ item.title }}</h3>
+          <div class="p-5">
+            <div class="flex items-start justify-between gap-3">
+              <h3 class="text-lg font-semibold text-stone-900">{{ item.title }}</h3>
               <span
-                class="text-xs px-2 py-0.5 rounded-full shrink-0 ml-2"
+                class="rounded-full px-2.5 py-1 text-xs font-medium"
                 :class="item.isPublic ? 'bg-emerald-50 text-emerald-600' : 'bg-stone-100 text-stone-500'"
               >{{ item.isPublic ? '公开' : '私密' }}</span>
             </div>
-            <p class="text-sm text-stone-500 mb-3 line-clamp-2">{{ item.description || TEXT.NO_DESCRIPTION }}</p>
-            <div class="flex items-center gap-4 text-xs text-stone-400">
-            <span class="flex items-center gap-1">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/></svg>
-              {{ item.viewCount || 0 }}
-            </span>
-            <span class="flex items-center gap-1">
-              <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/></svg>
-              {{ item.likeCount || 0 }}
-            </span>
-            <span class="ml-auto">{{ item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '' }}</span>
+            <p class="mt-3 line-clamp-2 text-sm leading-6 text-stone-500">{{ item.description || TEXT.NO_DESCRIPTION }}</p>
+            <div class="mt-4 flex flex-wrap gap-2 text-xs text-stone-500">
+              <span class="rounded-full bg-stone-50 px-3 py-1.5">👁 {{ item.viewCount || 0 }}</span>
+              <span class="rounded-full bg-stone-50 px-3 py-1.5">❤️ {{ item.likeCount || 0 }}</span>
+              <span class="rounded-full bg-stone-50 px-3 py-1.5">{{ item.createdAt ? new Date(item.createdAt).toLocaleDateString() : '最近更新' }}</span>
+            </div>
+            <div class="mt-5 flex items-center justify-between text-sm">
+              <span class="text-stone-400">点击查看详情、评论、收藏和分享</span>
+              <span class="font-medium text-stone-700 transition group-hover:text-stone-900">进入路线</span>
+            </div>
           </div>
-          </div>
-        </div>
+        </article>
       </div>
-      <p v-else class="text-sm text-stone-400 text-center py-16">暂无路线，试试 AI 规划</p>
+      <div v-else class="surface-card rounded-[1.75rem] px-6 py-14 text-center">
+        <div class="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-stone-100 text-stone-400">
+          <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498 4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 0 0-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0Z" />
+          </svg>
+        </div>
+        <h3 class="text-lg font-semibold text-stone-900">当前分类暂无路线</h3>
+        <p class="mt-2 text-sm text-stone-500">可以切换其他分类，或直接使用 AI 智能规划生成新路线。</p>
+        <router-link
+          to="/ai-chat"
+          class="mt-5 inline-flex rounded-full bg-stone-900 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800"
+        >去试试 AI 规划</router-link>
+      </div>
     </template>
-
     <!-- 路线详情弹窗 -->
     <Teleport to="body">
       <div
@@ -109,9 +186,9 @@
         @click.self="closeDetail"
       >
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="closeDetail" />
-        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-full overflow-y-auto">
+        <div class="surface-card relative max-h-full w-full max-w-2xl overflow-y-auto rounded-[1.75rem] border border-white/80 bg-white/95 shadow-[0_32px_90px_-36px_rgba(15,23,42,0.45)] backdrop-blur">
           <!-- 弹窗头部 -->
-          <div class="sticky top-0 bg-white border-b border-stone-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+          <div class="sticky top-0 z-10 flex items-center justify-between rounded-t-[1.75rem] border-b border-stone-100/80 bg-white/90 px-6 py-4 backdrop-blur">
             <h2 class="text-lg font-semibold text-stone-900 truncate max-w-md">{{ selectedRoute.title }}</h2>
             <div class="flex items-center gap-2">
               <!-- 收藏按钮 -->
@@ -295,8 +372,8 @@
         @click.self="showCompare = false"
       >
         <div class="absolute inset-0 bg-black/40 backdrop-blur-sm" @click="showCompare = false" />
-        <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-full overflow-y-auto">
-          <div class="sticky top-0 bg-white border-b border-stone-100 px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
+        <div class="surface-card relative max-h-full w-full max-w-4xl overflow-y-auto rounded-[1.75rem] border border-white/80 bg-white/95 shadow-[0_32px_90px_-36px_rgba(15,23,42,0.45)] backdrop-blur">
+          <div class="sticky top-0 z-10 flex items-center justify-between rounded-t-[1.75rem] border-b border-stone-100/80 bg-white/90 px-6 py-4 backdrop-blur">
             <h2 class="text-lg font-semibold text-stone-900">路线对比</h2>
             <button @click="showCompare = false" class="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-100 rounded-lg transition-colors">
               <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
