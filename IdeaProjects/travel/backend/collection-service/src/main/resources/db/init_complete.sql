@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- 旅游网站数据库 - 完整初始化脚本
 -- 修正：表名匹配实体、UNIQUE约束、补全ui_dictionary
 -- 20 张表（合并 route_collection + travel_note_collection → user_collection）
@@ -495,7 +495,7 @@ INSERT INTO city (name, country, province, latitude, longitude, description, cov
 ('昆明', '中国', '云南', 25.0389, 102.7183, '春城花都，四季如春',                     'https://cityimg.com/kunming.jpg');
 
 -- -------------------------------------------------------
--- 用户 (15条, 密码均为 123456 的 BCrypt 加密)
+-- 用户 (15条, 密码列为 BCrypt 哈希示例值)
 -- -------------------------------------------------------
 INSERT INTO `user` (username, email, password, avatar, phone) VALUES
 ('zhangsan',    'zhangsan@example.com',    '$2a$10$JL77.aW4Cm17w2DTn8hozut4F/U3zouGqD4XUUNy2XgR6Cu6jG7Bm', 'https://avatar1.com/1.jpg',  '13800138001'),
@@ -847,3 +847,4 @@ INSERT INTO ui_dictionary (dict_type, dict_key, dict_value, dict_label, sort_ord
 ('price_level',    'low',       '实惠',     '人均<80',    1),
 ('price_level',    'medium',    '中等',     '人均80-200', 2),
 ('price_level',    'high',      '高端',     '人均>200',   3);
+

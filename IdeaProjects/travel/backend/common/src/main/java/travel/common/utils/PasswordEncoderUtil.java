@@ -22,7 +22,7 @@ public final class PasswordEncoderUtil {
     }
 
     public static void main(String[] args) {
-        String rawPassword = "123456";
+        String rawPassword = args != null && args.length > 0 ? args[0] : "ReplaceWithYourOwnPassword";
         String encodedPassword = encode(rawPassword);
         System.out.println("明文: " + rawPassword);
         System.out.println("BCrypt: " + encodedPassword);

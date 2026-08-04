@@ -1,0 +1,10 @@
+spring:
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            "route-service":
+              - uri: http://route-service:8093
+            "user-service":
+              - uri: http://user-service:8091

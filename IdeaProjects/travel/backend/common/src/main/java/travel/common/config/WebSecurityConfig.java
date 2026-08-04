@@ -47,6 +47,7 @@ public class WebSecurityConfig {
 
                         // ===== 公开只读（GET 浏览） =====
                         .requestMatchers(HttpMethod.GET, "/attractions", "/attractions/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/cities", "/cities/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/routes", "/routes/city/**", "/routes/search", "/routes/{id}").permitAll()
                         .requestMatchers(HttpMethod.GET, "/restaurants", "/restaurants/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/travel-notes/**").permitAll()

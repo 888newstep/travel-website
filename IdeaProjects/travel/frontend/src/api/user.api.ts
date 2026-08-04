@@ -1,5 +1,4 @@
 import apiClient from '../utils/api';
-import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../constants';
 
 export interface LoginRequest {
     username: string;
@@ -27,25 +26,6 @@ export interface User {
     };
 }
 
-export interface ChangePasswordRequest {
-    oldPassword: string;
-    newPassword: string;
-}
-
-export interface ResetPasswordRequest {
-    phone: string;
-    captcha: string;
-    newPassword: string;
-}
-
-export interface RefreshTokenRequest {
-    oldToken: string;
-}
-
-export interface RefreshTokenResponse {
-    token: string;
-}
-
 export const userApi = {
     async login(data: LoginRequest) {
         const response: any = await apiClient.post('/users/login', data);
@@ -60,21 +40,6 @@ export const userApi = {
     async getCurrentUser() {
         const response: any = await apiClient.get('/users/current');
         return response as User;
-    },
-
-    async getUserById(id: number) {
-        const response: any = await apiClient.get(`/users/${id}`);
-        return response as User;
-    },
-
-    async updateUser(user: Partial<User>) {
-        const response: any = await apiClient.put('/users/profile', user);
-        return response as boolean;
-    },
-
-    async deleteUser(id: number) {
-        const response: any = await apiClient.delete(`/users/${id}`);
-        return response as boolean;
     },
 
     async updateProfile(user: Partial<User>) {
@@ -101,48 +66,6 @@ export const userApi = {
         const response: any = await apiClient.post('/users/captcha', null, {
             params: { phone },
         });
-        return response as boolean;
-    },
-
-    async changePassword(data: ChangePasswordRequest) {
-        const response: any = await apiClient.post('/users/change-password', data);
-        return response as boolean;
-    },
-
-    async resetPassword(data: ResetPasswordRequest) {
-        const response: any = await apiClient.post('/users/reset-password', data);
-        return response as boolean;
-    },
-
-    async refreshToken(data: RefreshTokenRequest) {
-        const response: any = await apiClient.post('/users/refresh-token', data);
-        return response as RefreshTokenResponse;
-    },
-
-    async getNotifications(page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
-        const response: any = await apiClient.get('/v1/notifications', {
-            params: { page, size },
-        });
-        return response;
-    },
-
-    async markNotificationRead(notificationId: number) {
-        const response: any = await apiClient.put(`/v1/notifications/${notificationId}/read`);
-        return response as boolean;
-    },
-
-    async deleteNotification(notificationId: number) {
-        const response: any = await apiClient.delete(`/v1/notifications/${notificationId}`);
-        return response as boolean;
-    },
-
-    async getUnreadNotificationCount() {
-        const response: any = await apiClient.get('/v1/notifications/unread-count');
-        return response as number;
-    },
-
-    async markAllAsRead() {
-        const response: any = await apiClient.put('/v1/notifications/read-all');
         return response as boolean;
     },
 };

@@ -43,7 +43,6 @@ travel/
 │   │   └── resources/
 │   │       ├── application.properties
 │   │       ├── application-dev.properties
-│   │       ├── application-test.properties
 │   │       ├── application-prod.properties
 │   │       ├── db/                  # 数据库脚本
 │   │       └── doc/                 # 文档
@@ -115,7 +114,6 @@ mvn test jacoco:report
 
 ```bash
 # 使用测试配置文件
-mvn test -Dspring.profiles.active=test
 ```
 
 ### API接口测试
@@ -148,10 +146,10 @@ http :8080/api/health
 
 ```bash
 # 构建镜像
-docker build -t travel-app:latest .
+cp deploy/.env.example deploy/.env
 
 # 运行容器
-docker-compose up -d
+docker compose -f deploy/docker-compose.yml up --build -d
 ```
 
 ### 生产环境部署

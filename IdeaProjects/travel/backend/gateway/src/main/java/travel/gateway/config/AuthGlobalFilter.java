@@ -19,11 +19,11 @@ import java.util.List;
 @Component
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
-    private static final String SECRET = "travel-jwt-secret-key-2025-min-length-256-bit!!";
+    private static final String DEFAULT_JWT_SECRET = "dev-only-jwt-secret-change-me-before-production-32bytes";
     private static final List<String> WHITE_LIST = List.of(
-            "/api/user/login", "/api/user/register", "/api/user/captcha",
-            "/api/attraction/**", "/api/city/**", "/api/restaurant/**",
-            "/api/route/**", "/api/route-share/**",
+            "/api/users/login", "/api/users/register", "/api/users/captcha",
+            "/api/attractions/**", "/api/cities/**", "/api/restaurants/**", "/api/realtime-status/**",
+            "/api/routes/**", "/api/travel-notes/**", "/api/ai/**", "/api/route-share/**",
             "/swagger-ui/**", "/v3/api-docs/**", "/doc.html",
             "/actuator/**"
     );
@@ -43,7 +43,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         }
         try {
             String token = authHeader.substring(7);
-            SecretKey key = new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            SecretKey key = new SecretKeySpec(getJwtSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
             Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
             // 将用户信息传递到下游
             exchange.getRequest().mutate()
@@ -61,6 +61,18 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             return path.startsWith(pattern.substring(0, pattern.length() - 3));
         }
         return path.equals(pattern);
+    }
+
+    private String getJwtSecret() {
+        String systemProperty = System.getProperty("jwt.secret");
+        if (systemProperty != null && !systemProperty.isBlank()) {
+            return systemProperty;
+        }
+        String envVariable = System.getenv("JWT_SECRET");
+        if (envVariable != null && !envVariable.isBlank()) {
+            return envVariable;
+        }
+        return DEFAULT_JWT_SECRET;
     }
 
     @Override

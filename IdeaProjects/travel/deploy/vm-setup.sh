@@ -113,7 +113,8 @@ install_redis() {
     
     # 配置Redis密码
     sudo sed -i 's/^# requirepass/requirepass/' /etc/redis.conf
-    sudo sed -i 's/^requirepass .*/requirepass Axiao151888+/' /etc/redis.conf
+    REDIS_PASSWORD=${REDIS_PASSWORD:-change-me}
+    sudo sed -i "s/^requirepass .*/requirepass ${REDIS_PASSWORD}/" /etc/redis.conf
     sudo systemctl restart redis
     
     log_info "Redis安装完成"

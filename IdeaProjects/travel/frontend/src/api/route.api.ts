@@ -20,117 +20,7 @@ export interface RouteEvaluation {
     [key: string]: any;
 }
 
-export const routeApi = {
-    createRoutePlan(data: {
-        preferences?: Record<string, any>;
-        constraints?: Record<string, any>;
-    }) {
-        return apiClient.post<RoutePlan>('/routes/smart/generate-personalized', {
-            userPreferences: data.preferences,
-            constraints: data.constraints,
-        });
-    },
-
-    recommendRoutes(data: {
-        userId?: number;
-        cityId?: number;
-        days?: number;
-        preferences?: Record<string, any>;
-    }) {
-        return apiClient.post<RoutePlan[]>('/routes/smart/recommend-by-preference', data.preferences || {}, {
-            params: { userId: data.userId, cityId: data.cityId, days: data.days },
-        });
-    },
-
-    optimizeRoute(routeId: number, optimizationType: string) {
-        return apiClient.post<RouteOptimization>('/routes/smart/optimize', null, {
-            params: { routeId },
-        });
-    },
-
-    applyOptimization(data: { routeId: number; suggestion?: Record<string, any> }) {
-        return apiClient.post<boolean>('/route-optimization/apply', data);
-    },
-
-    getOptimizationHistory(routeId: number) {
-        return apiClient.get<Record<string, any>[]>(`/route-optimization/history/${routeId}`);
-    },
-
-    getOptimizationSuggestions(routeId: number) {
-        return apiClient.get(`/route-optimization/suggestions/${routeId}`);
-    },
-
-    evaluateRoute(routeId: number, evaluationParams: Record<string, any>) {
-        return apiClient.post<RouteEvaluation>(`/routes/smart/evaluate/${routeId}`, evaluationParams);
-    },
-
-    getMyRoutePlans(userId: number) {
-        return apiClient.get<RoutePlan[]>('/routes/my', {
-            params: { userId },
-        });
-    },
-
-    compareRoutes(routeIds: number[]) {
-        return apiClient.post<Record<string, any>>('/routes/smart/compare', null, {
-            params: { routeIds },
-        });
-    },
-
-    adjustRoute(routeId: number, data: {
-        currentLocation?: Record<string, number>;
-        realTimeFactors?: Record<string, any>;
-    }) {
-        return apiClient.post<Record<string, any>>(`/routes/smart/real-time-adjustment/${routeId}`, data);
-    },
-
-    getPopularRoutes(cityId: number, days: number, limit: number = DEFAULT_LIMIT_SMALL) {
-        return apiClient.get<RoutePlan[]>('/routes/smart/popular', {
-            params: { cityId, days, limit },
-        });
-    },
-
-    getSimilarRoutes(routeId: number, limit: number = DEFAULT_LIMIT_SMALL) {
-        return apiClient.get<RoutePlan[]>(`/routes/smart/similar/${routeId}`, {
-            params: { limit },
-        });
-    },
-
-    getSeasonalRoutes(cityId: number, season: string, days: number) {
-        return apiClient.get<RoutePlan[]>('/routes/smart/seasonal', {
-            params: { cityId, season, days },
-        });
-    },
-
-    getThemeRoutes(theme: string, cityId: number, days: number) {
-        return apiClient.get<RoutePlan[]>('/routes/smart/theme', {
-            params: { theme, cityId, days },
-        });
-    },
-
-    searchRoutes(title: string) {
-        return apiClient.get<RoutePlan[]>('/routes/search', {
-            params: { title },
-        });
-    },
-
-    getRoutesByCity(cityId: number) {
-        return apiClient.get<RoutePlan[]>(`/routes/city/${cityId}`);
-    },
-};
-
 export const intelligentRouteApi = {
-    recommendByPreference(userId: number, cityId: number, days: number, preferences: Record<string, any>) {
-        return apiClient.post<RoutePlan[]>('/routes/smart/recommend-by-preference', preferences, {
-            params: { userId, cityId, days },
-        });
-    },
-
-    compareRoutes(routeIds: number[]) {
-        return apiClient.post<Record<string, any>>('/routes/smart/compare', null, {
-            params: { routeIds },
-        });
-    },
-
     getRealTimeAdjustment(routeId: number, data: {
         currentLocation?: Record<string, number>;
         realTimeFactors?: Record<string, any>;
@@ -184,11 +74,13 @@ export const intelligentRouteApi = {
     },
 
     recommendByPreference(preferences: Record<string, any>, params: { userId: number; cityId: number; days: number }) {
-        return apiClient.post<RoutePlan[]>('/routes/smart/recommend-by-preference', { preferences }, { params });
+        return apiClient.post<RoutePlan[]>('/routes/smart/recommend-by-preference', preferences, { params });
     },
 
     compareRoutes(routeIds: number[]) {
-        return apiClient.post<Record<string, any>>('/routes/smart/compare', { routeIds });
+        return apiClient.post<Record<string, any>>('/routes/smart/compare', null, {
+            params: { routeIds },
+        });
     },
 
     optimizeRoute(routeId: number) {

@@ -1,5 +1,4 @@
 import apiClient from '../utils/api';
-import { DEFAULT_LIMIT } from '../constants';
 
 export interface Restaurant {
     id: number;
@@ -30,15 +29,5 @@ export const restaurantApi = {
         return apiClient.get<Restaurant[]>('/restaurants/search', {
             params: { cityId, keyword },
         });
-    },
-
-    getTopRated(cityId: number, limit: number = DEFAULT_LIMIT) {
-        return apiClient.get<Restaurant[]>(`/restaurants/top-rated/${cityId}`, {
-            params: { limit },
-        });
-    },
-
-    getById(id: number) {
-        return apiClient.get<Record<string, any>>(`/restaurants/${id}`);
     },
 };

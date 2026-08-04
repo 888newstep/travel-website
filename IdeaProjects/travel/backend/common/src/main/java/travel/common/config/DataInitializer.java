@@ -16,6 +16,7 @@ import travel.common.mapper.travel_recommendation_mapper.RestaurantMapper;
 import travel.common.mapper.user_community_mapper.UserMapper;
 import travel.common.mapper.system_mapper.UiDictionaryMapper;
 import travel.common.entity.system.UiDictionary;
+import travel.common.utils.CommonUtil;
 import travel.common.utils.PasswordEncoderUtil;
 
 import java.math.BigDecimal;
@@ -29,6 +30,8 @@ import java.time.LocalDateTime;
 @Component
 @RequiredArgsConstructor
 public class DataInitializer implements CommandLineRunner {
+
+    private static final String TEST_DATA_PASSWORD_ENV = "TEST_DATA_USER_PASSWORD";
 
     private final UserMapper userMapper;
     private final CityMapper cityMapper;
@@ -72,25 +75,41 @@ public class DataInitializer implements CommandLineRunner {
 
     private void seedUsers() {
         log.info("初始化测试用户...");
+        String initialPassword = resolveSeedUserPassword();
+
         User user = new User();
         user.setUsername("testuser");
         user.setPhone("13800138000");
-        user.setPassword(PasswordEncoderUtil.encode("123456"));
+        user.setPassword(PasswordEncoderUtil.encode(initialPassword));
         user.setCreatedAt(LocalDateTime.now());
         user.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user);
-        log.info("测试用户创建成功: testuser / 123456");
+        log.info("测试用户创建成功: {}", user.getUsername());
 
         // 再创建一个用户用于路线数据
         User user2 = new User();
         user2.setUsername("demo");
         user2.setPhone("13900139000");
-        user2.setPassword(PasswordEncoderUtil.encode("123456"));
+        user2.setPassword(PasswordEncoderUtil.encode(initialPassword));
         user2.setCreatedAt(LocalDateTime.now());
         user2.setUpdatedAt(LocalDateTime.now());
         userMapper.insert(user2);
+        log.info("测试用户创建成功: {}", user2.getUsername());
+
+        if (System.getenv(TEST_DATA_PASSWORD_ENV) != null && !System.getenv(TEST_DATA_PASSWORD_ENV).isBlank()) {
+            log.info("测试用户密码已通过环境变量 {} 提供", TEST_DATA_PASSWORD_ENV);
+        } else {
+            log.warn("未设置环境变量 {}，已为初始化测试用户生成随机密码", TEST_DATA_PASSWORD_ENV);
+        }
     }
 
+    private String resolveSeedUserPassword() {
+        String configuredPassword = System.getenv(TEST_DATA_PASSWORD_ENV);
+        if (configuredPassword != null && !configuredPassword.isBlank()) {
+            return configuredPassword;
+        }
+        return CommonUtil.generateRandomString(16);
+    }
     private void seedAttractions() {
         log.info("初始化景点数据...");
         // 南京景点
@@ -247,3 +266,4 @@ public class DataInitializer implements CommandLineRunner {
         dictionaryMapper.insert(d);
     }
 }
+
