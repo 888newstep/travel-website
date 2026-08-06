@@ -1,7 +1,7 @@
 import axios from 'axios';
 import type { AxiosResponse, AxiosError } from 'axios';
+import { AuthError, NetworkError } from '../lib/request';
 
-// 响应拦截器已解包 data，方法直接返回 Promise<T>
 const apiClient = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
     timeout: Number(import.meta.env.VITE_API_TIMEOUT) || 30000,
@@ -38,24 +38,26 @@ apiClient.interceptors.response.use(
         if (error.response) {
             switch (error.response.status) {
                 case 401:
-                    console.error('未授权，请重新登录');
+                    console.error('登录状态已失效');
                     localStorage.removeItem('token');
                     window.location.href = '/';
-                    break;
+                    return Promise.reject(new AuthError('登录状态已失效，请重新登录'));
                 case 403:
-                    console.error('拒绝访问');
-                    break;
+                    console.error('没有访问权限');
+                    return Promise.reject(new Error('暂无权限访问'));
                 case 404:
-                    console.error('请求的资源不存在');
-                    break;
+                    console.error('接口资源不存在');
+                    return Promise.reject(new Error('请求的资源不存在'));
                 case 500:
-                    console.error('服务器错误');
-                    break;
+                    console.error('服务器内部错误');
+                    return Promise.reject(new Error('服务器开小差了，请稍后重试'));
                 default:
-                    console.error('请求失败:', error.message);
+                    console.error('接口请求失败:', error.message);
+                    return Promise.reject(new Error(error.message || '请求失败'));
             }
         } else if (error.request) {
-            console.error('网络错误，请检查后端服务是否启动');
+            console.error('网络请求未收到响应');
+            return Promise.reject(new NetworkError('网络连接异常，请检查后重试'));
         }
         return Promise.reject(error);
     }

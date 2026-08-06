@@ -9,7 +9,7 @@ import org.springframework.context.annotation.ComponentScan;
 
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableFeignClients(basePackages = "travel.user.feign")
+@EnableFeignClients
 @ComponentScan(basePackages = {"travel.user", "travel.common"})
 @MapperScan(basePackages = {"travel.user.mapper", "travel.common.mapper"})
 public class UserServiceApplication {

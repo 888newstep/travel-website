@@ -1,6 +1,7 @@
 package travel.attraction.service;
 
 import travel.common.entity.travel_recommendation.Attraction;
+import travel.common.vo.CursorPageResult;
 
 import java.util.List;
 import java.util.Map;
@@ -48,6 +49,8 @@ public interface AttractionDetailService {
      * @return 景点列表
      */
     List<Attraction> getAttractionsByCity(Integer cityId, int page, int size);
+
+    CursorPageResult<Attraction> getAttractionsByCityCursor(Integer cityId, Integer lastId, int size);
 
     /**
      * 搜索景点
