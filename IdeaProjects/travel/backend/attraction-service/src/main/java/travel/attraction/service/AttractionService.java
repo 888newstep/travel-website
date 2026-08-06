@@ -2,6 +2,7 @@ package travel.attraction.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import travel.common.entity.travel_recommendation.Attraction;
+import travel.common.vo.CursorPageResult;
 
 import java.util.List;
 import java.util.Map;
@@ -27,4 +28,11 @@ public interface AttractionService extends IService<Attraction> {
     List<Attraction> search(String keyword);
 
     boolean removeById(Integer id);
+
+    CursorPageResult<Attraction> getByCursor(Integer cityId, String cursor, int size);
+
+    CursorPageResult<Attraction> getAllByCursor(String cursor, int size);
+
+    Map<String, Object> comparePagination(Integer cityId, int page, int size);
 }
+

@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import travel.common.entity.travel_recommendation.Attraction;
 import travel.attraction.service.AttractionDetailService;
 import travel.attraction.service.AttractionService;
+import travel.common.vo.CursorPageResult;
 import travel.common.utils.CacheUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,28 @@ public class AttractionDetailServiceImpl implements AttractionDetailService {
                 .eq(Attraction::getCityId, cityId)
                 .last("LIMIT " + size + " OFFSET " + (page * size))
                 .list();
+    }
+
+    @Override
+    public CursorPageResult<Attraction> getAttractionsByCityCursor(Integer cityId, Integer lastId, int size) {
+        if (cityId == null || size <= 0) {
+            return CursorPageResult.empty();
+        }
+
+        List<Attraction> records = attractionService.lambdaQuery()
+                .eq(Attraction::getCityId, cityId)
+                .lt(lastId != null, Attraction::getId, lastId)
+                .orderByDesc(Attraction::getId)
+                .last("LIMIT " + (size + 1))
+                .list();
+
+        boolean hasMore = records.size() > size;
+        if (hasMore) {
+            records = new ArrayList<>(records.subList(0, size));
+        }
+
+        Integer nextCursor = records.isEmpty() ? null : records.get(records.size() - 1).getId();
+        return new CursorPageResult<>(records, nextCursor, hasMore, null, nextCursor);
     }
 
     @Override

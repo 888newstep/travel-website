@@ -39,7 +39,7 @@ start-all.bat
 ### 启动 Nacos
 
 ```bash
-cd nacos\nacos
+cd backend\nacos\nacos
 bin\startup.cmd -m standalone
 ```
 
@@ -148,5 +148,5 @@ java -version
 stop-all.bat
 
 # 停止 Nacos
-nacos\nacos\bin\shutdown.cmd
+backend\nacos\nacos\bin\shutdown.cmd
 ```

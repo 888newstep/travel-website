@@ -2,10 +2,13 @@ package travel.common.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import travel.common.utils.CacheUtil;
 
-import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Supplier;
 
 @Slf4j
@@ -13,35 +16,36 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class DistributedLockService {
 
-    private final CacheUtil cacheUtil;
-    private static final long DEFAULT_LOCK_TIME = 5000;
+    private final RedissonClient redissonClient;
+
+    @Value("${redisson.lock.wait-time-seconds:3}")
+    private long waitTimeSeconds;
+
+    @Value("${redisson.lock.lease-time-seconds:15}")
+    private long leaseTimeSeconds;
 
     public <T> T executeWithLock(String lockKey, Supplier<T> action) {
-        String requestId = UUID.randomUUID().toString();
+        String fullLockKey = CacheUtil.generateKey(CacheUtil.LOCK_KEY_PREFIX, lockKey);
+        RLock lock = redissonClient.getLock(fullLockKey);
         boolean locked = false;
 
         try {
-            locked = cacheUtil.tryLock(
-                    CacheUtil.generateKey(CacheUtil.LOCK_KEY_PREFIX, lockKey),
-                    requestId,
-                    DEFAULT_LOCK_TIME
-            );
+            locked = lock.tryLock(waitTimeSeconds, leaseTimeSeconds, TimeUnit.SECONDS);
 
             if (!locked) {
-                log.warn("获取分布式锁失败: lockKey={}", lockKey);
-                throw new RuntimeException("系统繁忙，请稍后重试");
+                log.warn("Failed to acquire distributed lock: lockKey={}", lockKey);
+                throw new RuntimeException("Failed to acquire distributed lock");
             }
 
-            log.debug("获取分布式锁成功: lockKey={}", lockKey);
+            log.debug("Acquired distributed lock: lockKey={}", lockKey);
             return action.get();
-
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("Interrupted while acquiring distributed lock", e);
         } finally {
-            if (locked) {
-                boolean released = cacheUtil.releaseLock(
-                        CacheUtil.generateKey(CacheUtil.LOCK_KEY_PREFIX, lockKey),
-                        requestId
-                );
-                log.debug("释放分布式锁: lockKey={}, success={}", lockKey, released);
+            if (locked && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+                log.debug("Released distributed lock: lockKey={}, success=true", lockKey);
             }
         }
     }
@@ -53,3 +57,5 @@ public class DistributedLockService {
         });
     }
 }
+
+

@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS `attraction` (
     FOREIGN KEY (city_id) REFERENCES city(id) ON DELETE CASCADE,
     INDEX idx_city (city_id),
     INDEX idx_rating (rating DESC),
-    INDEX idx_name (name)
+    INDEX idx_name (name),
+    INDEX idx_city_rating_cover (city_id, rating DESC, name, id)
 ) COMMENT='景点表' ENGINE=InnoDB;
 
 -- ============================================================
@@ -847,4 +848,5 @@ INSERT INTO ui_dictionary (dict_type, dict_key, dict_value, dict_label, sort_ord
 ('price_level',    'low',       '实惠',     '人均<80',    1),
 ('price_level',    'medium',    '中等',     '人均80-200', 2),
 ('price_level',    'high',      '高端',     '人均>200',   3);
+
 

@@ -68,7 +68,8 @@ CREATE TABLE IF NOT EXISTS `attraction` (
     FOREIGN KEY (city_id) REFERENCES city(id) ON DELETE CASCADE,
     INDEX idx_city (city_id),
     INDEX idx_rating (rating DESC),
-    INDEX idx_name (name)
+    INDEX idx_name (name),
+    INDEX idx_city_rating_cover (city_id, rating DESC, name, id)
 ) COMMENT='景点表' ENGINE=InnoDB;
 
 -- ============================================================
