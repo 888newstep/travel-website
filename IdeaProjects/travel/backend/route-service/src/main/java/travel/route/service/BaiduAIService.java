@@ -2,7 +2,8 @@ package travel.route.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import okhttp3.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -15,9 +16,10 @@ import java.util.concurrent.TimeUnit;
 /**
  * 百度AI服务类
  */
-@Slf4j
 @Service
 public class BaiduAIService {
+
+    private static final Logger log = LoggerFactory.getLogger(BaiduAIService.class);
 
     @Value("${ai.baidu.app-id}")
     private String appId;

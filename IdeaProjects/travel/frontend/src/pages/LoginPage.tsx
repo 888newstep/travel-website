@@ -115,10 +115,10 @@ export function LoginPage() {
               <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 to-emerald-500 text-sm font-bold text-white shadow-lg shadow-sky-500/20">
                 T
               </span>
-              <span className="text-lg font-semibold">?????</span>
+              <span className="text-lg font-semibold">{'\u65c5\u884c\u5de5\u4f5c\u53f0'}</span>
             </Link>
 
-            <span className="section-kicker mt-6 inline-flex">????</span>
+            <span className="section-kicker mt-6 inline-flex">{'\u8d26\u53f7\u5165\u53e3'}</span>
 
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="chip">安全登录</span>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="travel.common.mapper.messaging.MqMessageStatusMapper">
+
+    <update id="markDispatched">
+        UPDATE mq_message_status
+        SET status = 'DISPATCHED',
+            dispatched_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE message_id = #{messageId}
+          AND status = 'PENDING'
+    </update>
+
+    <update id="markConfirmed">
+        UPDATE mq_message_status
+        SET status = 'CONFIRMED',
+            confirmed_at = CURRENT_TIMESTAMP,
+            last_error = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE message_id = #{messageId}
+          AND status IN ('PENDING', 'DISPATCHED')
+    </update>
+
+    <update id="markReturned">
+        UPDATE mq_message_status
+        SET status = 'RETURNED',
+            retry_count = retry_count + 1,
+            last_error = LEFT(#{errorMessage}, 1000),
+            next_attempt_time = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE message_id = #{messageId}
+          AND status IN ('PENDING', 'DISPATCHED', 'CONFIRMED')
+    </update>
+
+    <update id="markFailed">
+        UPDATE mq_message_status
+        SET status = 'FAILED',
+            retry_count = retry_count + 1,
+            last_error = LEFT(#{errorMessage}, 1000),
+            next_attempt_time = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE message_id = #{messageId}
+          AND status IN ('PENDING', 'DISPATCHED')
+    </update>
+</mapper>

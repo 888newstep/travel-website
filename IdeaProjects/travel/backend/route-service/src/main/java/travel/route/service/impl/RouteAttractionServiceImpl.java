@@ -3,7 +3,8 @@ package travel.route.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import travel.common.dto.request.RouteAttractionBatchSortRequest;
 import travel.common.entity.route_planning.RouteAttraction;
 import travel.common.enums.ErrorCodeEnum;
@@ -21,10 +22,11 @@ import java.util.stream.Collectors;
 /**
  * 路线-景点关联服务实现类
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RouteAttractionServiceImpl extends ServiceImpl<RouteAttractionMapper, RouteAttraction> implements RouteAttractionService {
+
+    private static final Logger log = LoggerFactory.getLogger(RouteAttractionServiceImpl.class);
 
     private final RouteAttractionMapper routeAttractionMapper;
     private final RouteService routeService;

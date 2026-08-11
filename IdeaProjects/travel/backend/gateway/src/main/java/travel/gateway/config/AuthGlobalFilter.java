@@ -2,6 +2,9 @@ package travel.gateway.config;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
@@ -12,14 +15,13 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 
 @Component
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
-    private static final String DEFAULT_JWT_SECRET = "dev-only-jwt-secret-change-me-before-production-32bytes";
     private static final List<String> WHITE_LIST = List.of(
             "/api/users/login", "/api/users/register", "/api/users/captcha",
             "/api/attractions/**", "/api/cities/**", "/api/restaurants/**", "/api/realtime-status/**",
@@ -28,29 +30,43 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             "/actuator/**"
     );
 
+    @Value("${jwt.secret:}")
+    private String jwtSecret;
+
+    @PostConstruct
+    void validateJwtSecret() {
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            throw new IllegalStateException("Property 'jwt.secret' must be configured for gateway authentication");
+        }
+    }
+
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
-        // 白名单放行
-        if (WHITE_LIST.stream().anyMatch(p -> matchPath(path, p))) {
+        if (WHITE_LIST.stream().anyMatch(pattern -> matchPath(path, pattern))) {
             return chain.filter(exchange);
         }
-        // JWT 校验
+
         String authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
+
         try {
             String token = authHeader.substring(7);
-            SecretKey key = new SecretKeySpec(getJwtSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            SecretKey key = Keys.hmacShaKeyFor(Base64.getEncoder().encode(jwtSecret.getBytes(StandardCharsets.UTF_8)));
             Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
-            // 将用户信息传递到下游
+            Object userId = claims.get("userId");
+            Object userType = claims.get("userType");
+            Object role = claims.get("role");
+
             exchange.getRequest().mutate()
-                    .header("X-User-Id", claims.get("userId", String.class))
-                    .header("X-User-Role", claims.get("role", String.class));
+                    .header("X-User-Id", userId == null ? "" : String.valueOf(userId))
+                    .header("X-User-Type", userType == null ? "" : String.valueOf(userType))
+                    .header("X-User-Role", String.valueOf(role != null ? role : userType));
             return chain.filter(exchange);
-        } catch (Exception e) {
+        } catch (Exception exception) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
@@ -61,18 +77,6 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             return path.startsWith(pattern.substring(0, pattern.length() - 3));
         }
         return path.equals(pattern);
-    }
-
-    private String getJwtSecret() {
-        String systemProperty = System.getProperty("jwt.secret");
-        if (systemProperty != null && !systemProperty.isBlank()) {
-            return systemProperty;
-        }
-        String envVariable = System.getenv("JWT_SECRET");
-        if (envVariable != null && !envVariable.isBlank()) {
-            return envVariable;
-        }
-        return DEFAULT_JWT_SECRET;
     }
 
     @Override

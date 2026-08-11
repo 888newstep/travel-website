@@ -2,9 +2,11 @@ package travel.route.controller;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import travel.common.entity.route_planning.Route;
 import travel.route.service.*;
+import travel.route.dto.route.*;
 import travel.common.utils.Result;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -167,7 +169,7 @@ public class RouteController {
 
     @GetMapping("/smart/list")
     @Operation(summary = "智能路线列表", description = "获取热门/季节性/主题路线，type=popular|seasonal|theme")
-    public Result<List<Map<String, Object>>> getSmartRoutes(
+    public Result<List<SmartRouteItem>> getSmartRoutes(
             @RequestParam String type,
             @RequestParam Integer cityId,
             @RequestParam Integer days,
@@ -176,7 +178,7 @@ public class RouteController {
             @RequestParam(required = false) String theme) {
         try {
             log.info("智能路线列表请求: type={}, cityId={}, days={}", type, cityId, days);
-            List<Map<String, Object>> routes = switch (type) {
+            List<SmartRouteItem> routes = switch (type) {
                 case "seasonal" -> intelligentRouteService.getSeasonalRoutes(cityId, season != null ? season : "spring", days);
                 case "theme" -> intelligentRouteService.getThemeRoutes(theme != null ? theme : "文化", cityId, days);
                 default -> intelligentRouteService.getPopularRoutes(cityId, days, limit);
@@ -190,12 +192,12 @@ public class RouteController {
 
     @GetMapping("/smart/similar/{routeId}")
     @Operation(summary = "相似路线推荐", description = "获取相似路线")
-    public Result<List<Map<String, Object>>> getSimilarRoutes(
+    public Result<List<SmartRouteItem>> getSimilarRoutes(
             @PathVariable Integer routeId,
             @RequestParam(defaultValue = "5") int limit) {
         try {
             log.info("获取相似路线请求: routeId={}, limit={}", routeId, limit);
-            List<Map<String, Object>> similarRoutes = intelligentRouteService.getSimilarRoutes(routeId, limit);
+            List<SmartRouteItem> similarRoutes = intelligentRouteService.getSimilarRoutes(routeId, limit);
             return Result.success("获取相似路线成功", similarRoutes);
         } catch (Exception e) {
             log.error("获取相似路线失败: routeId={}, error={}", routeId, e.getMessage());
@@ -205,13 +207,17 @@ public class RouteController {
 
     @PostMapping("/smart/recommend-by-preference")
     @Operation(summary = "基于偏好推荐", description = "基于用户偏好的智能路线推荐")
-    public Result<List<Map<String, Object>>> recommendRoutesByUserPreference(@RequestParam Integer userId,
+    public Result<List<UserPreferenceRecommendation>> recommendRoutesByUserPreference(@RequestParam Integer userId,
                                                                             @RequestParam Integer cityId,
                                                                             @RequestParam int days,
-                                                                            @RequestBody Map<String, Object> preferences) {
+                                                                            @RequestBody RoutePreferenceRequest request) {
         try {
             log.info("基于用户偏好推荐路线请求: userId={}, cityId={}, days={}", userId, cityId, days);
-            List<Map<String, Object>> recommendations = intelligentRouteService.recommendRoutesByUserPreference(userId, cityId, days, preferences);
+            java.util.Map<String, Object> preferences = new java.util.HashMap<>();
+            if (request.getPreferredTypes() != null) preferences.put("preferredTypes", request.getPreferredTypes());
+            if (request.getBudget() != null) preferences.put("budget", request.getBudget());
+            if (request.getTransportPreference() != null) preferences.put("transportPreference", request.getTransportPreference());
+            List<UserPreferenceRecommendation> recommendations = intelligentRouteService.recommendRoutesByUserPreference(userId, cityId, days, preferences);
             return Result.success(recommendations);
         } catch (Exception e) {
             log.error("基于用户偏好推荐路线失败: {}", e.getMessage());
@@ -233,11 +239,11 @@ public class RouteController {
 
     @PostMapping("/smart/evaluate/{routeId}")
     @Operation(summary = "评估路线质量", description = "评估路线质量")
-    public Result<Map<String, Object>> evaluateRouteQuality(@PathVariable Integer routeId,
-                                                            @RequestBody Map<String, Object> evaluationParams) {
+    public Result<RouteQualityEvaluation> evaluateRouteQuality(@PathVariable Integer routeId,
+                                                            @Valid @RequestBody RouteQualityEvaluationRequest request) {
         try {
             log.info("评估路线质量请求: routeId={}", routeId);
-            Map<String, Object> evaluation = intelligentRouteService.evaluateRouteQuality(routeId, evaluationParams);
+            RouteQualityEvaluation evaluation = intelligentRouteService.evaluateRouteQuality(routeId, request);
             return Result.success(evaluation);
         } catch (Exception e) {
             log.error("评估路线质量失败: routeId={}, error={}", routeId, e.getMessage());
@@ -249,10 +255,10 @@ public class RouteController {
 
     @PostMapping("/smart/compare")
     @Operation(summary = "比较路线", description = "多维度比较路线")
-    public Result<Map<String, Object>> compareRoutes(@RequestParam List<Integer> routeIds) {
+    public Result<RouteComparisonResult> compareRoutes(@RequestParam List<Integer> routeIds) {
         try {
             log.info("比较路线请求: routeIds={}", routeIds);
-            Map<String, Object> comparison = intelligentRouteService.compareRoutes(routeIds);
+            RouteComparisonResult comparison = intelligentRouteService.compareRoutes(routeIds);
             return Result.success(comparison);
         } catch (Exception e) {
             log.error("比较路线失败: {}", e.getMessage());
@@ -264,23 +270,11 @@ public class RouteController {
 
     @PostMapping("/smart/real-time-adjustment/{routeId}")
     @Operation(summary = "实时路线调整", description = "获取实时路线调整建议")
-    public Result<Map<String, Object>> getRealTimeAdjustment(@PathVariable Integer routeId,
-                                                             @RequestBody Map<String, Object> requestBody) {
+    public Result<RealTimeAdjustmentResult> getRealTimeAdjustment(@PathVariable Integer routeId,
+                                                             @Valid @RequestBody RealTimeAdjustmentRequest request) {
         try {
             log.info("获取实时路线调整建议请求: routeId={}", routeId);
-            Map<String, Double> currentLocation = null;
-            if (requestBody.get("currentLocation") instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Double> tempLocation = (Map<String, Double>) requestBody.get("currentLocation");
-                currentLocation = tempLocation;
-            }
-            Map<String, Object> realTimeFactors = null;
-            if (requestBody.get("realTimeFactors") instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> tempFactors = (Map<String, Object>) requestBody.get("realTimeFactors");
-                realTimeFactors = tempFactors;
-            }
-            Map<String, Object> adjustment = intelligentRouteService.getRealTimeAdjustment(routeId, currentLocation, realTimeFactors);
+            RealTimeAdjustmentResult adjustment = intelligentRouteService.getRealTimeAdjustment(routeId, request);
             return Result.success(adjustment);
         } catch (Exception e) {
             log.error("获取实时路线调整建议失败: routeId={}, error={}", routeId, e.getMessage());
@@ -292,22 +286,10 @@ public class RouteController {
 
     @PostMapping("/smart/generate-personalized")
     @Operation(summary = "生成个性化路线", description = "AI生成个性化路线")
-    public Result<Map<String, Object>> generatePersonalizedRoute(@RequestBody Map<String, Object> requestBody) {
+    public Result<PersonalizedRouteResult> generatePersonalizedRoute(@Valid @RequestBody PersonalizedRouteRequest request) {
         try {
             log.info("生成个性化路线请求");
-            Map<String, Object> userPreferences = null;
-            if (requestBody.get("userPreferences") instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> tempPreferences = (Map<String, Object>) requestBody.get("userPreferences");
-                userPreferences = tempPreferences;
-            }
-            Map<String, Object> constraints = null;
-            if (requestBody.get("constraints") instanceof Map) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> tempConstraints = (Map<String, Object>) requestBody.get("constraints");
-                constraints = tempConstraints;
-            }
-            Map<String, Object> route = intelligentRouteService.generatePersonalizedRoute(userPreferences, constraints);
+            PersonalizedRouteResult route = intelligentRouteService.generatePersonalizedRoute(request.getUserPreferences(), request.getConstraints());
             return Result.success(route);
         } catch (Exception e) {
             log.error("生成个性化路线失败: {}", e.getMessage());

@@ -2,9 +2,18 @@
 import { realtimeApi } from '../api/realtime.api'
 import { RealtimeCard } from '../components/RealtimeCard'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
+import { SearchEmptyState } from '../components/common/SearchFeedback'
+import { type StatusNoticeTone, StatusNotice } from '../components/common/StatusNotice'
 import { CROWD_LEVEL_MEDIUM } from '../constants'
 
 const DEFAULT_SYNC_MINUTES = 30
+
+type QuerySection = 'single' | 'batch' | 'crowded' | 'historical' | 'sevenDays' | 'needSync' | 'traffic'
+
+interface InlineNotice {
+  tone: StatusNoticeTone
+  message: string
+}
 
 function getTrafficStatusClass(value: Record<string, any> | null) {
   const status = String(value?.status || value?.level || '').toLowerCase()
@@ -72,22 +81,54 @@ export function RealtimeStatusPage() {
   const [trafficResult, setTrafficResult] = useState<Record<string, any> | null>(null)
   const [batchUpdateLoading, setBatchUpdateLoading] = useState(false)
   const [batchUpdateResult, setBatchUpdateResult] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loadingSection, setLoadingSection] = useState<QuerySection | null>(null)
+  const [singleNotice, setSingleNotice] = useState<InlineNotice | null>(null)
+  const [batchNotice, setBatchNotice] = useState<InlineNotice | null>(null)
+  const [crowdedNotice, setCrowdedNotice] = useState<InlineNotice | null>(null)
+  const [historicalNotice, setHistoricalNotice] = useState<InlineNotice | null>(null)
+  const [sevenDaysNotice, setSevenDaysNotice] = useState<InlineNotice | null>(null)
+  const [warnsNotice, setWarnsNotice] = useState<InlineNotice | null>(null)
+  const [needSyncNotice, setNeedSyncNotice] = useState<InlineNotice | null>(null)
+  const [trafficNotice, setTrafficNotice] = useState<InlineNotice | null>(null)
+  const [hasFetchedSingle, setHasFetchedSingle] = useState(false)
+  const [hasFetchedBatch, setHasFetchedBatch] = useState(false)
+  const [hasFetchedCrowded, setHasFetchedCrowded] = useState(false)
+  const [hasFetchedHistorical, setHasFetchedHistorical] = useState(false)
+  const [hasFetchedSevenDays, setHasFetchedSevenDays] = useState(false)
+  const [hasFetchedWarns, setHasFetchedWarns] = useState(false)
+  const [hasFetchedNeedSync, setHasFetchedNeedSync] = useState(false)
+  const [hasFetchedTraffic, setHasFetchedTraffic] = useState(false)
 
   const trafficStatusColor = useMemo(() => getTrafficStatusClass(trafficResult), [trafficResult])
+  const batchUpdateTone = useMemo<StatusNoticeTone | null>(() => {
+    if (!batchUpdateResult) return null
+    return batchUpdateResult.includes('\u6210\u529f') ? 'success' : 'error'
+  }, [batchUpdateResult])
+
+  function isLoading(section: QuerySection) {
+    return loadingSection === section
+  }
 
   async function fetchSingleStatus() {
     const id = singleAttractionId.trim()
-    if (!id) return
+    if (!id) {
+      setHasFetchedSingle(false)
+      setSingleResult(null)
+      setSingleNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u666f\u70b9\u7f16\u53f7\u3002' })
+      return
+    }
 
-    setLoading(true)
+    setHasFetchedSingle(true)
+    setSingleNotice(null)
+    setLoadingSection('single')
     try {
       const result = await realtimeApi.getAttractionRealtimeStatus(Number(id))
       setSingleResult(result || null)
     } catch {
       setSingleResult(null)
+      setSingleNotice({ tone: 'error', message: '\u5355\u666f\u70b9\u5b9e\u65f6\u72b6\u6001\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     } finally {
-      setLoading(false)
+      setLoadingSection(null)
     }
   }
 
@@ -98,64 +139,102 @@ export function RealtimeStatusPage() {
       .filter(Boolean)
       .map(Number)
 
-    if (!ids.length) return
+    if (!ids.length) {
+      setHasFetchedBatch(false)
+      setBatchResults([])
+      setBatchNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u9700\u8981\u67e5\u8be2\u7684\u666f\u70b9\u7f16\u53f7\u3002' })
+      return
+    }
 
-    setLoading(true)
+    setHasFetchedBatch(true)
+    setBatchNotice(null)
+    setLoadingSection('batch')
     try {
       const result = await realtimeApi.getBatchRealtimeStatus(ids)
       setBatchResults(Array.isArray(result) ? result : [])
     } catch {
       setBatchResults([])
+      setBatchNotice({ tone: 'error', message: '\u6279\u91cf\u72b6\u6001\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     } finally {
-      setLoading(false)
+      setLoadingSection(null)
     }
   }
 
   async function fetchCrowdedList() {
     const level = Number(minCrowdLevel) || CROWD_LEVEL_MEDIUM
 
-    setLoading(true)
+    setHasFetchedCrowded(true)
+    setCrowdedNotice(null)
+    setLoadingSection('crowded')
     try {
       const result = await realtimeApi.getCrowdedAttractions(level)
       setCrowdedList(Array.isArray(result) ? result : [])
     } catch {
       setCrowdedList([])
+      setCrowdedNotice({ tone: 'error', message: '\u62e5\u6324\u666f\u70b9\u5217\u8868\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     } finally {
-      setLoading(false)
+      setLoadingSection(null)
     }
   }
 
   async function fetchHistoricalAvg() {
     const id = historicalAvgId.trim()
-    if (!id) return
+    if (!id) {
+      setHasFetchedHistorical(false)
+      setHistoricalAvgResult(null)
+      setHistoricalNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u666f\u70b9\u7f16\u53f7\u3002' })
+      return
+    }
 
+    setHasFetchedHistorical(true)
+    setHistoricalNotice(null)
+    setLoadingSection('historical')
     try {
       const result = await realtimeApi.getHistoricalAvgCrowdCount(Number(id))
-      setHistoricalAvgResult(Number(result) || 0)
+      const normalized = Number(result)
+      setHistoricalAvgResult(Number.isFinite(normalized) ? normalized : null)
     } catch {
       setHistoricalAvgResult(null)
+      setHistoricalNotice({ tone: 'error', message: '\u5386\u53f2\u5e73\u5747\u5ba2\u6d41\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
+    } finally {
+      setLoadingSection(null)
     }
   }
 
   async function fetchSevenDaysAvg() {
     const id = sevenDaysAvgId.trim()
-    if (!id) return
+    if (!id) {
+      setHasFetchedSevenDays(false)
+      setSevenDaysAvgResult(null)
+      setSevenDaysNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u666f\u70b9\u7f16\u53f7\u3002' })
+      return
+    }
 
+    setHasFetchedSevenDays(true)
+    setSevenDaysNotice(null)
+    setLoadingSection('sevenDays')
     try {
       const result = await realtimeApi.get7DaysAvgCrowdCount(Number(id))
-      setSevenDaysAvgResult(Number(result) || 0)
+      const normalized = Number(result)
+      setSevenDaysAvgResult(Number.isFinite(normalized) ? normalized : null)
     } catch {
       setSevenDaysAvgResult(null)
+      setSevenDaysNotice({ tone: 'error', message: '\u8fd1 7 \u5929\u5e73\u5747\u5ba2\u6d41\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
+    } finally {
+      setLoadingSection(null)
     }
   }
 
   async function fetchWarns() {
+    setHasFetchedWarns(true)
+    setWarnsNotice(null)
     setWarnsLoading(true)
     try {
       const result = await realtimeApi.getActiveWarns()
       setWarns(Array.isArray(result) ? result : [])
     } catch {
       setWarns([])
+      setWarnsNotice({ tone: 'error', message: '\u6d3b\u52a8\u9884\u8b66\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     } finally {
       setWarnsLoading(false)
     }
@@ -164,24 +243,41 @@ export function RealtimeStatusPage() {
   async function fetchNeedSync() {
     const minutes = Number(needSyncMinutes) || DEFAULT_SYNC_MINUTES
 
+    setHasFetchedNeedSync(true)
+    setNeedSyncNotice(null)
+    setLoadingSection('needSync')
     try {
       const result = await realtimeApi.getNeedSyncStatus(minutes)
       setNeedSyncList(Array.isArray(result) ? result : [])
     } catch {
       setNeedSyncList([])
+      setNeedSyncNotice({ tone: 'error', message: '\u5f85\u540c\u6b65\u72b6\u6001\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
+    } finally {
+      setLoadingSection(null)
     }
   }
 
   async function fetchTraffic() {
     const id = trafficAttractionId.trim()
-    if (!id) return
+    if (!id) {
+      setHasFetchedTraffic(false)
+      setTrafficResult(null)
+      setTrafficNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u666f\u70b9\u7f16\u53f7\u3002' })
+      return
+    }
 
+    setHasFetchedTraffic(true)
+    setTrafficNotice(null)
     setTrafficResult(null)
+    setLoadingSection('traffic')
     try {
       const result = await realtimeApi.getTrafficInfo(Number(id))
       setTrafficResult(result || null)
     } catch {
       setTrafficResult(null)
+      setTrafficNotice({ tone: 'error', message: '\u4ea4\u901a\u4fe1\u606f\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
+    } finally {
+      setLoadingSection(null)
     }
   }
 
@@ -238,7 +334,7 @@ export function RealtimeStatusPage() {
                 <div className="mt-1 text-xl font-semibold text-slate-900">先刷新状态，再决定是否调整路线</div>
               </div>
               <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">
-                Live Board
+                {'\u5b9e\u65f6\u770b\u677f'}
               </span>
             </div>
             <div className="mt-4 grid gap-3 text-sm text-slate-600">
@@ -250,7 +346,7 @@ export function RealtimeStatusPage() {
               <button type="button" onClick={batchUpdateStatus} className="btn-primary">
                 {batchUpdateLoading ? '刷新中...' : '批量刷新状态'}
               </button>
-              {batchUpdateResult ? <span className="text-sm text-slate-500">{batchUpdateResult}</span> : null}
+            {batchUpdateTone ? <StatusNotice tone={batchUpdateTone} message={batchUpdateResult} className="mt-4" /> : null}
             </div>
           </div>
         </div>
@@ -259,19 +355,31 @@ export function RealtimeStatusPage() {
 
       <section className="mt-8 grid gap-6 xl:grid-cols-[1fr_1fr]">
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title="单景点状态" description="输入景点 ID，查看当前客流、等待时间、天气与开闭园状态。" />
+          <SectionHeader title="单景点状态" description="输入景点编号，查看当前客流、等待时间、天气与开闭园状态。" />
           <div className="flex gap-3">
             <input
               value={singleAttractionId}
               onChange={(event) => setSingleAttractionId(event.target.value)}
               type="text"
-              placeholder="输入 attractionId"
+              placeholder={'\u8f93\u5165\u666f\u70b9\u7f16\u53f7'}
               className="search-input flex-1"
             />
             <button className="btn-primary" onClick={fetchSingleStatus}>查询</button>
           </div>
-          <div className="mt-4">{loading ? <LoadingSpinner /> : null}</div>
-          {singleResult ? <div className="mt-4"><RealtimeCard data={singleResult} /></div> : <p className="mt-4 text-sm text-slate-400">暂无单景点实时数据</p>}
+          {singleNotice ? (
+            <StatusNotice
+              tone={singleNotice.tone}
+              message={singleNotice.message}
+              actionLabel={singleNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={singleNotice.tone === 'error' ? fetchSingleStatus : undefined}
+              className="mt-4"
+            />
+          ) : null}
+          {isLoading('single') ? <div className="mt-4"><LoadingSpinner /></div> : null}
+          {!isLoading('single') && singleResult ? <div className="mt-4"><RealtimeCard data={singleResult} /></div> : null}
+          {!isLoading('single') && hasFetchedSingle && !singleResult && !singleNotice ? (
+            <SearchEmptyState className="mt-4" message={'\u6682\u672a\u67e5\u8be2\u5230\u8be5\u666f\u70b9\u7684\u5b9e\u65f6\u6570\u636e\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchSingleStatus} />
+          ) : null}
         </div>
 
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
@@ -281,20 +389,31 @@ export function RealtimeStatusPage() {
               value={batchIds}
               onChange={(event) => setBatchIds(event.target.value)}
               type="text"
-              placeholder="输入多个 attractionId，用逗号分隔"
+              placeholder={'\u8f93\u5165\u591a\u4e2a\u666f\u70b9\u7f16\u53f7\uff0c\u7528\u9017\u53f7\u5206\u9694'}
               className="search-input flex-1"
             />
             <button className="btn-primary" onClick={fetchBatchStatus}>查询</button>
           </div>
-          {batchResults.length ? (
+          {batchNotice ? (
+            <StatusNotice
+              tone={batchNotice.tone}
+              message={batchNotice.message}
+              actionLabel={batchNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={batchNotice.tone === 'error' ? fetchBatchStatus : undefined}
+              className="mt-4"
+            />
+          ) : null}
+          {isLoading('batch') ? <div className="mt-4"><LoadingSpinner /></div> : null}
+          {!isLoading('batch') && batchResults.length ? (
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {batchResults.map((item, index) => (
                 <RealtimeCard key={item.id || `${item.attractionId}-${index}`} data={item} />
               ))}
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-400">暂无批量状态结果</p>
-          )}
+          ) : null}
+          {!isLoading('batch') && hasFetchedBatch && !batchResults.length && !batchNotice ? (
+            <SearchEmptyState className="mt-4" message={'\u5f53\u524d\u6ca1\u6709\u53ef\u5c55\u793a\u7684\u6279\u91cf\u72b6\u6001\u7ed3\u679c\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchBatchStatus} />
+          ) : null}
         </div>
       </section>
 
@@ -311,15 +430,26 @@ export function RealtimeStatusPage() {
             />
             <button className="btn-primary" onClick={fetchCrowdedList}>查询</button>
           </div>
-          {crowdedList.length ? (
+          {crowdedNotice ? (
+            <StatusNotice
+              tone={crowdedNotice.tone}
+              message={crowdedNotice.message}
+              actionLabel={crowdedNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={crowdedNotice.tone === 'error' ? fetchCrowdedList : undefined}
+              className="mt-4"
+            />
+          ) : null}
+          {isLoading('crowded') ? <div className="mt-4"><LoadingSpinner /></div> : null}
+          {!isLoading('crowded') && crowdedList.length ? (
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {crowdedList.map((item, index) => (
                 <RealtimeCard key={item.id || `${item.attractionId}-${index}`} data={item} />
               ))}
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-400">暂无拥挤景点结果</p>
-          )}
+          ) : null}
+          {!isLoading('crowded') && hasFetchedCrowded && !crowdedList.length && !crowdedNotice ? (
+            <SearchEmptyState className="mt-4" message={'\u5f53\u524d\u6ca1\u6709\u8fbe\u5230\u8be5\u62e5\u6324\u7b49\u7ea7\u7684\u666f\u70b9\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchCrowdedList} />
+          ) : null}
         </div>
 
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
@@ -332,12 +462,25 @@ export function RealtimeStatusPage() {
                   value={historicalAvgId}
                   onChange={(event) => setHistoricalAvgId(event.target.value)}
                   type="text"
-                  placeholder="输入 attractionId"
+                  placeholder={'\u8f93\u5165\u666f\u70b9\u7f16\u53f7'}
                   className="search-input flex-1"
                 />
                 <button className="btn-secondary" onClick={fetchHistoricalAvg}>查询</button>
               </div>
-              <div className="mt-4 text-sm text-slate-600">结果：{historicalAvgResult ?? '--'}</div>
+              {historicalNotice ? (
+                <StatusNotice
+                  tone={historicalNotice.tone}
+                  message={historicalNotice.message}
+                  actionLabel={historicalNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+                  onAction={historicalNotice.tone === 'error' ? fetchHistoricalAvg : undefined}
+                  className="mt-4"
+                />
+              ) : null}
+              {isLoading('historical') ? <div className="mt-4"><LoadingSpinner /></div> : null}
+{!isLoading('historical') && historicalAvgResult !== null ? <div className="mt-4 text-sm text-slate-600">{'\u7ed3\u679c\uff1a'}{historicalAvgResult}</div> : null}
+              {!isLoading('historical') && hasFetchedHistorical && historicalAvgResult === null && !historicalNotice ? (
+                <SearchEmptyState className="mt-4 p-6" message={'\u6682\u672a\u83b7\u53d6\u5230\u5386\u53f2\u5e73\u5747\u5ba2\u6d41\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchHistoricalAvg} />
+              ) : null}
             </div>
             <div className="metric-card">
               <div className="text-xs text-slate-500">近 7 天平均客流</div>
@@ -346,12 +489,25 @@ export function RealtimeStatusPage() {
                   value={sevenDaysAvgId}
                   onChange={(event) => setSevenDaysAvgId(event.target.value)}
                   type="text"
-                  placeholder="输入 attractionId"
+                  placeholder={'\u8f93\u5165\u666f\u70b9\u7f16\u53f7'}
                   className="search-input flex-1"
                 />
                 <button className="btn-secondary" onClick={fetchSevenDaysAvg}>查询</button>
               </div>
-              <div className="mt-4 text-sm text-slate-600">结果：{sevenDaysAvgResult ?? '--'}</div>
+              {sevenDaysNotice ? (
+                <StatusNotice
+                  tone={sevenDaysNotice.tone}
+                  message={sevenDaysNotice.message}
+                  actionLabel={sevenDaysNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+                  onAction={sevenDaysNotice.tone === 'error' ? fetchSevenDaysAvg : undefined}
+                  className="mt-4"
+                />
+              ) : null}
+              {isLoading('sevenDays') ? <div className="mt-4"><LoadingSpinner /></div> : null}
+{!isLoading('sevenDays') && sevenDaysAvgResult !== null ? <div className="mt-4 text-sm text-slate-600">{'\u7ed3\u679c\uff1a'}{sevenDaysAvgResult}</div> : null}
+              {!isLoading('sevenDays') && hasFetchedSevenDays && sevenDaysAvgResult === null && !sevenDaysNotice ? (
+                <SearchEmptyState className="mt-4 p-6" message={'\u6682\u672a\u83b7\u53d6\u5230\u8fd1 7 \u5929\u5e73\u5747\u5ba2\u6d41\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchSevenDaysAvg} />
+              ) : null}
             </div>
           </div>
         </div>
@@ -360,6 +516,15 @@ export function RealtimeStatusPage() {
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
           <SectionHeader title="活动预警" description="查看当前激活的状态预警与风险提示。" action={<button className="btn-secondary" onClick={fetchWarns}>刷新</button>} />
+          {warnsNotice ? (
+            <StatusNotice
+              tone={warnsNotice.tone}
+              message={warnsNotice.message}
+              actionLabel={warnsNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={warnsNotice.tone === 'error' ? fetchWarns : undefined}
+              className="mb-4"
+            />
+          ) : null}
           {warnsLoading ? <LoadingSpinner /> : null}
           {!warnsLoading && warns.length ? (
             <div className="space-y-4">
@@ -367,8 +532,8 @@ export function RealtimeStatusPage() {
                 <article key={warn.id || index} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 px-5 py-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-900">{warn.title || warn.name || `预警 #${index + 1}`}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-500">{warn.description || warn.message || '暂无更多描述'}</p>
+                      <h3 className="text-base font-semibold text-slate-900">{warn.title || warn.name || `\u9884\u8b66\u7f16\u53f7 ${index + 1}`}</h3>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">{warn.description || warn.message || '\u6682\u65e0\u66f4\u591a\u63cf\u8ff0'}</p>
                     </div>
                     <span className={`rounded-full px-3 py-1 text-xs font-medium ${getWarnLevelClass(warn.severity)}`}>
                       {getWarnLevelLabel(warn.severity)}
@@ -378,7 +543,9 @@ export function RealtimeStatusPage() {
               ))}
             </div>
           ) : null}
-          {!warnsLoading && !warns.length ? <p className="py-8 text-center text-sm text-slate-400">暂无活动预警</p> : null}
+          {!warnsLoading && hasFetchedWarns && !warns.length && !warnsNotice ? (
+            <SearchEmptyState className="mt-4" message={'\u5f53\u524d\u6682\u65e0\u6d3b\u52a8\u9884\u8b66\u3002'} actionLabel={'\u91cd\u65b0\u5237\u65b0'} onAction={fetchWarns} />
+          ) : null}
         </div>
 
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
@@ -393,15 +560,26 @@ export function RealtimeStatusPage() {
             />
             <button className="btn-primary" onClick={fetchNeedSync}>查询</button>
           </div>
-          {needSyncList.length ? (
+          {needSyncNotice ? (
+            <StatusNotice
+              tone={needSyncNotice.tone}
+              message={needSyncNotice.message}
+              actionLabel={needSyncNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={needSyncNotice.tone === 'error' ? fetchNeedSync : undefined}
+              className="mt-4"
+            />
+          ) : null}
+          {isLoading('needSync') ? <div className="mt-4"><LoadingSpinner /></div> : null}
+          {!isLoading('needSync') && needSyncList.length ? (
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               {needSyncList.map((item, index) => (
                 <RealtimeCard key={item.id || `${item.attractionId}-${index}`} data={item} />
               ))}
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-400">暂无待同步记录</p>
-          )}
+          ) : null}
+          {!isLoading('needSync') && hasFetchedNeedSync && !needSyncList.length && !needSyncNotice ? (
+            <SearchEmptyState className="mt-4" message={'\u5f53\u524d\u6682\u65e0\u5f85\u540c\u6b65\u72b6\u6001\u8bb0\u5f55\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchNeedSync} />
+          ) : null}
         </div>
       </section>
 
@@ -413,25 +591,36 @@ export function RealtimeStatusPage() {
               value={trafficAttractionId}
               onChange={(event) => setTrafficAttractionId(event.target.value)}
               type="text"
-              placeholder="输入 attractionId"
+              placeholder={'\u8f93\u5165\u666f\u70b9\u7f16\u53f7'}
               className="search-input flex-1"
             />
             <button className="btn-primary" onClick={fetchTraffic}>查询</button>
           </div>
-          {trafficResult ? (
+          {trafficNotice ? (
+            <StatusNotice
+              tone={trafficNotice.tone}
+              message={trafficNotice.message}
+              actionLabel={trafficNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={trafficNotice.tone === 'error' ? fetchTraffic : undefined}
+              className="mt-4"
+            />
+          ) : null}
+          {isLoading('traffic') ? <div className="mt-4"><LoadingSpinner /></div> : null}
+          {!isLoading('traffic') && trafficResult ? (
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="space-y-2 text-sm">
                 <p className="text-slate-700">
-                  交通状态：<span className={trafficStatusColor}>{String(trafficResult.status || trafficResult.level || '未知')}</span>
+                  {'\u4ea4\u901a\u72b6\u6001\uff1a'}<span className={trafficStatusColor}>{String(trafficResult.status || trafficResult.level || '\u672a\u77e5')}</span>
                 </p>
-                {trafficResult.speed ? <p className="text-slate-600">平均速度：{trafficResult.speed} km/h</p> : null}
-                {trafficResult.congestion ? <p className="text-slate-600">拥堵指数：{trafficResult.congestion}</p> : null}
+                {trafficResult.speed ? <p className="text-slate-600">{'\u5e73\u5747\u901f\u5ea6\uff1a'}{trafficResult.speed} km/h</p> : null}
+                {trafficResult.congestion ? <p className="text-slate-600">{'\u62e5\u5835\u6307\u6570\uff1a'}{trafficResult.congestion}</p> : null}
                 {trafficResult.description ? <p className="text-xs text-slate-500">{trafficResult.description}</p> : null}
               </div>
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-slate-400">暂无交通查询结果</p>
-          )}
+          ) : null}
+          {!isLoading('traffic') && hasFetchedTraffic && !trafficResult && !trafficNotice ? (
+            <SearchEmptyState className="mt-4" message={'\u6682\u672a\u67e5\u8be2\u5230\u8be5\u666f\u70b9\u7684\u4ea4\u901a\u4fe1\u606f\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchTraffic} />
+          ) : null}
         </div>
       </section>
     </div>

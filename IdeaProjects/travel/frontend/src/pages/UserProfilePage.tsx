@@ -266,7 +266,7 @@ export function UserProfilePage() {
 
           <div>
 
-            <span className="section-kicker">????</span>
+            <span className="section-kicker">{'\u4e2a\u4eba\u8d44\u6599'}</span>
 
             <div className="mt-3 flex flex-wrap gap-2">
 
@@ -364,7 +364,7 @@ export function UserProfilePage() {
 
             <div>
 
-              <span className="section-kicker">????</span>
+              <span className="section-kicker">{'\u6536\u85cf\u6e05\u5355'}</span>
 
               <h2 className="mt-3 text-lg font-semibold text-slate-900">我的收藏</h2>
 
@@ -432,7 +432,7 @@ export function UserProfilePage() {
 
             <div>
 
-              <span className="section-kicker">????</span>
+              <span className="section-kicker">{'\u6211\u7684\u8def\u7ebf'}</span>
 
               <h2 className="mt-3 text-lg font-semibold text-slate-900">我的路线</h2>
 

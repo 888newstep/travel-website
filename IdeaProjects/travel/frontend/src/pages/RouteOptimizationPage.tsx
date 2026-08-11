@@ -148,7 +148,7 @@ export function RouteOptimizationPage() {
                 <article key={suggestion.id || index} className="metric-card surface-card-hover">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <h3 className="text-base font-semibold text-slate-900">{suggestion.title || suggestion.type || `\u5efa\u8bae #${index + 1}`}</h3>
+                      <h3 className="text-base font-semibold text-slate-900">{suggestion.title || suggestion.type || `\u5efa\u8bae\u7f16\u53f7 ${index + 1}`}</h3>
                       <p className="mt-2 text-sm leading-6 text-slate-500">{suggestion.description || suggestion.detail || '\u6682\u65e0\u5efa\u8bae\u8bf4\u660e'}</p>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
                         {suggestion.timeSaved ? <span className="rounded-full bg-white px-3 py-1.5">{'\u8282\u7701 '}{suggestion.timeSaved}{' \u5206\u949f'}</span> : null}
@@ -172,7 +172,7 @@ export function RouteOptimizationPage() {
             <div className="space-y-4">
               {history.map((item, index) => (
                 <article key={item.id || index} className="metric-card surface-card-hover">
-                  <div className="text-sm font-semibold text-slate-900">{item.title || item.type || `\u8bb0\u5f55 #${index + 1}`}</div>
+                  <div className="text-sm font-semibold text-slate-900">{item.title || item.type || `\u8bb0\u5f55\u7f16\u53f7 ${index + 1}`}</div>
                   <p className="mt-2 text-sm leading-6 text-slate-500">{item.description || item.detail || '\u6682\u65e0\u5386\u53f2\u8bf4\u660e'}</p>
                   <div className="mt-3 text-xs text-slate-400">{item.createTime || item.createdAt || '\u672a\u77e5\u65f6\u95f4'}</div>
                 </article>

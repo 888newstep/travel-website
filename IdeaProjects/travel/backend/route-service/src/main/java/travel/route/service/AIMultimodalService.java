@@ -1,12 +1,13 @@
 package travel.route.service;
 
+import travel.route.dto.ai.AIMultimodalItem;
 import org.springframework.web.multipart.MultipartFile;
+
 import java.util.List;
-import java.util.Map;
 
 public interface AIMultimodalService {
 
-    List<Map<String, Object>> getMultimodalRecommendations(String text, MultipartFile image, int limit);
+    List<AIMultimodalItem> getMultimodalRecommendations(String text, MultipartFile image, int limit);
 
-    List<Map<String, Object>> multimodalSearch(String text, MultipartFile image, int page, int size);
+    List<AIMultimodalItem> multimodalSearch(String text, MultipartFile image, int page, int size);
 }

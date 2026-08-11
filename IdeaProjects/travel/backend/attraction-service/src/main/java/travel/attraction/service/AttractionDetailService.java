@@ -77,6 +77,11 @@ public interface AttractionDetailService {
      */
     List<Map<String, Object>> getAttractionReviews(Long id, int page, int size);
 
+    Map<String, Object> saveAttractionReview(Integer attractionId, Integer userId, Integer rating, String content);
+
+    /** 获取指定景点周边的其他景点（按距离排序） */
+    List<Map<String, Object>> getNearbyAttractions(Integer id, int limit);
+
     /**
      * 获取景点评分统计
      * @param id 景点ID

@@ -902,7 +902,7 @@ export function AIChatPage() {
 
             onChange={(event) => setPlanForm((current) => ({ ...current, preferences: event.target.value }))}
 
-            placeholder="偏好，例如 pace:slow,budget:medium,theme:family"
+            placeholder={'\u504f\u597d\uff0c\u4f8b\u5982\uff1a\u6175\u61d2\u8282\u594f\u3001\u4eb2\u5b50\u540c\u884c\u3001\u4e2d\u7b49\u9884\u7b97'}
 
             className="search-input"
 
@@ -914,7 +914,7 @@ export function AIChatPage() {
 
             onChange={(event) => setPlanForm((current) => ({ ...current, constraints: event.target.value }))}
 
-            placeholder="限制，例如 children:true,days:3,transport:metro"
+            placeholder={'\u9650\u5236\uff0c\u4f8b\u5982\uff1a\u5e26\u5b69\u5b50\u3001\u4e09\u5929\u884c\u7a0b\u3001\u4ee5\u5730\u94c1\u4e3a\u4e3b'}
 
             className="search-input mt-4"
 
@@ -960,7 +960,7 @@ export function AIChatPage() {
 
               onChange={(event) => setSafetyCityId(event.target.value)}
 
-              placeholder="输入城市 ID"
+              placeholder={'\u8f93\u5165\u57ce\u5e02\u7f16\u53f7'}
 
               className="search-input flex-1"
 

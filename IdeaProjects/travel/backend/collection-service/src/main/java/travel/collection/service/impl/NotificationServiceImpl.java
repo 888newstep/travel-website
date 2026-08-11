@@ -12,6 +12,7 @@ import travel.common.exception.BusinessException;
 import travel.common.mapper.user_community_mapper.NotificationMapper;
 import travel.collection.service.NotificationService;
 import travel.collection.service.UserService;
+import travel.collection.util.CurrentUserSupport;
 import travel.common.utils.ThirdApiUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -66,7 +67,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     public List<Notification> getCurrentUserNotifications(Integer page, Integer size) {
-        User currentUser = userService.getCurrentUser();
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         return getByUserId(currentUser.getId(), page, size);
     }
 
@@ -90,7 +91,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean markAllAsRead() {
-        User currentUser = userService.getCurrentUser();
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         LambdaQueryWrapper<Notification> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Notification::getUserId, currentUser.getId());
         queryWrapper.eq(Notification::getIsRead, false);
@@ -119,7 +120,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     public Integer getUnreadCount() {
-        User currentUser = userService.getCurrentUser();
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         LambdaQueryWrapper<Notification> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Notification::getUserId, currentUser.getId());
         queryWrapper.eq(Notification::getIsRead, false);

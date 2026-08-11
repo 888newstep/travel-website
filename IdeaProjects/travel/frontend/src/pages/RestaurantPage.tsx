@@ -93,7 +93,7 @@ export function RestaurantPage() {
               <StatTile label={'\u9910\u5385\u6570'} value={restaurants.length} />
               <StatTile label={'\u641c\u7d22\u72b6\u6001'} value={keyword.trim() ? '\u641c\u7d22\u4e2d' : '\u5168\u90e8'} />
               <StatTile label={'\u9ad8\u8bc4\u5206'} value={highRatedCount} />
-              <StatTile label={'\u57ce\u5e02 ID'} value={`#${DEFAULT_CITY_ID}`} />
+              <StatTile label={'\u57ce\u5e02\u7f16\u53f7'} value={DEFAULT_CITY_ID} />
             </div>
             {topCuisineTypes.length ? (
               <div className="mt-5 flex flex-wrap gap-2">
@@ -126,7 +126,7 @@ export function RestaurantPage() {
               </button>
             </div>
             <div className="mt-4 text-sm text-slate-500">
-              {'\u5f53\u524d\u663e\u793a\uff1a'}{keyword.trim() ? '\u5173\u952e\u8bcd\u5df2\u5e94\u7528' : '\u6d4f\u89c8\u5168\u90e8'} {'\u00b7 \u57ce\u5e02 #'}{DEFAULT_CITY_ID}
+              {'\u5f53\u524d\u663e\u793a\uff1a'}{keyword.trim() ? '\u5173\u952e\u8bcd\u5df2\u5e94\u7528' : '\u6d4f\u89c8\u5168\u90e8'} {'\u00b7 \u57ce\u5e02\u7f16\u53f7 '}{DEFAULT_CITY_ID}
             </div>
           </div>
         </div>
@@ -158,7 +158,7 @@ export function RestaurantPage() {
           <div className="mt-5 space-y-3 text-sm text-slate-600">
             <div className="metric-card surface-card-hover flex items-center justify-between">
               <span>{'\u5f53\u524d\u57ce\u5e02'}</span>
-              <span className="font-semibold text-slate-900">#{DEFAULT_CITY_ID}</span>
+              <span className="font-semibold text-slate-900">{DEFAULT_CITY_ID}</span>
             </div>
             <div className="metric-card surface-card-hover flex items-center justify-between">
               <span>{'\u68c0\u7d22\u6a21\u5f0f'}</span>

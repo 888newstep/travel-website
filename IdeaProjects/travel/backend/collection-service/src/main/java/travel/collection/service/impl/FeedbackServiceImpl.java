@@ -12,6 +12,7 @@ import travel.common.exception.BusinessException;
 import travel.common.mapper.user_community_mapper.FeedbackMapper;
 import travel.collection.service.FeedbackService;
 import travel.collection.service.UserService;
+import travel.collection.util.CurrentUserSupport;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +31,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Feedback submitFeedback(Feedback feedback) {
-        User currentUser = userService.getCurrentUser();
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         feedback.setUserId(currentUser.getId());
         feedback.setStatus("pending");
         feedback.setCreatedAt(LocalDateTime.now());
@@ -50,7 +51,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
 
     @Override
     public List<Feedback> getCurrentUserFeedbacks(Integer page, Integer size) {
-        User currentUser = userService.getCurrentUser();
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         return getByUserId(currentUser.getId(), page, size);
     }
 
@@ -61,7 +62,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
             throw new BusinessException(ErrorCodeEnum.FEEDBACK_NOT_EXIST);
         }
 
-        User currentUser = userService.getCurrentUser();
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         if (!currentUser.getId().equals(feedback.getUserId())) {
             throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
         }
@@ -91,7 +92,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
             throw new BusinessException(ErrorCodeEnum.FEEDBACK_NOT_EXIST);
         }
 
-        User currentUser = userService.getCurrentUser();
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         if (!currentUser.getId().equals(feedback.getUserId())) {
             throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
         }

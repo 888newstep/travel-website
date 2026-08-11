@@ -19,10 +19,10 @@ const toneClassMap: Record<StatusNoticeTone, string> = {
 }
 
 const toneTitleMap: Record<StatusNoticeTone, string> = {
-  info: 'MessageList',
-  success: 'MessageList',
-  warning: '???',
-  error: 'MessageList',
+  info: '\u72b6\u6001\u63d0\u793a',
+  success: '\u64cd\u4f5c\u5b8c\u6210',
+  warning: '\u8bf7\u7559\u610f',
+  error: '\u5904\u7406\u5931\u8d25',
 }
 
 export function StatusNotice({

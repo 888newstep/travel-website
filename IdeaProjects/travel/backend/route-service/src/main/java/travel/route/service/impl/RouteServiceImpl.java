@@ -3,13 +3,18 @@ package travel.route.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import travel.common.entity.route_planning.Route;
 import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
 import travel.common.mapper.route_planning_mapper.RouteMapper;
 import travel.common.repository.RouteRepository;
 import travel.route.service.RouteService;
+import travel.route.service.RouteCacheService;
+import travel.route.service.RouteOverviewStatisticsService;
+import travel.route.service.RouteTransportService;
+import travel.route.service.RouteRealtimeStatusService;
 import travel.common.utils.CacheUtil;
 import travel.common.utils.Result;
 import org.springframework.stereotype.Service;
@@ -17,15 +22,19 @@ import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("unchecked")
 public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements RouteService {
 
+    private static final Logger log = LoggerFactory.getLogger(RouteServiceImpl.class);
+
     private final RouteRepository routeRepository;
     private final CacheUtil cacheUtil;
+    private final RouteCacheService routeCacheService;
+    private final RouteOverviewStatisticsService routeOverviewStatisticsService;
+    private final RouteTransportService routeTransportService;
+    private final RouteRealtimeStatusService routeRealtimeStatusService;
 
     @Override
     public Route getById(Integer id) {
@@ -33,20 +42,16 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
             return null;
         }
 
-        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "detail", id);
-        Route cached = cacheUtil.get(cacheKey, Route.class);
-
+        // 尝试从缓存获取
+        Route cached = routeCacheService.getRouteDetail(id);
         if (cached != null) {
-            log.debug("从缓存获取路线详情: id={}", id);
-            cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_hits"), 1);
             return cached;
         }
 
-        cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_misses"), 1);
+        // 缓存未命中，从数据库查询
         Route route = baseMapper.selectById(id);
         if (route != null) {
-            cacheUtil.set(cacheKey, route, 1, TimeUnit.HOURS);
-            log.debug("缓存路线详情: id={}", id);
+            routeCacheService.cacheRouteDetail(route);
         }
         return route;
     }
@@ -57,27 +62,15 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
 
-        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "user", userId);
-        Object cachedObj = cacheUtil.get(cacheKey, List.class);
-        if (cachedObj instanceof List) {
-            List<?> cachedList = (List<?>) cachedObj;
-            List<Route> cachedRoutes = new ArrayList<>();
-            for (Object item : cachedList) {
-                if (item instanceof Route) {
-                    cachedRoutes.add((Route) item);
-                }
-            }
-            if (!cachedRoutes.isEmpty()) {
-                log.debug("从缓存获取用户路线: userId={}", userId);
-                cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_hits"), 1);
-                return cachedRoutes;
-            }
+        // 尝试从缓存获取
+        List<Route> cached = routeCacheService.getUserRoutes(userId);
+        if (cached != null && !cached.isEmpty()) {
+            return cached;
         }
 
-        cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_misses"), 1);
+        // 缓存未命中，从数据库查询
         List<Route> routes = routeRepository.findByUserId(userId);
-        cacheUtil.set(cacheKey, routes, 30, TimeUnit.MINUTES);
-        log.debug("缓存用户路线: userId={}, count={}", userId, routes.size());
+        routeCacheService.cacheUserRoutes(userId, routes);
         return routes;
     }
 
@@ -174,8 +167,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
         boolean result = routeRepository.update(route);
         if (result) {
             invalidateRouteCache(route.getUserId().longValue(), route.getCityId());
-            String detailKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "detail", route.getId());
-            cacheUtil.delete(detailKey);
+            routeCacheService.invalidateRouteCache(route.getId());
         }
         return result;
     }
@@ -186,16 +178,17 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
         boolean result = routeRepository.deleteById(id.longValue());
         if (result && route != null) {
             invalidateRouteCache(route.getUserId().longValue(), route.getCityId());
-            String detailKey = CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "detail", id);
-            cacheUtil.delete(detailKey);
+            routeCacheService.invalidateRouteCache(id);
         }
         return result;
     }
 
     private void invalidateRouteCache(Long userId, Integer cityId) {
+        // 使用 RouteCacheService 失效用户路线缓存
         if (userId != null) {
-            cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "user", userId));
+            routeCacheService.invalidateUserRoutes(userId);
         }
+        // 其他缓存操作保持原样
         if (cityId != null) {
             cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ROUTE_KEY_PREFIX, "city", cityId));
         }
@@ -216,282 +209,62 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
 
     @Override
     public Map<String, Object> getRouteStatistics() {
-        try {
-            Map<String, Object> statistics = new HashMap<>();
-            List<Route> allRoutes = routeRepository.findAll();
-
-            statistics.put("totalRoutes", allRoutes.size());
-            statistics.put("publicRoutes", allRoutes.stream().filter(Route::getIsPublic).count());
-            statistics.put("privateRoutes", allRoutes.stream().filter(r -> !r.getIsPublic()).count());
-            statistics.put("averageDays", allRoutes.stream().mapToInt(Route::getDurationDays).average().orElse(0.0));
-            statistics.put("totalViews", allRoutes.stream().mapToInt(Route::getViewCount).sum());
-            statistics.put("totalLikes", allRoutes.stream().mapToInt(Route::getLikeCount).sum());
-
-            return statistics;
-        } catch (Exception e) {
-            log.error("获取路线统计失败: error={}", e.getMessage());
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("message", "获取路线统计失败: " + e.getMessage());
-            return errorResult;
-        }
+        return routeOverviewStatisticsService.getRouteStatistics();
     }
 
     @Override
     public List<Map<String, Object>> getRouteStatisticsByCity() {
-        try {
-            List<Route> allRoutes = routeRepository.findAll();
-            Map<Integer, List<Route>> routesByCity = allRoutes.stream()
-                    .collect(Collectors.groupingBy(Route::getCityId));
-            
-            List<Map<String, Object>> cityStats = new ArrayList<>();
-            for (Map.Entry<Integer, List<Route>> entry : routesByCity.entrySet()) {
-                Map<String, Object> stat = new HashMap<>();
-                stat.put("cityId", entry.getKey());
-                stat.put("routeCount", entry.getValue().size());
-                stat.put("averageRating", 0.0);
-                cityStats.add(stat);
-            }
-            
-            return cityStats;
-        } catch (Exception e) {
-            log.error("获取城市路线统计失败: error={}", e.getMessage());
-            return List.of();
-        }
+        return routeOverviewStatisticsService.getRouteStatisticsByCity();
     }
 
     @Override
     public Map<String, Object> getRouteCompletionRate() {
-        try {
-            List<Route> allRoutes = routeRepository.findAll();
-            int totalRoutes = allRoutes.size();
-            int completedRoutes = (int) allRoutes.stream().filter(r -> r.getViewCount() != null && r.getViewCount() > 0).count();
-            double completionRate = totalRoutes > 0 ? (double) completedRoutes / totalRoutes : 0.0;
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("totalRoutes", totalRoutes);
-            result.put("completedRoutes", completedRoutes);
-            result.put("rate", completionRate);
-
-            return result;
-        } catch (Exception e) {
-            log.error("获取路线完成率失败: error={}", e.getMessage());
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("message", "获取路线完成率失败: " + e.getMessage());
-            return errorResult;
-        }
+        return routeOverviewStatisticsService.getRouteCompletionRate();
     }
 
     @Override
     public List<Map<String, Object>> getRouteDurationDistribution() {
-        try {
-            List<Route> allRoutes = routeRepository.findAll();
-            Map<Integer, Long> durationDistribution = allRoutes.stream()
-                    .collect(Collectors.groupingBy(Route::getDurationDays, Collectors.counting()));
-            
-            List<Map<String, Object>> distribution = new ArrayList<>();
-            for (Map.Entry<Integer, Long> entry : durationDistribution.entrySet()) {
-                Map<String, Object> item = new HashMap<>();
-                item.put("days", entry.getKey());
-                item.put("count", entry.getValue());
-                distribution.add(item);
-            }
-            
-            return distribution;
-        } catch (Exception e) {
-            log.error("获取路线时长分布失败: error={}", e.getMessage());
-            return List.of();
-        }
+        return routeOverviewStatisticsService.getRouteDurationDistribution();
     }
 
     @Override
     public List<Map<String, Object>> getTransportOptions(Integer fromCity, Integer toCity) {
-        try {
-            List<Map<String, Object>> options = new ArrayList<>();
-            
-            Map<String, Object> publicTransport = new HashMap<>();
-            publicTransport.put("type", "public");
-            publicTransport.put("name", "公共交通");
-            publicTransport.put("cost", 50);
-            publicTransport.put("time", 120);
-            options.add(publicTransport);
-            
-            Map<String, Object> taxi = new HashMap<>();
-            taxi.put("type", "taxi");
-            taxi.put("name", "出租车");
-            taxi.put("cost", 200);
-            taxi.put("time", 60);
-            options.add(taxi);
-            
-            Map<String, Object> privateCar = new HashMap<>();
-            privateCar.put("type", "private");
-            privateCar.put("name", "私家车");
-            privateCar.put("cost", 150);
-            privateCar.put("time", 80);
-            options.add(privateCar);
-            
-            return options;
-        } catch (Exception e) {
-            log.error("获取交通方式选项失败: error={}", e.getMessage());
-            return List.of();
-        }
+        return routeTransportService.getTransportOptions(fromCity, toCity);
     }
 
     @Override
     public Map<String, Object> calculateTransportCost(Map<String, Object> params) {
-        try {
-            String transportType = (String) params.getOrDefault("transportType", "public");
-            Integer distance = (Integer) params.getOrDefault("distance", 100);
-            
-            double costPerKm = switch (transportType) {
-                case "public" -> 0.5;
-                case "taxi" -> 2.0;
-                case "private" -> 1.5;
-                default -> 0.5;
-            };
-            
-            double totalCost = distance * costPerKm;
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("transportType", transportType);
-            result.put("distance", distance);
-            result.put("costPerKm", costPerKm);
-            result.put("totalCost", totalCost);
-
-            return result;
-        } catch (Exception e) {
-            log.error("计算交通费用失败: error={}", e.getMessage());
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("message", "计算交通费用失败: " + e.getMessage());
-            return errorResult;
-        }
+        return routeTransportService.calculateTransportCost(params);
     }
 
     @Override
     public Map<String, Object> calculateTransportTime(Map<String, Object> params) {
-        try {
-            String transportType = (String) params.getOrDefault("transportType", "public");
-            Integer distance = (Integer) params.getOrDefault("distance", 100);
-            
-            double speedKmPerHour = switch (transportType) {
-                case "public" -> 30.0;
-                case "taxi" -> 40.0;
-                case "private" -> 50.0;
-                default -> 30.0;
-            };
-            
-            double totalTime = distance / speedKmPerHour * 60;
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("transportType", transportType);
-            result.put("distance", distance);
-            result.put("speedKmPerHour", speedKmPerHour);
-            result.put("totalTime", totalTime);
-
-            return result;
-        } catch (Exception e) {
-            log.error("计算交通时间失败: error={}", e.getMessage());
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("message", "计算交通时间失败: " + e.getMessage());
-            return errorResult;
-        }
+        return routeTransportService.calculateTransportTime(params);
     }
 
     @Override
     public List<Map<String, Object>> getTransportRecommendations(Map<String, Object> params) {
-        try {
-            List<Map<String, Object>> recommendations = new ArrayList<>();
-            
-            Integer budget = (Integer) params.getOrDefault("budget", 200);
-            Integer timeConstraint = (Integer) params.getOrDefault("timeConstraint", 120);
-            
-            List<Map<String, Object>> options = getTransportOptions(1, 2);
-            
-            for (Map<String, Object> option : options) {
-                double cost = (double) option.get("cost");
-                double time = (double) option.get("time");
-                
-                if (cost <= budget && time <= timeConstraint) {
-                    recommendations.add(option);
-                }
-            }
-            
-            return recommendations;
-        } catch (Exception e) {
-            log.error("获取交通推荐失败: error={}", e.getMessage());
-            return List.of();
-        }
+        return routeTransportService.getTransportRecommendations(params);
     }
 
     @Override
     public List<Map<String, Object>> getRoutesNeedingSync(Integer minutes) {
-        try {
-            List<Map<String, Object>> routes = new ArrayList<>();
-            Map<String, Object> route = new HashMap<>();
-            route.put("routeId", 1);
-            route.put("lastUpdated", "2026-04-22T10:00:00");
-            routes.add(route);
-            
-            return routes;
-        } catch (Exception e) {
-            log.error("获取需要同步的路线失败: error={}", e.getMessage());
-            return List.of();
-        }
+        return routeRealtimeStatusService.getRoutesNeedingSync(minutes);
     }
 
     @Override
     public Map<String, Object> syncRouteStatus(List<Integer> routeIds) {
-        try {
-            Map<String, Object> result = new HashMap<>();
-            result.put("successCount", routeIds.size());
-            result.put("failedCount", 0);
-
-            return result;
-        } catch (Exception e) {
-            log.error("同步路线状态失败: error={}", e.getMessage());
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("message", "同步路线状态失败: " + e.getMessage());
-            return errorResult;
-        }
+        return routeRealtimeStatusService.syncRouteStatus(routeIds);
     }
 
     @Override
     public Map<String, Object> getRouteRealtimeStatus(Integer routeId) {
-        try {
-            Map<String, Object> status = new HashMap<>();
-            status.put("routeId", routeId);
-            status.put("status", "active");
-            status.put("lastUpdated", new Date());
-
-            return status;
-        } catch (Exception e) {
-            log.error("获取路线实时状态失败: error={}", e.getMessage());
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("message", "获取路线实时状态失败: " + e.getMessage());
-            return errorResult;
-        }
+        return routeRealtimeStatusService.getRouteRealtimeStatus(routeId);
     }
 
     @Override
     public Map<String, Object> updateRouteRealtimeStatus(Integer routeId, Map<String, Object> params) {
-        try {
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("routeId", routeId);
-
-            return result;
-        } catch (Exception e) {
-            log.error("更新路线实时状态失败: error={}", e.getMessage());
-            Map<String, Object> errorResult = new HashMap<>();
-            errorResult.put("success", false);
-            errorResult.put("message", "更新路线实时状态失败: " + e.getMessage());
-            return errorResult;
-        }
+        return routeRealtimeStatusService.updateRouteRealtimeStatus(routeId, params);
     }
 
     @Override
@@ -1260,3 +1033,4 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
         }
     }
 }
+

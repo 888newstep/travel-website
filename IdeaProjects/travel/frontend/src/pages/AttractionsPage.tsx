@@ -1,6 +1,7 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { attractionApi, type Attraction } from '../api/attraction.api'
+import { userApi } from '../api/user.api'
 
 import { CommentComposer, CommentFeed } from '../components/common/CommentBlocks'
 
@@ -103,8 +104,20 @@ export function AttractionsPage() {
 
 
   const hasToken = Boolean(getStoredToken())
+  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
 
 
+
+
+  useEffect(() => {
+    if (hasToken) {
+      userApi.getCurrentUser().then((user) => {
+        if (user && typeof (user as any).id === 'number') {
+          setCurrentUserId((user as any).id)
+        }
+      }).catch(() => {})
+    }
+  }, [hasToken])
 
   const fetchAttractions = useCallback(async (searchText: string) => {
 
@@ -364,7 +377,7 @@ export function AttractionsPage() {
 
     try {
 
-      await attractionApi.submitReview(selectedItem.id!, Number(reviewForm.rating), reviewForm.content.trim())
+      await attractionApi.submitReview(selectedItem.id!, Number(reviewForm.rating), reviewForm.content.trim(), currentUserId ?? undefined)
 
       setReviewForm({ rating: '5', content: '' })
 
@@ -736,9 +749,13 @@ export function AttractionsPage() {
 
                   <div key={item.id || index} className="metric-card">
 
-                    <div className="font-medium text-slate-900">{item.name || `周边景点 #${index + 1}`}</div>
+                    <div className="font-medium text-slate-900">{item.name || `周边景点编号 ${index + 1}`}</div>
 
                     <div className="mt-2 line-clamp-2 text-sm text-slate-500">{item.description || item.address || '暂无补充说明'}</div>
+
+                    {typeof item.distance === 'number' ? (
+                      <div className="mt-1 text-xs text-slate-400">距离约 {item.distance.toFixed(1)} 公里</div>
+                    ) : null}
 
                   </div>
 
@@ -763,4 +780,3 @@ export function AttractionsPage() {
   )
 
 }
-

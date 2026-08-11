@@ -19,6 +19,14 @@ export interface RouteOptimization {
 export interface RouteEvaluation {
     [key: string]: any;
 }
+// 后端智能路线接口返回 SmartRouteItem，主键字段为 routeId；前端统一映射为 id
+function normalizeSmartRoute<T>(item: T): T {
+  if (item && typeof item === 'object' && !('id' in item) && 'routeId' in item) {
+    const record = item as Record<string, unknown>
+    return { ...record, id: record.routeId } as T
+  }
+  return item
+}
 
 export const intelligentRouteApi = {
     getRealTimeAdjustment(routeId: number, data: {
@@ -40,9 +48,9 @@ export const intelligentRouteApi = {
     },
 
     getPopularRoutes(cityId: number, days: number, limit: number = DEFAULT_LIMIT_SMALL) {
-        return apiClient.get<RoutePlan[]>('/routes/smart/popular', {
-            params: { cityId, days, limit },
-        });
+        return apiClient.get<RoutePlan[]>('/routes/smart/list', {
+            params: { type: 'popular', cityId, days, limit },
+        }).then((list) => (Array.isArray(list) ? list.map(normalizeSmartRoute) : list));
     },
 
     getSimilarRoutes(routeId: number, limit: number = DEFAULT_LIMIT_SMALL) {
@@ -52,25 +60,27 @@ export const intelligentRouteApi = {
     },
 
     getSeasonalRoutes(cityId: number, season: string, days: number) {
-        return apiClient.get<RoutePlan[]>('/routes/smart/seasonal', {
-            params: { cityId, season, days },
-        });
+        return apiClient.get<RoutePlan[]>('/routes/smart/list', {
+            params: { type: 'seasonal', cityId, season, days },
+        }).then((list) => (Array.isArray(list) ? list.map(normalizeSmartRoute) : list));
     },
 
     getThemeRoutes(theme: string, cityId: number, days: number) {
-        return apiClient.get<RoutePlan[]>('/routes/smart/theme', {
-            params: { theme, cityId, days },
-        });
+        return apiClient.get<RoutePlan[]>('/routes/smart/list', {
+            params: { type: 'theme', theme, cityId, days },
+        }).then((list) => (Array.isArray(list) ? list.map(normalizeSmartRoute) : list));
     },
 
     getOptimizationSuggestions(routeId: number, optimizationType: string = 'comprehensive') {
-        return apiClient.get<Record<string, any>>(`/routes/smart/optimization-suggestions/${routeId}`, {
+        return apiClient.get<Record<string, any>>(`/route-optimization/suggestions/${routeId}`, {
             params: { optimizationType },
         });
     },
 
     getSmartRouteList(params: { type: string; cityId: number; days: number; limit?: number; season?: string; theme?: string }) {
-        return apiClient.get<RoutePlan[]>('/routes/smart/list', { params });
+        return apiClient.get<RoutePlan[]>('/routes/smart/list', { params }).then((list) =>
+            Array.isArray(list) ? list.map(normalizeSmartRoute) : list,
+        );
     },
 
     recommendByPreference(preferences: Record<string, any>, params: { userId: number; cityId: number; days: number }) {

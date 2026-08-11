@@ -1,13 +1,17 @@
 server:
   port: 8091
 
+mq:
+  status-persistence:
+    enabled: ${MQ_STATUS_PERSISTENCE_ENABLED:false}
+
 spring:
   profiles:
     active: dev
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/travel_website?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:Axiao151888+}
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:travel_website}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
     driver-class-name: com.mysql.cj.jdbc.Driver
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
@@ -46,22 +50,34 @@ spring:
       stat-view-servlet:
         enabled: true
         url-pattern: /druid/*
-        login-username: ${DRUID_USERNAME:admin}
-        login-password: ${DRUID_PASSWORD:admin}
+        login-username: ${DRUID_USERNAME:}
+        login-password: ${DRUID_PASSWORD:}
         reset-enable: false
         allow: 127.0.0.1
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:Axiao151888+}
-      database: 0
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:0}
       lettuce:
         pool:
           max-active: 8
           max-idle: 8
           min-idle: 0
           max-wait: 3000ms
+  rabbitmq:
+    host: ${RABBITMQ_HOST:<CLOUD_HOST_PLACEHOLDER>}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 5s
+    requested-heartbeat: 30s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
 
 mybatis-plus:
   mapper-locations: classpath:mappers/**/*.xml

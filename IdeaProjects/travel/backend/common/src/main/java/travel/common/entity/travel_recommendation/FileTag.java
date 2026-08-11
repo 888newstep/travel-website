@@ -1,6 +1,7 @@
 package travel.common.entity.travel_recommendation;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
@@ -14,6 +15,7 @@ public class FileTag {
     private String tagType;
     private Integer fileId;
     private Integer userId;
+    @TableField(exist = false)
     private String description;
     private Integer usageCount;
     private LocalDateTime createTime;

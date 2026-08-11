@@ -584,7 +584,7 @@ export function FileManagementPage() {
 
         <div className="relative grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-            <span className="section-kicker">????</span>
+            <span className="section-kicker">{'\u6587\u4ef6\u7ba1\u7406'}</span>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="chip">{'\u8d44\u6599\u6574\u7406'}</span>
               <span className="chip">{'\u7f13\u5b58\u6e05\u7406'}</span>
@@ -664,7 +664,7 @@ export function FileManagementPage() {
 
 
 
-              <span className="section-kicker">????</span>
+              <span className="section-kicker">{'\u5206\u7c7b\u7ba1\u7406'}</span>
 
 
 
