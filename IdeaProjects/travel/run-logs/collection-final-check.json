@@ -1,0 +1,231 @@
+{
+  "notifications": {
+    "http": 200,
+    "payload": {
+      "code": 200,
+      "data": [
+        {
+          "id": 65,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-04T10:53:24",
+          "updatedAt": "2026-08-04T10:53:24"
+        },
+        {
+          "id": 68,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-04T10:53:24",
+          "updatedAt": "2026-08-04T10:53:24"
+        },
+        {
+          "id": 57,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-04T10:51:05",
+          "updatedAt": "2026-08-04T10:51:05"
+        },
+        {
+          "id": 60,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-04T10:51:05",
+          "updatedAt": "2026-08-04T10:51:05"
+        },
+        {
+          "id": 49,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-04T10:30:02",
+          "updatedAt": "2026-08-04T10:30:02"
+        },
+        {
+          "id": 52,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-04T10:30:02",
+          "updatedAt": "2026-08-04T10:30:02"
+        },
+        {
+          "id": 41,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:40:49",
+          "updatedAt": "2026-08-03T22:40:49"
+        },
+        {
+          "id": 44,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:40:49",
+          "updatedAt": "2026-08-03T22:40:49"
+        },
+        {
+          "id": 33,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:40:23",
+          "updatedAt": "2026-08-03T22:40:23"
+        },
+        {
+          "id": 36,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:40:23",
+          "updatedAt": "2026-08-03T22:40:23"
+        },
+        {
+          "id": 25,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:37:14",
+          "updatedAt": "2026-08-03T22:37:14"
+        },
+        {
+          "id": 28,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:37:14",
+          "updatedAt": "2026-08-03T22:37:14"
+        },
+        {
+          "id": 17,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:35:44",
+          "updatedAt": "2026-08-03T22:35:44"
+        },
+        {
+          "id": 20,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:35:44",
+          "updatedAt": "2026-08-03T22:35:44"
+        },
+        {
+          "id": 9,
+          "userId": 1,
+          "type": "system",
+          "title": "\u5a06\u3223\u7e4b\u9354\u72b2\u53c6\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f",
+          "content": "\u5a06\u3223\u7e4b\u93c9\u30e5\u57cc\u93c3\u5470\ue511\u7ec0\u60e7\u5c2f\u951b\u5c7d\u7d11\u6fee\u5b29\u7d98\u9428\u52ec\u68be\u741b\u5c83\ue749\u9352\u6391\u60c2\u951b\ufffd",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:34:26",
+          "updatedAt": "2026-08-03T22:34:26"
+        },
+        {
+          "id": 12,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u741a\ue0a3\u6579\u9498\ufffd",
+          "content": "\u6d63\u72b5\u6b91\u5a13\u6b4c\ue187\u9286\u5a42\u5bf3\u6d5c\ue0ff\u7b01\u93c3\u30e6\u7236\u93c0\u8364\u6690\u9286\u5b2d\ue766\u93c0\u60f0\u68cc\u6d5c\ufffd",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-08-03T22:34:26",
+          "updatedAt": "2026-08-03T22:34:26"
+        },
+        {
+          "id": 1,
+          "userId": 1,
+          "type": "system",
+          "title": "\u6b22\u8fce\u52a0\u5165\u65c5\u884c\u793e\u533a",
+          "content": "\u6b22\u8fce\u6765\u5230\u65c5\u884c\u793e\u533a\uff0c\u5f00\u59cb\u4f60\u7684\u65c5\u884c\u89c4\u5212\u5427\uff01",
+          "isRead": false,
+          "redirectUrl": null,
+          "createdAt": "2026-07-28T23:48:58",
+          "updatedAt": "2026-07-28T23:48:58"
+        },
+        {
+          "id": 4,
+          "userId": 1,
+          "type": "collection",
+          "title": "\u4f60\u7684\u6e38\u8bb0\u88ab\u6536\u85cf",
+          "content": "\u4f60\u7684\u6e38\u8bb0\u300a\u5317\u4eac\u4e09\u65e5\u6e38\u653b\u7565\u300b\u88ab\u6536\u85cf\u4e86",
+          "isRead": true,
+          "redirectUrl": null,
+          "createdAt": "2026-07-28T23:48:58",
+          "updatedAt": "2026-07-28T23:48:58"
+        }
+      ],
+      "message": "\u83b7\u53d6\u6210\u529f"
+    }
+  },
+  "unread_count": {
+    "http": 200,
+    "payload": {
+      "code": 200,
+      "data": 9,
+      "message": "\u83b7\u53d6\u6210\u529f"
+    }
+  },
+  "stats": {
+    "http": 200,
+    "payload": {
+      "code": 200,
+      "message": "\u83b7\u53d6\u7edf\u8ba1\u4fe1\u606f\u6210\u529f",
+      "data": {
+        "shares": 1,
+        "notes": 9,
+        "collections": 1
+      },
+      "timestamp": 1786078431473,
+      "success": true
+    }
+  }
+}

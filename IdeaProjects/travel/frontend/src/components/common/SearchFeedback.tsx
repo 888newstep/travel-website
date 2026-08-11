@@ -14,8 +14,8 @@ interface SearchEmptyStateProps {
 
 export function SearchSyncNotice({
   searching,
-  syncingText = 'MessageListMessageList...',
-  syncedText = 'MessageListMessageListMessageList??',
+  syncingText = '\u6b63\u5728\u540c\u6b65\u641c\u7d22\u7ed3\u679c...',
+  syncedText = '\u641c\u7d22\u7ed3\u679c\u5df2\u4e0e\u5f53\u524d\u5173\u952e\u8bcd\u540c\u6b65\u3002',
   className = '',
 }: SearchSyncNoticeProps) {
   return (

@@ -1,5 +1,6 @@
 package travel.file.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -133,7 +134,11 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<ResourceFile> searchByFileName(String fileName) {
-        return resourceFileMapper.selectByFileName(fileName);
+        LambdaQueryWrapper<ResourceFile> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.like(fileName != null && !fileName.isBlank(), ResourceFile::getFileName, fileName)
+                .orderByDesc(ResourceFile::getUpdatedAt)
+                .orderByDesc(ResourceFile::getId);
+        return list(queryWrapper);
     }
 
     @Override
@@ -230,7 +235,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     public List<Map<String, Object>> getFileTags(Integer fileId) {
         List<Map<String, Object>> tags = new ArrayList<>();
         try {
-            List<FileTag> fileTags = fileTagMapper.selectByFileId(fileId);
+            List<FileTag> fileTags = findTagsByFileId(fileId);
             for (FileTag tag : fileTags) {
                 Map<String, Object> tagMap = new HashMap<>();
                 tagMap.put("id", tag.getId());
@@ -268,7 +273,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     public boolean removeFileTag(Integer fileId, String tagName) {
         try {
-            List<FileTag> tags = fileTagMapper.selectByFileId(fileId);
+            List<FileTag> tags = findTagsByFileId(fileId);
             for (FileTag tag : tags) {
                 if (tag.getTagName().equals(tagName)) {
                     return fileTagMapper.deleteById(tag.getId()) > 0;
@@ -843,7 +848,20 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     public List<ResourceFile> searchResourceFiles(String keyword, int page, int size) {
         log.info("搜索资源文件: keyword={}, page={}, size={}", keyword, page, size);
-        return searchByFileName(keyword);
+        List<ResourceFile> matches = searchByFileName(keyword);
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.max(size, 1);
+        int start = Math.min(safePage * safeSize, matches.size());
+        int end = Math.min(start + safeSize, matches.size());
+        return matches.subList(start, end);
+    }
+
+    private List<FileTag> findTagsByFileId(Integer fileId) {
+        LambdaQueryWrapper<FileTag> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(FileTag::getFileId, fileId)
+                .orderByDesc(FileTag::getUsageCount)
+                .orderByAsc(FileTag::getTagName);
+        return fileTagMapper.selectList(queryWrapper);
     }
 
     @Override

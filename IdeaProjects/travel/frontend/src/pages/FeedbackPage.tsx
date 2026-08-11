@@ -200,7 +200,7 @@ export function FeedbackPage() {
 
         <div className="relative grid gap-6 xl:grid-cols-[1.05fr_0.95fr] xl:items-center">
           <div>
-            <span className="section-kicker">????</span>
+            <span className="section-kicker">{'\u53cd\u9988\u4e2d\u5fc3'}</span>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="chip">{'\u4ea7\u54c1\u5efa\u8bae'}</span>
               <span className="chip">{'\u95ee\u9898\u8ddf\u8fdb'}</span>
@@ -250,7 +250,7 @@ export function FeedbackPage() {
 
         <form onSubmit={submitFeedback} className="scenic-shell-soft edge-glow animate-fade-in p-6">
 
-          <span className="section-kicker">????</span>
+          <span className="section-kicker">{'\u63d0\u4ea4\u53cd\u9988'}</span>
 
           <h2 className="mt-3 text-lg font-semibold text-slate-900">Submit</h2>
 
@@ -358,7 +358,7 @@ export function FeedbackPage() {
 
         <section className="scenic-shell-soft p-6">
 
-          <span className="section-kicker">????</span>
+          <span className="section-kicker">{'\u5386\u53f2\u8bb0\u5f55'}</span>
 
           <h2 className="mt-3 text-lg font-semibold text-slate-900">反馈历史</h2>
 

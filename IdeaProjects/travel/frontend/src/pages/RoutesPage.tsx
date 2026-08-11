@@ -257,7 +257,7 @@ export function RoutesPage() {
   const routeCommentFeedItems = useMemo(
     () => routeComments.map((comment, index) => ({
       id: String(comment.id || `route-comment-${index}`),
-      author: comment.isAnonymous ? '匿名用户' : `用户 #${comment.userId}`,
+      author: comment.isAnonymous ? '匿名用户' : `用户编号 ${comment.userId}`,
       time: formatTime(comment.createTime || comment.updateTime),
       meta: `评分 ${comment.rating || '--'} 分 · 点赞 ${comment.likeCount || 0}`,
       content: String(comment.content || '暂无评论内容'),
@@ -538,7 +538,7 @@ export function RoutesPage() {
 
         <div className="relative grid gap-8 xl:grid-cols-[1.08fr_0.92fr] xl:items-end">
           <div>
-            <span className="section-kicker">????</span>
+            <span className="section-kicker">{'\u8def\u7ebf\u4e2d\u5fc3'}</span>
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="chip">城市漫游</span>
               <span className="chip">热门推荐</span>

@@ -84,7 +84,7 @@ export const attractionApi = {
         });
     },
 
-    submitReview(attractionId: number, rating: number, content: string) {
-        return apiClient.post<any>(`/attractions/${attractionId}/review`, { rating, content });
+    submitReview(attractionId: number, rating: number, content: string, userId?: number) {
+        return apiClient.post<any>(`/attractions/${attractionId}/review`, { rating, content, userId });
     },
 };

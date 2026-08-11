@@ -1,0 +1,10 @@
+﻿*** Begin Patch
+*** Update File: backend\gateway\src\main\resources\application.yml
+@@
+ logging:
+   level:
+     travel.gateway: debug
++
++jwt:
++  secret: ${JWT_SECRET:}
+*** End Patch

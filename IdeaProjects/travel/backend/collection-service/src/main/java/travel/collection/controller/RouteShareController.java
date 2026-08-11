@@ -59,10 +59,12 @@ public class RouteShareController {
     }
 
     @GetMapping("/validate")
-    public Result<Boolean> validateShareCode(@RequestParam String code) {
+    public Result<Boolean> validateShareCode(@RequestParam(required = false) String code,
+                                             @RequestParam(required = false) String shareCode) {
         try {
             log.info("验证分享码请求: code={}", code);
-            boolean valid = routeShareService.validateShareCode(code);
+            String actualCode = (code != null && !code.isBlank()) ? code : shareCode;
+            boolean valid = routeShareService.validateShareCode(actualCode);
             return Result.success("验证成功", valid);
         } catch (Exception e) {
             log.error("验证分享码失败: error={}", e.getMessage());

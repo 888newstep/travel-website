@@ -44,7 +44,7 @@ public class RouteCollectionController {
 
     @GetMapping("/list/{userId}")
     public Result<List<RouteCollectionVO>> getUserCollections(@PathVariable Integer userId,
-                                                              @RequestParam(defaultValue = "0") int page,
+                                                              @RequestParam(defaultValue = "1") int page,
                                                               @RequestParam(defaultValue = "10") int size) {
         try {
             log.info("查询用户收藏列表请求: userId={}, page={}, size={}", userId, page, size);
@@ -96,7 +96,7 @@ public class RouteCollectionController {
 
     @GetMapping("/public")
     public Result<List<travel.common.entity.user_community.RouteCollection>> getPublicCollections(
-            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
         try {
             log.info("获取公开收藏列表请求: page={}, size={}", page, size);

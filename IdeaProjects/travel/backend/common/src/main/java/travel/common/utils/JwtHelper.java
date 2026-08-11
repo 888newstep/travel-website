@@ -8,34 +8,30 @@ import java.util.Date;
 import java.util.Base64;
 
 public class JwtHelper {
-    private static final String DEFAULT_JWT_SECRET = "dev-only-jwt-secret-change-me-before-production-32bytes";
-
-    // 令牌过期时间：24小时
+    // 浠ょ墝杩囨湡鏃堕棿锛?4灏忔椂
     private static long tokenExpiration = 24 * 60 * 60 * 1000;
 
     private static String getTokenSignKey() {
         String systemProperty = System.getProperty("jwt.secret");
-        if (systemProperty != null && !systemProperty.isEmpty()) {
+        if (systemProperty != null && !systemProperty.isBlank()) {
             return systemProperty;
         }
         String envVariable = System.getenv("JWT_SECRET");
-        if (envVariable != null && !envVariable.isEmpty()) {
+        if (envVariable != null && !envVariable.isBlank()) {
             return envVariable;
         }
-        return DEFAULT_JWT_SECRET;
+        throw new IllegalStateException("Property 'jwt.secret' must be configured before using JwtHelper");
     }
-    // 生成密钥对象
+    // 鐢熸垚瀵嗛挜瀵硅薄
     private static SecretKey getSecretKey() {
         byte[] keyBytes = Base64.getEncoder().encode(getTokenSignKey().getBytes());
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
     /**
-     * 生成token字符串
-     * @param userId 用户ID
-     * @param userType 用户类型
-     * @return 生成的token字符串
-     */
+     * 鐢熸垚token瀛楃涓?     * @param userId 鐢ㄦ埛ID
+     * @param userType 鐢ㄦ埛绫诲瀷
+     * @return 鐢熸垚鐨則oken瀛楃涓?     */
     public static String createToken(Long userId, Integer userType) {
         String token = Jwts.builder()
                 .subject("TRAVEL-PLATFORM-USER")
@@ -50,9 +46,8 @@ public class JwtHelper {
     }
 
     /**
-     * 从token字符串获取userid
-     * @param token token字符串
-     * @return 用户ID
+     * 浠巘oken瀛楃涓茶幏鍙杣serid
+     * @param token token瀛楃涓?     * @return 鐢ㄦ埛ID
      */
     public static Long getUserId(String token) {
         if (token == null || token.isBlank()) {
@@ -72,15 +67,14 @@ public class JwtHelper {
             }
             return null;
         } catch (Exception e) {
-            // 处理token解析异常
+            // 澶勭悊token瑙ｆ瀽寮傚父
             return null;
         }
     }
 
     /**
-     * 从token字符串获取userType
-     * @param token token字符串
-     * @return 用户类型
+     * 浠巘oken瀛楃涓茶幏鍙杣serType
+     * @param token token瀛楃涓?     * @return 鐢ㄦ埛绫诲瀷
      */
     public static Integer getUserType(String token) {
         if (token == null || token.isBlank()) {
@@ -94,16 +88,14 @@ public class JwtHelper {
             Claims claims = jwt.getPayload();
             return (Integer) claims.get("userType");
         } catch (Exception e) {
-            // 处理token解析异常
+            // 澶勭悊token瑙ｆ瀽寮傚父
             return null;
         }
     }
 
     /**
-     * 从token字符串获取userName
-     * @param token token字符串
-     * @return 用户名
-     */
+     * 浠巘oken瀛楃涓茶幏鍙杣serName
+     * @param token token瀛楃涓?     * @return 鐢ㄦ埛鍚?     */
     public static String getUserName(String token) {
         if (token == null || token.isBlank()) {
             return "";
@@ -116,15 +108,14 @@ public class JwtHelper {
             Claims claims = jwt.getPayload();
             return (String) claims.get("userName");
         } catch (Exception e) {
-            // 处理token解析异常
+            // 澶勭悊token瑙ｆ瀽寮傚父
             return "";
         }
     }
 
     /**
-     * 判断token是否有效
-     * @param token token字符串
-     * @return 是否过期
+     * 鍒ゆ柇token鏄惁鏈夋晥
+     * @param token token瀛楃涓?     * @return 鏄惁杩囨湡
      */
     public static boolean isExpiration(String token) {
         if (token == null || token.isBlank()) {
@@ -137,18 +128,18 @@ public class JwtHelper {
                     .parseSignedClaims(token);
             Claims claims = jwt.getPayload();
             boolean isExpire = claims.getExpiration().before(new Date());
-            // 没有过期，有效，返回false
+            // 娌℃湁杩囨湡锛屾湁鏁堬紝杩斿洖false
             return isExpire;
         } catch (Exception e) {
-            // 过期或解析异常，返回true
+            // 杩囨湡鎴栬В鏋愬紓甯革紝杩斿洖true
             return true;
         }
     }
 
     /**
-     * 刷新Token
-     * @param token 旧token
-     * @return 新token
+     * 鍒锋柊Token
+     * @param token 鏃oken
+     * @return 鏂皌oken
      */
     public static String refreshToken(String token) {
         if (token == null || token.isBlank()) {
@@ -160,7 +151,7 @@ public class JwtHelper {
                     .build()
                     .parseSignedClaims(token);
             Claims claims = jwt.getPayload();
-            // 使用claims变量获取用户信息，避免重复解析token
+            // 浣跨敤claims鍙橀噺鑾峰彇鐢ㄦ埛淇℃伅锛岄伩鍏嶉噸澶嶈В鏋恡oken
             Object userIdObj = claims.get("userId");
             Long userId = null;
             if (userIdObj instanceof Integer) {
@@ -174,15 +165,14 @@ public class JwtHelper {
             }
             return null;
         } catch (Exception e) {
-            // 处理token解析异常
+            // 澶勭悊token瑙ｆ瀽寮傚父
             return null;
         }
     }
 
     /**
-     * 验证token是否有效
-     * @param token token字符串
-     * @return 是否有效
+     * 楠岃瘉token鏄惁鏈夋晥
+     * @param token token瀛楃涓?     * @return 鏄惁鏈夋晥
      */
     public static boolean validateToken(String token) {
         if (token == null || token.isBlank()) {
@@ -195,16 +185,13 @@ public class JwtHelper {
                     .parseSignedClaims(token);
             return true;
         } catch (Exception e) {
-            // token无效
+            // token鏃犳晥
             return false;
         }
     }
 
     /**
-     * 从token字符串获取过期时间
-     * @param token token字符串
-     * @return 过期时间戳
-     */
+     * 浠巘oken瀛楃涓茶幏鍙栬繃鏈熸椂闂?     * @param token token瀛楃涓?     * @return 杩囨湡鏃堕棿鎴?     */
     public static Long getExpiration(String token) {
         if (token == null || token.isBlank()) {
             return null;
@@ -217,22 +204,23 @@ public class JwtHelper {
             Claims claims = jwt.getPayload();
             return claims.getExpiration().getTime();
         } catch (Exception e) {
-            // 处理token解析异常
+            // 澶勭悊token瑙ｆ瀽寮傚父
             return null;
         }
     }
 
     /**
-     * 主方法用于测试
-     * @param args 参数
+     * 涓绘柟娉曠敤浜庢祴璇?     * @param args 鍙傛暟
      */
     public static void main(String[] args) {
         String token = createToken(1L, 1);
-        System.out.println("生成的token: " + token);
-        System.out.println("从token获取userId: " + getUserId(token));
-        System.out.println("从token获取userType: " + getUserType(token));
-        System.out.println("token是否有效: " + !isExpiration(token));
-        System.out.println("验证token: " + validateToken(token));
-        System.out.println("刷新token: " + refreshToken(token));
+        System.out.println("鐢熸垚鐨則oken: " + token);
+        System.out.println("浠巘oken鑾峰彇userId: " + getUserId(token));
+        System.out.println("浠巘oken鑾峰彇userType: " + getUserType(token));
+        System.out.println("token鏄惁鏈夋晥: " + !isExpiration(token));
+        System.out.println("楠岃瘉token: " + validateToken(token));
+        System.out.println("鍒锋柊token: " + refreshToken(token));
     }
 }
+
+

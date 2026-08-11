@@ -41,8 +41,13 @@ spring:
         fallback:
           mode: response
           response-status: 429
-          response-body: '{"code":429,"message":"请求过于频繁，请稍后再试"}'
+          response-body: '{"code":429,"message":"璇锋眰杩囦簬棰戠箒锛岃绋嶅悗鍐嶈瘯"}'
 
 logging:
   level:
     travel.gateway: debug
+
+jwt:
+  secret: ${JWT_SECRET:}
+
+

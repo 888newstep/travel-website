@@ -8,7 +8,8 @@ import com.alibaba.dashscope.common.Role;
 import com.alibaba.dashscope.exception.ApiException;
 import com.alibaba.dashscope.exception.InputRequiredException;
 import com.alibaba.dashscope.exception.NoApiKeyException;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import travel.common.utils.AICacheManager;
@@ -20,9 +21,10 @@ import java.util.Map;
 /**
  * 通义千问AI服务 - 带缓存优化
  */
-@Slf4j
 @Service
 public class QwenService {
+
+    private static final Logger log = LoggerFactory.getLogger(QwenService.class);
 
     @Value("${ai.qwen.api-key}")
     private String apiKey;

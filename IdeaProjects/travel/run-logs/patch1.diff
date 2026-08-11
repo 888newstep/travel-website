@@ -1,0 +1,79 @@
+﻿*** Begin Patch
+*** Add File: backend/collection-service/src/main/java/travel/collection/config/FeignRequestConfig.java
++package travel.collection.config;
++
++import feign.RequestInterceptor;
++import jakarta.servlet.http.HttpServletRequest;
++import org.springframework.context.annotation.Bean;
++import org.springframework.context.annotation.Configuration;
++import org.springframework.web.context.request.RequestContextHolder;
++import org.springframework.web.context.request.ServletRequestAttributes;
++
++@Configuration
++public class FeignRequestConfig {
++
++    @Bean
++    public RequestInterceptor requestInterceptor() {
++        return template -> {
++            ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
++            if (attributes == null) {
++                return;
++            }
++
++            HttpServletRequest request = attributes.getRequest();
++            if (request == null) {
++                return;
++            }
++
++            String authorization = request.getHeader("Authorization");
++            if (authorization != null && !authorization.isBlank()) {
++                template.header("Authorization", authorization);
++            }
++        };
++    }
++}
+*** Add File: backend/collection-service/src/main/java/travel/collection/util/CurrentUserSupport.java
++package travel.collection.util;
++
++import lombok.experimental.UtilityClass;
++import travel.common.entity.user_community.User;
++import travel.common.enums.ErrorCodeEnum;
++import travel.common.exception.BusinessException;
++
++@UtilityClass
++public class CurrentUserSupport {
++
++    public static User requireUser(User user) {
++        if (user == null) {
++            throw new BusinessException(ErrorCodeEnum.UNAUTHORIZED);
++        }
++        return user;
++    }
++}
+*** Update File: backend/collection-service/src/main/java/travel/collection/controller/RouteCollectionController.java
+@@
+     @GetMapping("/list/{userId}")
+     public Result<List<RouteCollectionVO>> getUserCollections(@PathVariable Integer userId,
+-                                                              @RequestParam(defaultValue = "0") int page,
++                                                              @RequestParam(defaultValue = "1") int page,
+                                                               @RequestParam(defaultValue = "10") int size) {
+@@
+     @GetMapping("/public")
+     public Result<List<travel.common.entity.user_community.RouteCollection>> getPublicCollections(
+-            @RequestParam(defaultValue = "0") int page,
++            @RequestParam(defaultValue = "1") int page,
+             @RequestParam(defaultValue = "10") int size) {
+*** Update File: backend/collection-service/src/main/java/travel/collection/controller/RouteShareController.java
+@@
+-    public Result<Boolean> validateShareCode(@RequestParam String code) {
++    public Result<Boolean> validateShareCode(@RequestParam(required = false) String code,
++                                             @RequestParam(required = false) String shareCode) {
+         try {
+-            log.info("楠岃瘉鍒嗕韩鐮佽姹? code={}", code);
+-            boolean valid = routeShareService.validateShareCode(code);
++            String actualCode = (code != null && !code.isBlank()) ? code : shareCode;
++            log.info("楠岃瘉鍒嗕韩鐮佽姹? code={}", actualCode);
++            boolean valid = routeShareService.validateShareCode(actualCode);
+             return Result.success("楠岃瘉鎴愬姛", valid);
+         } catch (Exception e) {
+*** End Patch

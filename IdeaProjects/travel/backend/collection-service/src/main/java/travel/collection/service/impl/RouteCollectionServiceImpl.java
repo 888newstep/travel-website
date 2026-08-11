@@ -157,9 +157,10 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
     @Override
     public List<RouteCollectionVO> getUserCollections(Integer userId, int page, int size) {
-        if (userId == null || userId <= 0 || page <= 0 || size <= 0) {
+        if (userId == null || userId <= 0 || size <= 0) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
+        page = Math.max(page, 1);
 
         String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "user", userId, "page", page, "size", size);
         List<?> cachedList = cacheUtil.get(cacheKey, List.class);
@@ -336,9 +337,10 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
     @Override
     public List<RouteCollection> getPublicCollections(int page, int size) {
-        if (page <= 0 || size <= 0) {
+        if (size <= 0) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
+        page = Math.max(page, 1);
 
         String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "public", "page", page, "size", size);
         List<?> cachedList = cacheUtil.get(cacheKey, List.class);

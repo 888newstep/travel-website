@@ -2,6 +2,10 @@ package travel.attraction.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import travel.common.entity.travel_recommendation.Attraction;
+import travel.common.entity.travel_recommendation.AttractionReview;
+import travel.common.mapper.travel_recommendation_mapper.AttractionReviewMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+
 import travel.attraction.service.AttractionDetailService;
 import travel.attraction.service.AttractionService;
 import travel.common.vo.CursorPageResult;
@@ -23,6 +27,8 @@ public class AttractionDetailServiceImpl implements AttractionDetailService {
     private final AttractionService attractionService;
 
     private final CacheUtil cacheUtil;
+
+    private final AttractionReviewMapper attractionReviewMapper;
 
     private static final String ATTRACTION_DETAIL_PREFIX = "attraction:detail:";
     private static final String CROWD_FORECAST_PREFIX = "crowd:forecast:";
@@ -109,8 +115,44 @@ public class AttractionDetailServiceImpl implements AttractionDetailService {
     @Override
     public List<Map<String, Object>> getAttractionReviews(Long id, int page, int size) {
         log.info("获取景点评论: id={}, page={}, size={}", id, page, size);
-        // Return empty list for now, would query from database
-        return Collections.emptyList();
+        List<AttractionReview> reviews = attractionReviewMapper.selectList(
+                new LambdaQueryWrapper<AttractionReview>()
+                        .eq(AttractionReview::getAttractionId, id)
+                        .orderByDesc(AttractionReview::getCreatedAt)
+                        .last("LIMIT " + Math.max(0, Math.min(size, 100))));
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (AttractionReview review : reviews) {
+            Map<String, Object> map = new HashMap<>();
+            map.put("id", review.getId());
+            map.put("attractionId", review.getAttractionId());
+            map.put("userId", review.getUserId());
+            map.put("rating", review.getRating());
+            map.put("content", review.getContent());
+            map.put("createTime", review.getCreatedAt() == null ? null : review.getCreatedAt().toString());
+            result.add(map);
+        }
+        return result;
+    }
+
+    @Override
+    public Map<String, Object> saveAttractionReview(Integer attractionId, Integer userId, Integer rating, String content) {
+        log.info("保存景点点评: attractionId={}, userId={}, rating={}", attractionId, userId, rating);
+        AttractionReview review = new AttractionReview();
+        review.setAttractionId(attractionId);
+        review.setUserId(userId == null ? 0 : userId);
+        review.setRating(rating);
+        review.setContent(content);
+        review.setCreatedAt(java.time.LocalDateTime.now());
+        review.setUpdatedAt(java.time.LocalDateTime.now());
+        attractionReviewMapper.insert(review);
+        Map<String, Object> map = new HashMap<>();
+        map.put("id", review.getId());
+        map.put("attractionId", review.getAttractionId());
+        map.put("userId", review.getUserId());
+        map.put("rating", review.getRating());
+        map.put("content", review.getContent());
+        map.put("createTime", review.getCreatedAt().toString());
+        return map;
     }
 
     @Override
@@ -270,6 +312,51 @@ public class AttractionDetailServiceImpl implements AttractionDetailService {
 
         return facilities;
     }
+
+        @Override
+    public List<Map<String, Object>> getNearbyAttractions(Integer id, int limit) {
+        log.info("获取周边景点: id={}, limit={}", id, limit);
+        Attraction current = attractionService.getById(id);
+        if (current == null) {
+            return new ArrayList<>();
+        }
+        int finalLimit = Math.max(1, Math.min(limit, 50));
+        double lat = current.getLatitude() == null ? 0.0 : current.getLatitude().doubleValue();
+        double lng = current.getLongitude() == null ? 0.0 : current.getLongitude().doubleValue();
+
+        List<Map<String, Object>> result = attractionService.getByCityId(current.getCityId()).stream()
+                .filter(a -> !a.getId().equals(id))           // 排除自身
+                .map(a -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("id", a.getId());
+                    map.put("name", a.getName());
+                    map.put("description", a.getDescription());
+                    map.put("address", a.getAddress());
+                    double aLat = a.getLatitude() == null ? 0.0 : a.getLatitude().doubleValue();
+                    double aLng = a.getLongitude() == null ? 0.0 : a.getLongitude().doubleValue();
+                    map.put("distance", calculateDistance(lat, lng, aLat, aLng));
+                    return map;
+                })
+                .sorted((m1, m2) -> Double.compare((Double) m1.get("distance"), (Double) m2.get("distance")))
+                .limit(finalLimit)
+                .collect(java.util.stream.Collectors.toList());
+        return result;
+    }
+
+    /** 简化的距离计算（单位：公里） */
+    private double calculateDistance(double lat1, double lng1, double lat2, double lng2) {
+        if (lat1 == 0.0 && lng1 == 0.0) {
+            return Double.MAX_VALUE;
+        }
+        double R = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double sinLat = Math.sin(dLat / 2);
+        double sinLng = Math.sin(dLng / 2);
+        double a = sinLat * sinLat + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * sinLng * sinLng;
+        return 2 * R * Math.asin(Math.sqrt(a));
+    }
+
 
     @Override
     public List<Map<String, Object>> getNearbyServices(Integer attractionId, String serviceType) {

@@ -43,3 +43,6 @@ pnpm-debug.log*
 dist/
 dist-ssr/
 *.local
+backend/nacos/nacos/data/
+backend/nacos/nacos/logs/
+query

@@ -1,5 +1,9 @@
 package travel.route.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import travel.route.dto.ai.AISmartItineraryOptimizeResponse;
+import travel.route.dto.ai.AISmartItineraryResponse;
+
 import java.util.Map;
 
 /**
@@ -16,7 +20,7 @@ public interface AISmartItineraryService {
      * @param userId 用户ID
      * @return 智能行程计划
      */
-    Map<String, Object> generateItinerary(Map<String, Object> userPreferences, double budget, int days, Integer cityId, Integer userId);
+    AISmartItineraryResponse generateItinerary(Map<String, JsonNode> userPreferences, double budget, int days, Integer cityId, Integer userId);
 
     /**
      * 优化现有行程
@@ -24,5 +28,5 @@ public interface AISmartItineraryService {
      * @param userPreferences 用户偏好
      * @return 优化后的行程
      */
-    Map<String, Object> optimizeItinerary(Integer routeId, Map<String, Object> userPreferences);
+    AISmartItineraryOptimizeResponse optimizeItinerary(Integer routeId, Map<String, JsonNode> userPreferences);
 }

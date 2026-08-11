@@ -1,4 +1,4 @@
-﻿-- ============================================================
+-- ============================================================
 -- 旅游网站数据库 - 完整初始化脚本
 -- 修正：表名匹配实体、UNIQUE约束、补全ui_dictionary
 -- 20 张表（合并 route_collection + travel_note_collection → user_collection）
@@ -12,6 +12,29 @@ CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
 
 USE travel_website;
+
+-- ============================================================
+-- 0. RabbitMQ 消息状态表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `mq_message_status` (
+    id                 BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '消息状态记录ID',
+    message_id         VARCHAR(64) NOT NULL COMMENT 'RabbitMQ 关联号，业务幂等键候选',
+    message_type       VARCHAR(64) NOT NULL COMMENT '消息类型',
+    exchange_name      VARCHAR(255) NOT NULL COMMENT '交换机名称',
+    routing_key        VARCHAR(255) NOT NULL COMMENT '路由键',
+    payload_json       LONGTEXT NOT NULL COMMENT '可补偿消息载荷',
+    status             VARCHAR(20) NOT NULL COMMENT 'PENDING/DISPATCHED/CONFIRMED/RETURNED/FAILED',
+    retry_count        INT NOT NULL DEFAULT 0 COMMENT '补偿重试次数',
+    last_error         VARCHAR(1000) COMMENT '最近一次投递错误',
+    next_attempt_time  TIMESTAMP NULL COMMENT '下次补偿时间',
+    dispatched_at      TIMESTAMP NULL COMMENT '本地发送调用接受时间',
+    confirmed_at       TIMESTAMP NULL COMMENT 'broker publisher confirm 时间',
+    created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY uk_mq_message_id (message_id),
+    INDEX idx_mq_status_next_attempt (status, next_attempt_time),
+    INDEX idx_mq_created_at (created_at)
+) COMMENT='RabbitMQ 消息投递状态表' ENGINE=InnoDB;
 
 -- ============================================================
 -- 1. 用户表
@@ -279,6 +302,21 @@ CREATE TABLE IF NOT EXISTS `route_comment` (
     INDEX idx_reply_to (reply_to)
 ) COMMENT='路线评论表(合并评分+反馈)' ENGINE=InnoDB;
 
+-- ============================================================
+-- 12.5 景点点评表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `attraction_review` (
+    id              INT PRIMARY KEY AUTO_INCREMENT COMMENT '点评ID',
+    attraction_id   INT NOT NULL COMMENT '景点ID',
+    user_id         INT NOT NULL DEFAULT 0 COMMENT '用户ID',
+    rating          TINYINT NOT NULL DEFAULT 5 COMMENT '评分(1-5)',
+    content         TEXT COMMENT '点评内容',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_attraction (attraction_id),
+    INDEX idx_user (user_id),
+    INDEX idx_rating (rating DESC)
+) COMMENT='景点点评表' ENGINE=InnoDB;
 -- ============================================================
 -- 13. 路线分享表
 -- ============================================================
@@ -848,4 +886,3 @@ INSERT INTO ui_dictionary (dict_type, dict_key, dict_value, dict_label, sort_ord
 ('price_level',    'low',       '实惠',     '人均<80',    1),
 ('price_level',    'medium',    '中等',     '人均80-200', 2),
 ('price_level',    'high',      '高端',     '人均>200',   3);
-

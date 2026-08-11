@@ -265,6 +265,38 @@ public class AttractionController {
         }
     }
 
+    @GetMapping("/{id}/nearby")
+    public Result<List<Map<String, Object>>> getNearby(@PathVariable Long id,
+                                                       @RequestParam(required = false) String serviceType) {  // serviceType 已废弃，返回周边景点
+        try {
+            log.info("Get nearby attractions request: id={}", id);
+            int limit = 5;
+            List<Map<String, Object>> services = attractionDetailService.getNearbyAttractions(id.intValue(), limit);
+            return Result.success("Fetched nearby attractions successfully", services);
+        } catch (Exception e) {
+            log.error("Failed to get nearby attractions: id={}, error={}", id, e.getMessage());
+            return Result.error("Failed to get nearby attractions: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/review")
+    public Result<Map<String, Object>> submitReview(@PathVariable Long id,
+                                                    @RequestBody Map<String, Object> params) {
+        try {
+            log.info("Submit attraction review request: id={}", id);
+            int rating = params.get("rating") instanceof Number n ? n.intValue() : 5;
+            String content = params.get("content") == null ? "" : params.get("content").toString();
+            Integer userId = params.get("userId") instanceof Number u ? u.intValue() : 0;
+            if (rating < 1 || rating > 5) {
+                rating = Math.max(1, Math.min(5, rating));
+            }
+            Map<String, Object> review = attractionDetailService.saveAttractionReview(id.intValue(), userId, rating, content);
+            return Result.success("Review submitted successfully", review);
+        } catch (Exception e) {
+            log.error("Failed to submit attraction review: id={}, error={}", id, e.getMessage());
+            return Result.error("Failed to submit attraction review: " + e.getMessage());
+        }
+    }
     @PostMapping("/increment-views/{id}")
     public Result<Boolean> incrementViews(@PathVariable Long id) {
         try {
@@ -289,6 +321,3 @@ public class AttractionController {
         }
     }
 }
-
-
-

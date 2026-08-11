@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.collection.service.UserStatisticsService;
 import travel.collection.service.UserService;
+import travel.collection.util.CurrentUserSupport;
 import travel.common.utils.Result;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,7 +26,7 @@ public class UserStatisticsController {
     @GetMapping
     public Result<Map<String, Object>> getUserStats() {
         try {
-            var currentUser = userService.getCurrentUser();
+            var currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
             Map<String, Object> stats = userStatisticsService.getUserStats(currentUser.getId());
             return Result.success("获取统计信息成功", stats);
         } catch (Exception e) {

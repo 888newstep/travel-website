@@ -1,6 +1,7 @@
 package travel.route.algorithm;
 
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import travel.common.entity.travel_recommendation.Attraction;
 import travel.common.utils.AMapRouteService;
@@ -13,9 +14,10 @@ import java.util.stream.IntStream;
  * 遗传算法 TSP 优化器
  * 用于优化景点游览顺序，最小化总距离/时间/成本
  */
-@Slf4j
 @Component
 public class GeneticAlgorithmTSP {
+
+    private static final Logger log = LoggerFactory.getLogger(GeneticAlgorithmTSP.class);
 
     private static final int POPULATION_SIZE = 100;    // 种群大小
     private static final int MAX_GENERATIONS = 200;    // 最大迭代次数

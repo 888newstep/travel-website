@@ -6,6 +6,7 @@ export interface AttractionRealtimeStatus {
     attractionId: number;
     crowdCount?: number;
     waitTime?: number;
+    crowdLevel?: number;
     status?: string;
     temperature?: number;
     weather?: string;
@@ -59,8 +60,22 @@ export const realtimeApi = {
         });
     },
 
-    getTrafficInfo(attractionId: number) {
-        return apiClient.get<Record<string, any>>(`/realtime-status/traffic/${attractionId}`);
+    async getTrafficInfo(attractionId: number) {
+        // 后端未提供独立交通查询接口，复用实时状态查询并映射为前端展示结构
+        const status = await apiClient.get<AttractionRealtimeStatus>(`/realtime-status/attraction/${attractionId}`);
+        if (!status) {
+            return null;
+        }
+        const level = status.crowdLevel ?? 0;
+        const levelText = level >= 4 ? '拥堵' : level >= 3 ? '缓慢' : '畅通';
+        return {
+            status: levelText,
+            level: levelText,
+            congestion: level,
+            description: status.status ? `当前状态：${status.status}` : '暂无更多交通说明',
+            speed: null,
+            lastUpdateTime: status.lastUpdateTime,
+        };
     },
 
     triggerBatchUpdate() {

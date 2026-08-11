@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { shareApi, type RouteShare } from '../api/share.api'
+import { SearchEmptyState } from '../components/common/SearchFeedback'
+import { type StatusNoticeTone, StatusNotice } from '../components/common/StatusNotice'
 import { DEFAULT_LIMIT, DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../constants'
 
 function SectionHeader({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
@@ -14,6 +16,15 @@ function SectionHeader({ title, description, action }: { title: string; descript
   )
 }
 
+function getShareItemTypeLabel(itemType?: string) {
+  return itemType === 'note' ? '\u7b14\u8bb0' : '\u8def\u7ebf'
+}
+
+interface InlineNotice {
+  tone: StatusNoticeTone
+  message: string
+}
+
 export function RouteSharePage() {
   const [genForm, setGenForm] = useState({ itemId: '', itemType: 'route' })
   const [genResult, setGenResult] = useState<RouteShare | null>(null)
@@ -25,64 +36,109 @@ export function RouteSharePage() {
   const [statsId, setStatsId] = useState('')
   const [statsResult, setStatsResult] = useState<Record<string, any> | null>(null)
   const [batchIds, setBatchIds] = useState('')
+  const [pageNotice, setPageNotice] = useState<InlineNotice | null>(null)
+  const [listNotice, setListNotice] = useState<InlineNotice | null>(null)
+  const [popularNotice, setPopularNotice] = useState<InlineNotice | null>(null)
+  const [statsNotice, setStatsNotice] = useState<InlineNotice | null>(null)
+  const [hasLoadedShares, setHasLoadedShares] = useState(false)
+  const [hasLoadedPopular, setHasLoadedPopular] = useState(false)
+  const [hasLoadedStats, setHasLoadedStats] = useState(false)
 
   async function generateShare() {
-    if (!genForm.itemId.trim()) return
+    if (!genForm.itemId.trim()) {
+      setPageNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u5185\u5bb9\u7f16\u53f7\u3002' })
+      setGenResult(null)
+      return
+    }
 
+    setPageNotice(null)
     try {
       const response = await shareApi.generateShareCode(Number(genForm.itemId), genForm.itemType || 'route')
       setGenResult(response || null)
+      setPageNotice({ tone: 'success', message: '\u5206\u4eab\u7801\u5df2\u751f\u6210\uff0c\u53ef\u4ee5\u7ee7\u7eed\u590d\u5236\u6216\u6821\u9a8c\u3002' })
     } catch {
       setGenResult(null)
+      setPageNotice({ tone: 'error', message: '\u5206\u4eab\u7801\u751f\u6210\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     }
   }
 
   async function validateShare() {
-    if (!validateCode.trim()) return
+    if (!validateCode.trim()) {
+      setPageNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u5206\u4eab\u7801\u3002' })
+      setValidateResult(null)
+      return
+    }
 
+    setPageNotice(null)
     try {
       const response = await shareApi.validateShareCode(validateCode.trim())
       setValidateResult(Boolean(response))
     } catch {
-      setValidateResult(false)
+      setValidateResult(null)
+      setPageNotice({ tone: 'error', message: '\u5206\u4eab\u7801\u6821\u9a8c\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002' })
     }
   }
 
   async function fetchUserShares() {
+    if (!listUserId.trim()) {
+      setHasLoadedShares(false)
+      setListNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u7528\u6237\u7f16\u53f7\u3002' })
+      setShareList([])
+      return
+    }
+
+    setHasLoadedShares(true)
+    setListNotice(null)
     try {
       const response = await shareApi.getUserShares(Number(listUserId) || 0, DEFAULT_PAGE, DEFAULT_PAGE_SIZE)
       setShareList(Array.isArray(response) ? response : [])
     } catch {
       setShareList([])
+      setListNotice({ tone: 'error', message: '\u5206\u4eab\u8bb0\u5f55\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     }
   }
 
   async function fetchPopular() {
+    setHasLoadedPopular(true)
+    setPopularNotice(null)
     try {
       const response = await shareApi.getPopularShares(DEFAULT_LIMIT)
       setPopularList(Array.isArray(response) ? response : [])
     } catch {
       setPopularList([])
+      setPopularNotice({ tone: 'error', message: '\u70ed\u95e8\u5206\u4eab\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     }
   }
 
   async function fetchStats() {
+    if (!statsId.trim()) {
+      setHasLoadedStats(false)
+      setStatsNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u5185\u5bb9\u7f16\u53f7\u3002' })
+      setStatsResult(null)
+      return
+    }
+
+    setHasLoadedStats(true)
+    setStatsNotice(null)
     try {
       const response = await shareApi.getShareStatistics(Number(statsId) || 0)
-      setStatsResult(response || null)
+      setStatsResult(response && Object.keys(response).length ? response : null)
     } catch {
       setStatsResult(null)
+      setStatsNotice({ tone: 'error', message: '\u5206\u4eab\u7edf\u8ba1\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     }
   }
 
   async function cancelShare(id?: number) {
     if (!id) return
 
+    setPageNotice(null)
     try {
       await shareApi.cancelShare(id)
       setShareList((current) => current.filter((item) => item.id !== id))
+      setPageNotice({ tone: 'success', message: '\u5206\u4eab\u5df2\u53d6\u6d88\u3002' })
     } catch {
-      // ignore
+      setPageNotice({ tone: 'error', message: '\u53d6\u6d88\u5206\u4eab\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002' })
     }
   }
 
@@ -93,13 +149,18 @@ export function RouteSharePage() {
       .filter(Boolean)
       .map(Number)
 
-    if (!ids.length) return
+    if (!ids.length) {
+      setPageNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u9700\u8981\u53d6\u6d88\u7684\u5206\u4eab\u7f16\u53f7\u3002' })
+      return
+    }
 
+    setPageNotice(null)
     try {
       await shareApi.batchCancelShares(ids)
       setShareList((current) => current.filter((item) => !ids.includes(Number(item.id))))
+      setPageNotice({ tone: 'success', message: '\u6279\u91cf\u53d6\u6d88\u5df2\u63d0\u4ea4\uff0c\u53ef\u7ee7\u7eed\u5237\u65b0\u5206\u4eab\u5217\u8868\u3002' })
     } catch {
-      // ignore
+      setPageNotice({ tone: 'error', message: '\u6279\u91cf\u53d6\u6d88\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
     }
   }
 
@@ -152,15 +213,17 @@ export function RouteSharePage() {
         </div>
       </section>
 
+      {pageNotice ? <StatusNotice tone={pageNotice.tone} message={pageNotice.message} className="mt-6" /> : null}
+
       <div className="mt-8 grid gap-6 xl:grid-cols-2">
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title={'\u751f\u6210\u5206\u4eab\u7801'} description={'\u8f93\u5165\u8def\u7ebf\u6216\u5185\u5bb9 ID \u751f\u6210\u5206\u4eab\u7801'} />
+          <SectionHeader title={'\u751f\u6210\u5206\u4eab\u7801'} description={'\u8f93\u5165\u8def\u7ebf\u6216\u5185\u5bb9\u7f16\u53f7\u751f\u6210\u5206\u4eab\u7801'} />
           <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
             <input
               value={genForm.itemId}
               onChange={(event) => setGenForm((current) => ({ ...current, itemId: event.target.value }))}
               type="text"
-              placeholder={'\u8f93\u5165\u5185\u5bb9 ID'}
+              placeholder={'\u8f93\u5165\u5185\u5bb9\u7f16\u53f7'}
               className="search-input"
             />
             <button onClick={generateShare} className="btn-primary">{'\u751f\u6210'}</button>
@@ -196,18 +259,27 @@ export function RouteSharePage() {
         </div>
 
         <section className="scenic-shell-soft edge-glow animate-fade-in p-6 xl:col-span-2">
-          <SectionHeader title={'\u6211\u7684\u5206\u4eab\u8bb0\u5f55'} description={'\u6309\u7528\u6237 ID \u67e5\u8be2\u5206\u4eab\u4e0e\u70ed\u95e8\u8bb0\u5f55'} action={<span className="chip">{shareList.length} {'\u6761'}</span>} />
+          <SectionHeader title={'\u6211\u7684\u5206\u4eab\u8bb0\u5f55'} description={'\u6309\u7528\u6237\u7f16\u53f7\u67e5\u8be2\u5206\u4eab\u4e0e\u70ed\u95e8\u8bb0\u5f55'} action={<span className="chip">{shareList.length} {'\u6761'}</span>} />
           <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
             <input
               value={listUserId}
               onChange={(event) => setListUserId(event.target.value)}
               type="text"
-              placeholder={'\u8f93\u5165\u7528\u6237 ID'}
+              placeholder={'\u8f93\u5165\u7528\u6237\u7f16\u53f7'}
               className="search-input"
             />
             <button onClick={fetchUserShares} className="btn-secondary">{'\u67e5\u8be2\u6211\u7684\u5206\u4eab'}</button>
             <button onClick={fetchPopular} className="btn-secondary">{'\u67e5\u770b\u70ed\u95e8'}</button>
           </div>
+          {listNotice ? (
+            <StatusNotice
+              tone={listNotice.tone}
+              message={listNotice.message}
+              actionLabel={listNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={listNotice.tone === 'error' ? fetchUserShares : undefined}
+              className="mb-4"
+            />
+          ) : null}
           {shareList.length ? (
             <div className="space-y-4">
               {shareList.map((item) => (
@@ -215,7 +287,7 @@ export function RouteSharePage() {
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-slate-900">{item.shareCode || '\u672a\u547d\u540d\u7801'}</h3>
-                      <p className="mt-2 text-sm leading-6 text-slate-500">{'\u7c7b\u578b'} {item.itemType || 'route'} {'\u00b7 \u5185\u5bb9 ID'} {item.itemId || item.routeId || '-'}</p>
+                      <p className="mt-2 text-sm leading-6 text-slate-500">{'\u7c7b\u578b '}{getShareItemTypeLabel(item.itemType)}{' \u00b7 \u5185\u5bb9\u7f16\u53f7 '}{item.itemId || item.routeId || '-'}</p>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
                         <span className="chip">{'\u8bbf\u95ee'} {item.visitCount || 0}</span>
                         <span className="chip">{'\u5230\u671f'} {item.expireTime || '\u672a\u77e5'}</span>
@@ -232,34 +304,55 @@ export function RouteSharePage() {
                 </article>
               ))}
             </div>
-          ) : (
-            <div className="py-8 text-center text-sm text-slate-400">{'\u6682\u65e0\u5206\u4eab\u8bb0\u5f55'}</div>
-          )}
+          ) : hasLoadedShares ? (
+            <SearchEmptyState
+              message={'\u6682\u672a\u67e5\u5230\u5bf9\u5e94\u7684\u5206\u4eab\u8bb0\u5f55\uff0c\u53ef\u66f4\u6362\u7528\u6237\u7f16\u53f7\u540e\u518d\u8bd5\u3002'}
+              actionLabel={'\u91cd\u65b0\u67e5\u8be2'}
+              onAction={fetchUserShares}
+            />
+          ) : null}
         </section>
 
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title={'\u5206\u4eab\u7edf\u8ba1'} description={'\u6309\u5185\u5bb9 ID \u67e5\u770b\u5206\u4eab\u6982\u51b5'} />
+          <SectionHeader title={'\u5206\u4eab\u7edf\u8ba1'} description={'\u6309\u5185\u5bb9\u7f16\u53f7\u67e5\u770b\u5206\u4eab\u6982\u51b5'} />
           <div className="mt-4 flex gap-3">
             <input
               value={statsId}
               onChange={(event) => setStatsId(event.target.value)}
               type="text"
-              placeholder={'\u8f93\u5165\u5185\u5bb9 ID'}
+              placeholder={'\u8f93\u5165\u5185\u5bb9\u7f16\u53f7'}
               className="search-input flex-1"
             />
             <button onClick={fetchStats} className="btn-primary">{'\u67e5\u770b'}</button>
           </div>
+          {statsNotice ? (
+            <StatusNotice
+              tone={statsNotice.tone}
+              message={statsNotice.message}
+              actionLabel={statsNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={statsNotice.tone === 'error' ? fetchStats : undefined}
+              className="mt-4"
+            />
+          ) : null}
           {statsResult ? <pre className="mt-4 whitespace-pre-wrap rounded-2xl bg-slate-50 p-4 text-xs text-slate-600">{JSON.stringify(statsResult, null, 2)}</pre> : null}
+          {hasLoadedStats && !statsResult && !statsNotice ? (
+            <SearchEmptyState
+              className="mt-4"
+              message={'\u6682\u672a\u53d6\u5230\u8be5\u5185\u5bb9\u7684\u5206\u4eab\u7edf\u8ba1\u3002'}
+              actionLabel={'\u91cd\u65b0\u67e5\u8be2'}
+              onAction={fetchStats}
+            />
+          ) : null}
         </div>
 
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title={'\u6279\u91cf\u53d6\u6d88'} description={'\u8f93\u5165\u591a\u4e2a\u5206\u4eab ID\uff0c\u4ee5\u9017\u53f7\u5206\u9694'} />
+          <SectionHeader title={'\u6279\u91cf\u53d6\u6d88'} description={'\u8f93\u5165\u591a\u4e2a\u5206\u4eab\u7f16\u53f7\uff0c\u4ee5\u9017\u53f7\u5206\u9694'} />
           <div className="mt-4 space-y-3">
             <textarea
               value={batchIds}
               onChange={(event) => setBatchIds(event.target.value)}
               rows={5}
-              placeholder={'\u8f93\u5165\u5206\u4eab ID\uff0c\u9017\u53f7\u5206\u9694'}
+              placeholder={'\u8f93\u5165\u5206\u4eab\u7f16\u53f7\uff0c\u9017\u53f7\u5206\u9694'}
               className="search-input"
             />
             <button onClick={batchCancel} className="btn-primary">{'\u6279\u91cf\u53d6\u6d88'}</button>
@@ -268,18 +361,31 @@ export function RouteSharePage() {
 
         <section className="scenic-shell-soft edge-glow animate-fade-in p-6 xl:col-span-2">
           <SectionHeader title={'\u70ed\u95e8\u5206\u4eab'} description={'\u67e5\u770b\u8bbf\u95ee\u91cf\u8f83\u9ad8\u7684\u5206\u4eab\u5185\u5bb9'} action={<span className="chip">{popularList.length} {'\u6761'}</span>} />
+          {popularNotice ? (
+            <StatusNotice
+              tone={popularNotice.tone}
+              message={popularNotice.message}
+              actionLabel={popularNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
+              onAction={popularNotice.tone === 'error' ? fetchPopular : undefined}
+              className="mb-4"
+            />
+          ) : null}
           {popularList.length ? (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {popularList.map((item) => (
                 <article key={item.id} className="metric-card surface-card-hover">
                   <div className="text-sm font-semibold text-slate-900">{item.shareCode || '\u672a\u547d\u540d\u7801'}</div>
-                  <div className="mt-2 text-sm text-slate-500">{'\u7c7b\u578b'} {item.itemType || 'route'} {'\u00b7 \u8bbf\u95ee'} {item.visitCount || 0}</div>
+                  <div className="mt-2 text-sm text-slate-500">{'\u7c7b\u578b '}{getShareItemTypeLabel(item.itemType)}{' \u00b7 \u8bbf\u95ee '}{item.visitCount || 0}</div>
                 </article>
               ))}
             </div>
-          ) : (
-            <div className="py-8 text-center text-sm text-slate-400">{'\u6682\u65e0\u70ed\u95e8\u5206\u4eab'}</div>
-          )}
+          ) : hasLoadedPopular ? (
+            <SearchEmptyState
+              message={'\u6682\u65e0\u70ed\u95e8\u5206\u4eab\u6570\u636e\uff0c\u53ef\u7a0d\u540e\u91cd\u65b0\u52a0\u8f7d\u3002'}
+              actionLabel={'\u91cd\u65b0\u52a0\u8f7d'}
+              onAction={fetchPopular}
+            />
+          ) : null}
         </section>
       </div>
     </div>

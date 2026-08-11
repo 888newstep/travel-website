@@ -1,5 +1,8 @@
 import apiClient from '../utils/api';
 
+const AI_BASE = '/ai';
+const AI_ADVANCED_BASE = `${AI_BASE}/advanced`;
+
 export interface AIChatRequest {
     message: string;
     context?: Record<string, any>;
@@ -15,9 +18,14 @@ export interface AIImageAnalysis {
     analysisType?: string;
 }
 
+function buildVoiceFallbackPrompt(text: string) {
+    return `Please treat the following transcribed voice text as a real travel question and reply with concise, actionable travel advice in Chinese:
+${text}`;
+}
+
 export const aiApi = {
     chat(data: AIChatRequest) {
-        return apiClient.post<AIChatResponse>('/ai/chat', data);
+        return apiClient.post<AIChatResponse>(`${AI_BASE}/chat`, data);
     },
 
     getTravelRecommendation(data: {
@@ -27,15 +35,15 @@ export const aiApi = {
         budget?: number;
         duration?: number;
     }) {
-        return apiClient.post<any>('/ai/recommend', data);
+        return apiClient.post<any>(`${AI_BASE}/recommend`, data);
     },
 
     analyzeImage(data: AIImageAnalysis) {
-        return apiClient.post<any>('/ai/image-analysis', data);
+        return apiClient.post<any>(`${AI_BASE}/image-analysis`, data);
     },
 
     getImageAnalysisTypes() {
-        return apiClient.get<{ value: string; label: string }[]>('/ai/image-analysis/types');
+        return apiClient.get<{ value: string; label: string }[]>(`${AI_BASE}/image-analysis/types`);
     },
 
     generateItinerary(data: {
@@ -44,7 +52,7 @@ export const aiApi = {
         preferences?: Record<string, any>;
         budget?: number;
     }) {
-        return apiClient.post<any>('/ai/itinerary/generate', data);
+        return apiClient.post<any>(`${AI_BASE}/itinerary/generate`, data);
     },
 
     multimodalQuery(data: {
@@ -53,29 +61,38 @@ export const aiApi = {
         audio?: string;
         context?: Record<string, any>;
     }) {
-        return apiClient.post<any>('/ai/multimodal/query', data);
+        return apiClient.post<any>(`${AI_BASE}/multimodal/query`, data);
     },
 
     smartAssistant(query: string, context?: Record<string, any>) {
-        return apiClient.post<AIChatResponse>('/ai/assistant/chat', {
+        return apiClient.post<AIChatResponse>(`${AI_BASE}/assistant/chat`, {
             query,
             context,
         });
     },
 
     getBudgetEstimation(data: Record<string, any>) {
-        return apiClient.post<any>('/ai/advanced/budget', data);
+        return apiClient.post<any>(`${AI_ADVANCED_BASE}/budget`, data);
     },
 
     planSmartRoute(data: Record<string, any>) {
-        return apiClient.post<any>('/ai/advanced/plan', data);
+        return apiClient.post<any>(`${AI_ADVANCED_BASE}/plan`, data);
     },
 
     getSafetyAdvice(cityId: number) {
-        return apiClient.get<any>(`/ai/advanced/safety/${cityId}`);
+        return apiClient.get<any>(`${AI_ADVANCED_BASE}/safety/${cityId}`);
     },
 
-    processVoice(data: { audioData: string | null; text: string }) {
-        return apiClient.post<any>('/ai/advanced/voice', data);
+    async processVoice(data: { audioData: string | null; text: string }) {
+        try {
+            return await apiClient.post<any>(`${AI_ADVANCED_BASE}/voice`, data);
+        } catch (error) {
+            if (data.text?.trim()) {
+                return apiClient.post<any>(`${AI_BASE}/chat`, {
+                    message: buildVoiceFallbackPrompt(data.text.trim()),
+                });
+            }
+            throw error;
+        }
     },
 };
