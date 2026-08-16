@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `mq_message_status` (
     exchange_name      VARCHAR(255) NOT NULL COMMENT '交换机名称',
     routing_key        VARCHAR(255) NOT NULL COMMENT '路由键',
     payload_json       LONGTEXT NOT NULL COMMENT '可补偿消息载荷',
-    status             VARCHAR(20) NOT NULL COMMENT 'PENDING/DISPATCHED/CONFIRMED/RETURNED/FAILED',
+    status             VARCHAR(20) NOT NULL COMMENT 'PENDING/DISPATCHED/CONFIRMED/RETURNED/FAILED/RETRYING',
     retry_count        INT NOT NULL DEFAULT 0 COMMENT '补偿重试次数',
     last_error         VARCHAR(1000) COMMENT '最近一次投递错误',
     next_attempt_time  TIMESTAMP NULL COMMENT '下次补偿时间',
@@ -92,7 +92,8 @@ CREATE TABLE IF NOT EXISTS `attraction` (
     INDEX idx_city (city_id),
     INDEX idx_rating (rating DESC),
     INDEX idx_name (name),
-    INDEX idx_city_rating_cover (city_id, rating DESC, name, id)
+    INDEX idx_city_rating_id (city_id, rating DESC, id DESC),
+    INDEX idx_rating_id (rating DESC, id DESC)
 ) COMMENT='景点表' ENGINE=InnoDB;
 
 -- ============================================================
@@ -355,11 +356,13 @@ CREATE TABLE IF NOT EXISTS `notification` (
     content      TEXT COMMENT '内容',
     is_read      BOOLEAN DEFAULT FALSE COMMENT '是否已读',
     redirect_url VARCHAR(500) COMMENT '跳转URL',
+    source_message_id VARCHAR(100) NULL COMMENT 'RabbitMQ source message id',
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     INDEX idx_user_read (user_id, is_read),
-    INDEX idx_type (type)
+    INDEX idx_type (type),
+    UNIQUE KEY uk_notification_source_message (source_message_id)
 ) COMMENT='通知表' ENGINE=InnoDB;
 
 -- ============================================================

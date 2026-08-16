@@ -118,4 +118,32 @@ class MessageProducerServiceTest {
 
         verify(mqMessageStatusService, never()).markFailed(anyString(), any(Throwable.class));
     }
+
+    @Test
+    void shouldPublishNotificationToReliableTopologyWithMessageMetadataWhenEnabled() {
+        MessageProducerService service = new MessageProducerService(
+                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), false, true);
+
+        service.sendNotification(7, "NOTICE", "title", "content");
+
+        ArgumentCaptor<MessagePostProcessor> postProcessorCaptor =
+                ArgumentCaptor.forClass(MessagePostProcessor.class);
+        ArgumentCaptor<CorrelationData> correlationCaptor =
+                ArgumentCaptor.forClass(CorrelationData.class);
+        verify(rabbitTemplate).convertAndSend(
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY),
+                any(NotificationMessageVO.class),
+                postProcessorCaptor.capture(),
+                correlationCaptor.capture());
+
+        String messageId = correlationCaptor.getValue().getId();
+        assertNotNull(messageId);
+        Message processed = postProcessorCaptor.getValue()
+                .postProcessMessage(new Message(new byte[0], new MessageProperties()));
+        assertEquals(messageId, processed.getMessageProperties().getMessageId());
+        assertEquals("NotificationMessageVO", processed.getMessageProperties().getType());
+        verify(mqMessageStatusService, never()).createPending(
+                anyString(), anyString(), anyString(), anyString(), anyString());
+    }
 }

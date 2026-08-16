@@ -27,17 +27,23 @@ public class AMapService {
     @Value("${amap.api-url:https://restapi.amap.com/v3}")
     private String apiUrl;
 
+    @Value("${travel.external.max-response-bytes:1048576}")
+    private long maxResponseBytes = 1_048_576L;
+
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final AICacheManager cacheManager;
+    private final ExternalCallBulkheadRegistry bulkheadRegistry;
 
-    public AMapService(AICacheManager cacheManager) {
+    public AMapService(AICacheManager cacheManager, ExternalCallBulkheadRegistry bulkheadRegistry) {
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(10, TimeUnit.SECONDS)
                 .readTimeout(10, TimeUnit.SECONDS)
+                .callTimeout(15, TimeUnit.SECONDS)
                 .build();
         this.objectMapper = new ObjectMapper();
         this.cacheManager = cacheManager;
+        this.bulkheadRegistry = bulkheadRegistry;
     }
 
     /**
@@ -55,9 +61,10 @@ public class AMapService {
                         .get()
                         .build();
 
-                try (Response response = httpClient.newCall(request).execute()) {
+                try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                     Response response = httpClient.newCall(request).execute()) {
                     if (response.isSuccessful() && response.body() != null) {
-                        String responseBody = response.body().string();
+                        String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                         JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                         if ("1".equals(jsonNode.get("status").asText())) {
@@ -124,9 +131,10 @@ public class AMapService {
                                 .get()
                                 .build();
 
-                        try (Response response = httpClient.newCall(request).execute()) {
+                        try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                             Response response = httpClient.newCall(request).execute()) {
                             if (response.isSuccessful() && response.body() != null) {
-                                String responseBody = response.body().string();
+                                String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                                 JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                                 if ("1".equals(jsonNode.get("status").asText())) {
@@ -164,9 +172,10 @@ public class AMapService {
                                 .get()
                                 .build();
 
-                        try (Response response = httpClient.newCall(request).execute()) {
+                        try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                             Response response = httpClient.newCall(request).execute()) {
                             if (response.isSuccessful() && response.body() != null) {
-                                String responseBody = response.body().string();
+                                String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                                 JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                                 if ("1".equals(jsonNode.get("status").asText())) {
@@ -204,9 +213,10 @@ public class AMapService {
                                 .get()
                                 .build();
 
-                        try (Response response = httpClient.newCall(request).execute()) {
+                        try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                             Response response = httpClient.newCall(request).execute()) {
                             if (response.isSuccessful() && response.body() != null) {
-                                String responseBody = response.body().string();
+                                String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                                 JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                                 if ("1".equals(jsonNode.get("status").asText())) {
@@ -242,9 +252,10 @@ public class AMapService {
                         .get()
                         .build();
 
-                try (Response response = httpClient.newCall(request).execute()) {
+                try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                     Response response = httpClient.newCall(request).execute()) {
                     if (response.isSuccessful() && response.body() != null) {
-                        String responseBody = response.body().string();
+                        String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                         JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                         if ("1".equals(jsonNode.get("status").asText())) {
@@ -278,9 +289,10 @@ public class AMapService {
                         .get()
                         .build();
 
-                try (Response response = httpClient.newCall(request).execute()) {
+                try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                     Response response = httpClient.newCall(request).execute()) {
                     if (response.isSuccessful() && response.body() != null) {
-                        String responseBody = response.body().string();
+                        String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                         JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                         if ("1".equals(jsonNode.get("status").asText())) {
@@ -314,9 +326,10 @@ public class AMapService {
                         .get()
                         .build();
 
-                try (Response response = httpClient.newCall(request).execute()) {
+                try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                     Response response = httpClient.newCall(request).execute()) {
                     if (response.isSuccessful() && response.body() != null) {
-                        String responseBody = response.body().string();
+                        String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                         JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                         if ("1".equals(jsonNode.get("status").asText())) {
@@ -353,9 +366,10 @@ public class AMapService {
                         .get()
                         .build();
 
-                try (Response response = httpClient.newCall(request).execute()) {
+                try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.AMAP).acquire();
+                     Response response = httpClient.newCall(request).execute()) {
                     if (response.isSuccessful() && response.body() != null) {
-                        String responseBody = response.body().string();
+                        String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                         JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                         if ("1".equals(jsonNode.get("status").asText())) {

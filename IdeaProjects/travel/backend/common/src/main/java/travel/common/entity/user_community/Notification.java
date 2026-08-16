@@ -33,6 +33,12 @@ public class Notification {
     @TableField("redirect_url")
     private String redirectUrl;
 
+    /**
+     * RabbitMQ 原始消息唯一号，用于数据库最终幂等兜底；历史人工创建通知允许为空。
+     */
+    @TableField("source_message_id")
+    private String sourceMessageId;
+
     @TableField("created_at")
     private LocalDateTime createdAt;
 

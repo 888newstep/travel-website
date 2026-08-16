@@ -12,6 +12,9 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import travel.common.utils.BoundedHttpBodyReader;
+import travel.common.utils.ExternalCallBulkhead;
+import travel.common.utils.ExternalCallBulkheadRegistry;
 
 /**
  * 百度AI服务类
@@ -30,6 +33,9 @@ public class BaiduAIService {
     @Value("${ai.baidu.secret-key}")
     private String secretKey;
 
+    @Value("${travel.external.max-response-bytes:1048576}")
+    private long maxResponseBytes = 1_048_576L;
+
     private static final String TOKEN_URL = "https://aip.baidubce.com/oauth/2.0/token";
     private static final String SCENE_RECOGNIZE_URL = "https://aip.baidubce.com/rest/2.0/image-classify/v2/advanced_general";
     private static final String DISH_RECOGNIZE_URL = "https://aip.baidubce.com/rest/2.0/image-classify/v2/dish";
@@ -37,15 +43,18 @@ public class BaiduAIService {
 
     private final OkHttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final ExternalCallBulkheadRegistry bulkheadRegistry;
     private String accessToken;
     private long tokenExpireTime;
 
-    public BaiduAIService() {
+    public BaiduAIService(ExternalCallBulkheadRegistry bulkheadRegistry) {
         this.httpClient = new OkHttpClient.Builder()
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(60, TimeUnit.SECONDS)
+                .callTimeout(75, TimeUnit.SECONDS)
                 .build();
         this.objectMapper = new ObjectMapper();
+        this.bulkheadRegistry = bulkheadRegistry;
     }
 
     /**
@@ -64,9 +73,10 @@ public class BaiduAIService {
                 .post(RequestBody.create("", MediaType.get("application/json")))
                 .build();
 
-        try (Response response = httpClient.newCall(request).execute()) {
+        try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.BAIDU_AI).acquire();
+             Response response = httpClient.newCall(request).execute()) {
             if (response.isSuccessful() && response.body() != null) {
-                String responseBody = response.body().string();
+                String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                 JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                 accessToken = jsonNode.get("access_token").asText();
@@ -99,9 +109,10 @@ public class BaiduAIService {
                     .post(body)
                     .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
+            try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.BAIDU_AI).acquire();
+                 Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
+                    String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                     JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                     Map<String, Object> result = new HashMap<>();
@@ -139,9 +150,10 @@ public class BaiduAIService {
                     .post(body)
                     .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
+            try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.BAIDU_AI).acquire();
+                 Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
+                    String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                     JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                     Map<String, Object> result = new HashMap<>();
@@ -178,9 +190,10 @@ public class BaiduAIService {
                     .post(body)
                     .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
+            try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.BAIDU_AI).acquire();
+                 Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
+                    String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                     JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                     Map<String, Object> result = new HashMap<>();
@@ -221,9 +234,10 @@ public class BaiduAIService {
                     .post(body)
                     .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
+            try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.BAIDU_AI).acquire();
+                 Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
+                    String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                     JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                     Map<String, Object> result = new HashMap<>();
@@ -263,9 +277,10 @@ public class BaiduAIService {
                     .post(body)
                     .build();
 
-            try (Response response = httpClient.newCall(request).execute()) {
+            try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.BAIDU_AI).acquire();
+                 Response response = httpClient.newCall(request).execute()) {
                 if (response.isSuccessful() && response.body() != null) {
-                    String responseBody = response.body().string();
+                    String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                     JsonNode jsonNode = objectMapper.readTree(responseBody);
 
                     Map<String, Object> result = new HashMap<>();

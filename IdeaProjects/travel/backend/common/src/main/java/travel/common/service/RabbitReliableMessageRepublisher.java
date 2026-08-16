@@ -6,6 +6,7 @@ import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageDeliveryMode;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import travel.common.config.RabbitMQConfig;
@@ -31,29 +32,47 @@ public class RabbitReliableMessageRepublisher implements ReliableMessageRepublis
 
     private final RabbitTemplate rabbitTemplate;
     private final Duration confirmTimeout;
+    private final int maxRetryCount;
 
+    @Autowired
     public RabbitReliableMessageRepublisher(
             RabbitTemplate rabbitTemplate,
-            @Value("${mq.reliable-notification.confirm-timeout-ms:5000}") long confirmTimeoutMillis) {
+            @Value("${mq.reliable-notification.confirm-timeout-ms:5000}") long confirmTimeoutMillis,
+            @Value("${mq.reliable-notification.max-retries:3}") int maxRetryCount) {
         this.rabbitTemplate = rabbitTemplate;
         if (confirmTimeoutMillis <= 0) {
             throw new IllegalArgumentException("confirmTimeoutMillis must be positive");
         }
+        if (maxRetryCount < 1 || maxRetryCount > 3) {
+            throw new IllegalArgumentException("maxRetryCount must be between 1 and 3");
+        }
         this.confirmTimeout = Duration.ofMillis(confirmTimeoutMillis);
+        this.maxRetryCount = maxRetryCount;
     }
 
     public RabbitReliableMessageRepublisher(RabbitTemplate rabbitTemplate, Duration confirmTimeout) {
+        this(rabbitTemplate, confirmTimeout, 3);
+    }
+
+    public RabbitReliableMessageRepublisher(
+            RabbitTemplate rabbitTemplate,
+            Duration confirmTimeout,
+            int maxRetryCount) {
         this.rabbitTemplate = rabbitTemplate;
         if (confirmTimeout == null || confirmTimeout.isZero() || confirmTimeout.isNegative()) {
             throw new IllegalArgumentException("confirmTimeout must be positive");
         }
+        if (maxRetryCount < 1 || maxRetryCount > 3) {
+            throw new IllegalArgumentException("maxRetryCount must be between 1 and 3");
+        }
         this.confirmTimeout = confirmTimeout;
+        this.maxRetryCount = maxRetryCount;
     }
 
     @Override
     public ReliablePublishResult publishRetry(Message sourceMessage, int retryCount, String reason) {
-        if (retryCount < 1 || retryCount > 3) {
-            throw new IllegalArgumentException("retryCount must be between 1 and 3");
+        if (retryCount < 1 || retryCount > maxRetryCount) {
+            throw new IllegalArgumentException("retryCount must be between 1 and " + maxRetryCount);
         }
         String routingKey = switch (retryCount) {
             case 1 -> RabbitMQConfig.RELIABLE_NOTIFICATION_RETRY_1_ROUTING_KEY;
@@ -100,7 +119,9 @@ public class RabbitReliableMessageRepublisher implements ReliableMessageRepublis
                 .setHeader(RETRY_COUNT_HEADER, retryCount)
                 .setHeader(FAILURE_REASON_HEADER, truncate(reason))
                 .setDeliveryMode(MessageDeliveryMode.PERSISTENT)
-                .setDeliveryTag(null)
+                // deliveryTag 属于消费端通道状态，不能把原消息的投递标签带入新消息。
+                // Spring AMQP 3.x 的 setDeliveryTag 参数是 primitive long，传 null 会在运行时拆箱 NPE。
+                .setDeliveryTag(0L)
                 .setRedelivered(false)
                 .build();
 

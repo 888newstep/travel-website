@@ -87,6 +87,26 @@ class AIAdvancedServiceImplTest {
     }
 
     @Test
+    void shouldPrioritizeMustVisitAttractionsOverOptionalActivitiesWhenDailyCapacityIsTight() {
+        AIPlanRouteResponse response = aiAdvancedService.planRoute(
+                AIPlanRoutePreferences.builder().days(1).build(),
+                AIPlanRouteConstraints.builder()
+                        .maxDailyHours(6)
+                        .mustVisitAttractions(List.of("Museum A", "Museum B"))
+                        .build());
+
+        List<AIActivity> activities = allActivities(response);
+
+        assertEquals(List.of("Museum A", "Museum B"), activities.stream()
+                .map(AIActivity::getName)
+                .toList());
+        assertTrue(activities.stream().allMatch(activity -> "attraction".equals(activity.getType())));
+        assertEquals(6 * 60, activities.stream()
+                .mapToInt(activity -> durationMinutes(activity.getTime()))
+                .sum());
+    }
+
+    @Test
     void shouldExcludeAvoidedAttractionsFromGeneratedPlans() {
         AIPlanRouteResponse response = aiAdvancedService.planRoute(
                 AIPlanRoutePreferences.builder().days(1).build(),
@@ -99,6 +119,24 @@ class AIAdvancedServiceImplTest {
         assertTrue(activities.stream().noneMatch(activity ->
                 "attraction".equals(activity.getType()) && activity.getName().contains("\u666f\u70b9")));
         assertTrue(activities.stream().anyMatch(activity -> "restaurant".equals(activity.getType())));
+    }
+
+    @Test
+    void shouldKeepMustVisitAttractionWhileFilteringOnlyDefaultAttractions() {
+        AIPlanRouteResponse response = aiAdvancedService.planRoute(
+                AIPlanRoutePreferences.builder().days(1).build(),
+                AIPlanRouteConstraints.builder()
+                        .mustVisitAttractions(List.of("Preferred Museum"))
+                        .avoidAttractions(List.of("景点"))
+                        .build());
+
+        List<AIActivity> activities = allActivities(response);
+
+        assertEquals(List.of("Preferred Museum", "餐厅1"), activities.stream()
+                .map(AIActivity::getName)
+                .toList());
+        assertTrue(activities.stream().noneMatch(activity ->
+                "attraction".equals(activity.getType()) && activity.getName().contains("景点")));
     }
 
     @Test
@@ -139,6 +177,30 @@ class AIAdvancedServiceImplTest {
     }
 
     @Test
+    void shouldUseLaterWindowForMustVisitWhenEarlierWindowIsTooShort() {
+        List<AITimeWindow> windows = List.of(
+                new AITimeWindow("09:00", "10:00"),
+                new AITimeWindow("12:00", "13:30"),
+                new AITimeWindow("14:00", "17:00"));
+
+        AIPlanRouteResponse response = aiAdvancedService.planRoute(
+                AIPlanRoutePreferences.builder().days(1).build(),
+                AIPlanRouteConstraints.builder()
+                        .mustVisitAttractions(List.of("Museum"))
+                        .fixedTimeWindows(windows)
+                        .build());
+
+        List<AIActivity> activities = allActivities(response);
+
+        assertEquals(1, activities.size());
+        assertEquals("Museum", activities.get(0).getName());
+        assertEquals("14:00-17:00", activities.get(0).getTime());
+        activities.forEach(activity -> assertTrue(
+                isInsideAnyWindow(activity.getTime(), windows),
+                "activity is outside fixed windows: " + activity.getTime()));
+    }
+
+    @Test
     void shouldRespectMaximumDailyActivityDuration() {
         AIPlanRouteResponse response = aiAdvancedService.planRoute(
                 AIPlanRoutePreferences.builder().days(1).build(),
@@ -158,14 +220,34 @@ class AIAdvancedServiceImplTest {
     }
 
     @Test
+    void shouldApplyMaximumDailyActivityDurationIndependentlyForEachDay() {
+        AIPlanRouteResponse response = aiAdvancedService.planRoute(
+                AIPlanRoutePreferences.builder().days(2).build(),
+                AIPlanRouteConstraints.builder()
+                        .maxDailyHours(4)
+                        .build());
+
+        assertEquals(2, response.getDailyPlans().size());
+        response.getDailyPlans().forEach(dailyPlan -> {
+            int dailyMinutes = dailyPlan.getActivities().stream()
+                    .mapToInt(activity -> durationMinutes(activity.getTime()))
+                    .sum();
+            assertEquals(180, dailyMinutes);
+            assertTrue(dailyMinutes <= 4 * 60);
+        });
+    }
+
+    @Test
     void shouldRejectMustVisitAndAvoidConflict() {
         AIPlanRouteConstraints constraints = AIPlanRouteConstraints.builder()
                 .mustVisitAttractions(List.of("Museum"))
                 .avoidAttractions(List.of("museum"))
                 .build();
 
-        assertThrows(IllegalArgumentException.class, () -> aiAdvancedService.planRoute(
-                AIPlanRoutePreferences.builder().days(1).build(), constraints));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                aiAdvancedService.planRoute(
+                        AIPlanRoutePreferences.builder().days(1).build(), constraints));
+        assertTrue(exception.getMessage().contains("Museum"));
     }
 
     @Test
@@ -174,8 +256,10 @@ class AIAdvancedServiceImplTest {
                 .mustVisitAttractions(List.of("Museum A", "Museum B", "Museum C"))
                 .build();
 
-        assertThrows(IllegalArgumentException.class, () -> aiAdvancedService.planRoute(
-                AIPlanRoutePreferences.builder().days(1).build(), constraints));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                aiAdvancedService.planRoute(
+                        AIPlanRoutePreferences.builder().days(1).build(), constraints));
+        assertTrue(exception.getMessage().contains("Museum C"));
     }
 
     @Test
@@ -185,8 +269,10 @@ class AIAdvancedServiceImplTest {
                 .fixedTimeWindows(List.of(new AITimeWindow("09:00", "10:00")))
                 .build();
 
-        assertThrows(IllegalArgumentException.class, () -> aiAdvancedService.planRoute(
-                AIPlanRoutePreferences.builder().days(1).build(), constraints));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                aiAdvancedService.planRoute(
+                        AIPlanRoutePreferences.builder().days(1).build(), constraints));
+        assertTrue(exception.getMessage().contains("Museum"));
     }
 
     @Test

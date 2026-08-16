@@ -2,6 +2,7 @@ package travel.collection.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import travel.common.entity.user_community.Notification;
+import travel.common.vo.NotificationMessageVO;
 
 import java.util.List;
 
@@ -11,6 +12,11 @@ public interface NotificationService extends IService<Notification> {
      * 创建通知
      */
     Notification createNotification(Notification notification);
+
+    /**
+     * 按 RabbitMQ source message id 幂等创建通知。
+     */
+    Notification createReliableNotification(String sourceMessageId, NotificationMessageVO message);
 
     /**
      * 获取用户的通知列表

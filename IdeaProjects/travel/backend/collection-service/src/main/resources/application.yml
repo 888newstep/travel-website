@@ -59,7 +59,7 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-      database: ${REDIS_DB:0}
+      database: ${REDIS_DB:3}
       lettuce:
         pool:
           max-active: 8

@@ -102,7 +102,10 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
 
         cacheUtil.increment(CacheUtil.generateKey(CacheUtil.COUNTER_KEY_PREFIX, "cache_misses"), 1);
         QueryWrapper<Attraction> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("city_id", cityId).orderByDesc("rating");
+        // 与游标分页保持相同的稳定排序，避免评分相同时分页顺序漂移。
+        queryWrapper.eq("city_id", cityId)
+                .orderByDesc("rating")
+                .orderByDesc("id");
         List<Attraction> attractions = baseMapper.selectList(queryWrapper);
 
         cacheUtil.set(cacheKey, attractions, 1, TimeUnit.HOURS);
@@ -477,7 +480,6 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
         log.info("Invalidated attraction cache: cityId={}", cityId);
     }
 }
-
 
 
 

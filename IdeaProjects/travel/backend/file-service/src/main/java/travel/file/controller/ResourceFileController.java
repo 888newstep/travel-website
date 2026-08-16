@@ -35,12 +35,15 @@ public class ResourceFileController {
                                                     @RequestParam(required = false) String category,
                                                     @RequestParam(required = false) String description) {
         try {
-            log.info("上传资源文件请求: filename={}", file.getOriginalFilename());
+            log.info("上传资源文件请求: filename={}", file == null ? null : file.getOriginalFilename());
             ResourceFile result = resourceFileService.uploadResourceFile(file, category, description);
+            if (result == null) {
+                return Result.error("上传失败：文件参数不合法或存储失败");
+            }
             return Result.success("上传成功", result);
         } catch (Exception e) {
-            log.error("上传资源文件失败: error={}", e.getMessage());
-            return Result.error("上传失败: " + e.getMessage());
+            log.error("上传资源文件失败", e);
+            return Result.error("上传失败");
         }
     }
 
@@ -52,12 +55,15 @@ public class ResourceFileController {
     public Result<List<ResourceFile>> batchUploadResourceFiles(@RequestParam("files") MultipartFile[] files,
                                                                  @RequestParam(required = false) String category) {
         try {
-            log.info("批量上传资源文件请求: count={}", files.length);
+            log.info("批量上传资源文件请求: count={}", files == null ? 0 : files.length);
             List<ResourceFile> result = resourceFileService.batchUploadResourceFiles(files, category);
+            if (result == null || result.stream().anyMatch(file -> file == null)) {
+                return Result.error("批量上传失败：文件参数不合法或存储失败");
+            }
             return Result.success("批量上传成功", result);
         } catch (Exception e) {
-            log.error("批量上传资源文件失败: error={}", e.getMessage());
-            return Result.error("批量上传失败: " + e.getMessage());
+            log.error("批量上传资源文件失败", e);
+            return Result.error("批量上传失败");
         }
     }
 
@@ -86,10 +92,13 @@ public class ResourceFileController {
         try {
             log.info("下载资源文件请求: id={}", id);
             String downloadUrl = resourceFileService.downloadResourceFile(id);
+            if (downloadUrl == null) {
+                return Result.error("文件不存在或已失效");
+            }
             return Result.success("获取下载链接成功", downloadUrl);
         } catch (Exception e) {
-            log.error("下载资源文件失败: id={}, error={}", id, e.getMessage());
-            return Result.error("获取下载链接失败: " + e.getMessage());
+            log.error("下载资源文件失败: id={}", id, e);
+            return Result.error("获取下载链接失败");
         }
     }
 

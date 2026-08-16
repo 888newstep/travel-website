@@ -40,8 +40,8 @@ public class ReliableNotificationRabbitConfig {
 
     @Bean
     public Binding reliableNotificationBinding(
-            Queue reliableNotificationQueue,
-            TopicExchange reliableNotificationExchange) {
+            @Qualifier("reliableNotificationQueue") Queue reliableNotificationQueue,
+            @Qualifier("reliableNotificationExchange") TopicExchange reliableNotificationExchange) {
         return BindingBuilder.bind(reliableNotificationQueue)
                 .to(reliableNotificationExchange)
                 .with(RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY);
@@ -75,8 +75,8 @@ public class ReliableNotificationRabbitConfig {
 
     @Bean
     public Binding reliableNotificationRetry1Binding(
-            Queue reliableNotificationRetry1Queue,
-            DirectExchange reliableNotificationRetryExchange) {
+            @Qualifier("reliableNotificationRetry1Queue") Queue reliableNotificationRetry1Queue,
+            @Qualifier("reliableNotificationRetryExchange") DirectExchange reliableNotificationRetryExchange) {
         return retryBinding(
                 reliableNotificationRetry1Queue,
                 reliableNotificationRetryExchange,
@@ -85,8 +85,8 @@ public class ReliableNotificationRabbitConfig {
 
     @Bean
     public Binding reliableNotificationRetry2Binding(
-            Queue reliableNotificationRetry2Queue,
-            DirectExchange reliableNotificationRetryExchange) {
+            @Qualifier("reliableNotificationRetry2Queue") Queue reliableNotificationRetry2Queue,
+            @Qualifier("reliableNotificationRetryExchange") DirectExchange reliableNotificationRetryExchange) {
         return retryBinding(
                 reliableNotificationRetry2Queue,
                 reliableNotificationRetryExchange,
@@ -95,8 +95,8 @@ public class ReliableNotificationRabbitConfig {
 
     @Bean
     public Binding reliableNotificationRetry3Binding(
-            Queue reliableNotificationRetry3Queue,
-            DirectExchange reliableNotificationRetryExchange) {
+            @Qualifier("reliableNotificationRetry3Queue") Queue reliableNotificationRetry3Queue,
+            @Qualifier("reliableNotificationRetryExchange") DirectExchange reliableNotificationRetryExchange) {
         return retryBinding(
                 reliableNotificationRetry3Queue,
                 reliableNotificationRetryExchange,
@@ -116,8 +116,8 @@ public class ReliableNotificationRabbitConfig {
 
     @Bean
     public Binding reliableNotificationDeadLetterBinding(
-            Queue reliableNotificationDeadLetterQueue,
-            DirectExchange reliableNotificationDeadLetterExchange) {
+            @Qualifier("reliableNotificationDeadLetterQueue") Queue reliableNotificationDeadLetterQueue,
+            @Qualifier("reliableNotificationDeadLetterExchange") DirectExchange reliableNotificationDeadLetterExchange) {
         return BindingBuilder.bind(reliableNotificationDeadLetterQueue)
                 .to(reliableNotificationDeadLetterExchange)
                 .with(RabbitMQConfig.RELIABLE_NOTIFICATION_DEAD_LETTER_ROUTING_KEY);

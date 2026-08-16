@@ -54,7 +54,7 @@ public class AITimeWindow {
             return true;
         }
         try {
-            return !LocalTime.parse(end).isBefore(LocalTime.parse(start));
+            return LocalTime.parse(end).isAfter(LocalTime.parse(start));
         } catch (DateTimeParseException e) {
             // 具体格式错误交给 @Pattern 返回，避免覆盖更准确的校验消息。
             return true;

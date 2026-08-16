@@ -316,11 +316,13 @@ CREATE TABLE IF NOT EXISTS `notification` (
     content      TEXT COMMENT '内容',
     is_read      BOOLEAN DEFAULT FALSE COMMENT '是否已读',
     redirect_url VARCHAR(500) COMMENT '跳转URL',
+    source_message_id VARCHAR(100) NULL COMMENT 'RabbitMQ source message id',
     created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
     INDEX idx_user_read (user_id, is_read),
-    INDEX idx_type (type)
+    INDEX idx_type (type),
+    UNIQUE KEY uk_notification_source_message (source_message_id)
 ) COMMENT='通知表' ENGINE=InnoDB;
 
 -- ============================================================

@@ -8,13 +8,17 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import travel.common.config.AIConfig;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.travel_recommendation.Attraction;
+import travel.common.utils.BoundedHttpBodyReader;
 import travel.common.utils.CacheUtil;
+import travel.common.utils.ExternalCallBulkhead;
+import travel.common.utils.ExternalCallBulkheadRegistry;
 import travel.route.dto.ai.AIAskQuestionResponse;
 import travel.route.dto.ai.AIAttractionIntroResponse;
 import travel.route.dto.ai.AIOptimizeRouteResponse;
@@ -43,11 +47,16 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
     private final AttractionService attractionService;
     private final CacheUtil cacheUtil;
     private final AIConfig aiConfig;
+    private final ExternalCallBulkheadRegistry bulkheadRegistry;
     private final OkHttpClient httpClient = new OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(75, TimeUnit.SECONDS)
             .build();
     private final ObjectMapper objectMapper = new ObjectMapper();
+
+    @Value("${travel.external.max-response-bytes:1048576}")
+    private long maxResponseBytes = 1_048_576L;
 
     @Override
     public AIAskQuestionResponse askQuestion(String question, Integer userId) {
@@ -157,7 +166,8 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
                 .post(RequestBody.create(jsonBody, JSON))
                 .build();
 
-        try (Response response = httpClient.newCall(request).execute()) {
+        try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry.get(ExternalCallBulkheadRegistry.OPENAI).acquire();
+             Response response = httpClient.newCall(request).execute()) {
             if (!response.isSuccessful()) {
                 throw new IOException("OpenAI request failed: status=" + response.code());
             }
@@ -165,7 +175,7 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
                 throw new IOException("OpenAI response body is empty");
             }
 
-            String responseBody = response.body().string();
+            String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
             JsonNode rootNode = objectMapper.readTree(responseBody);
             JsonNode choicesNode = rootNode.path("choices");
             if (!choicesNode.isArray() || choicesNode.size() == 0) {

@@ -4,10 +4,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.*;
 
@@ -25,8 +27,29 @@ public class AMapRouteService {
     @Value("${amap.api-url:https://restapi.amap.com/v3}")
     private String apiUrl;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final long maxResponseBytes;
+    private final ExternalCallBulkheadRegistry bulkheadRegistry;
+
+    public AMapRouteService(
+            @Value("${amap.route.connect-timeout-ms:3000}") int connectTimeoutMs,
+            @Value("${amap.route.read-timeout-ms:5000}") int readTimeoutMs,
+            @Value("${travel.external.max-response-bytes:1048576}") long maxResponseBytes,
+            ExternalCallBulkheadRegistry bulkheadRegistry) {
+        if (connectTimeoutMs <= 0 || readTimeoutMs <= 0) {
+            throw new IllegalArgumentException("高德地图 HTTP 超时必须为正数");
+        }
+        if (maxResponseBytes <= 0) {
+            throw new IllegalArgumentException("外部 HTTP 响应体上限必须为正数");
+        }
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(connectTimeoutMs);
+        requestFactory.setReadTimeout(readTimeoutMs);
+        this.restTemplate = new RestTemplate(requestFactory);
+        this.maxResponseBytes = maxResponseBytes;
+        this.bulkheadRegistry = bulkheadRegistry;
+    }
 
     /**
      * 批量获取多个点之间的路径信息
@@ -59,10 +82,24 @@ public class AMapRouteService {
                     apiUrl, origin, destination, viaPoints, apiKey
             );
 
-            ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+            String responseBody;
+            try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry
+                    .get(ExternalCallBulkheadRegistry.AMAP).acquire()) {
+                responseBody = restTemplate.execute(
+                        url,
+                        HttpMethod.GET,
+                        null,
+                        clientHttpResponse -> {
+                            if (clientHttpResponse.getBody() == null) {
+                                throw new IOException("高德地图响应体为空");
+                            }
+                            return BoundedHttpBodyReader.readUtf8(
+                                    clientHttpResponse.getBody(), maxResponseBytes);
+                        });
+            }
 
-            if (response.getBody() != null) {
-                return parseRouteResponse(response.getBody());
+            if (responseBody != null) {
+                return parseRouteResponse(responseBody);
             }
 
         } catch (Exception e) {

@@ -22,6 +22,17 @@
 | `/ai/smart-itinerary/generate` | `AISmartItineraryGenerateRequest` | `AISmartItineraryResponse` | 全部完成 |
 | `/ai/smart-itinerary/optimize` | `AISmartItineraryOptimizeRequest` | `AISmartItineraryOptimizeResponse` | 全部完成 |
 | `/ai/advanced/guide` | `AIGenerateTravelGuideRequest` | `AITravelGuideResponse` | 全部完成 |
+
+### 1.3 实际执行状态（2026-08-11）
+
+- [x] 原 `AIController` 已按基础对话、助手、高级能力、图像、多模态拆分为多个职责单一的 Controller。
+- [x] Controller 层不再使用 `Map<String, Object>` 作为 `@RequestBody`、返回值或 `Result` 泛型。
+- [x] 请求 DTO 已接入 `jakarta.validation`，并通过 MockMvc 断言校验失败时不会调用 Service。
+- [x] `AIAssistantService`、`AIAdvancedService`、`AIImageAnalysisService`、`AIMultimodalService` 的核心返回值已完成类型化。
+- [x] 新增 `AIAskQuestionRequest`，恢复 `POST /ai/assistant/ask` 的 JSON DTO 入参契约。
+- [x] 恢复原 `POST /ai/assistant/optimize/{routeId}` 路径，并保留当前别名 `GET /ai/assistant/optimize-route/{routeId}`。
+- [ ] `AIAnalyzeImageResponse` 与 `AIImageAnalysisResponse` 的重复模型仍需在后续版本统一，统一前禁止直接删除任一类型。
+- [ ] 需要补充图像、多模态和个性化推荐 Controller 的 MockMvc 结果断言，并纳入 CI 门禁。
 ### 1.2 仍需 DTO 化的端点（本次目标）
 
 | # | 端点 | 方法 | 当前请求类型 | 当前响应类型 | 复杂度 |
@@ -39,7 +50,18 @@
 | 11 | `/ai/multimodal/recommendations` | `getMultimodalRecommendations` | `MultipartFile` + 参数 | `Result<List<Map<String, Object>>>` | 高 |
 | 12 | `/ai/multimodal/search` | `multimodalSearch` | `MultipartFile` + 参数 | `Result<List<Map<String, Object>>>` | 高 |
 
-### 1.3 需要提取为独立 DTO 的内部类
+### 1.3 实际执行状态（2026-08-11）
+
+- [x] 原 `AIController` 已按基础对话、助手、高级能力、图像、多模态拆分为职责单一的 Controller。
+- [x] Controller 层不再使用 `Map<String, Object>` 作为 `@RequestBody`、返回值或 `Result` 泛型。
+- [x] 请求 DTO 已接入 `jakarta.validation`，并通过 MockMvc 断言校验失败时不会调用 Service。
+- [x] `AIAssistantService`、`AIAdvancedService`、`AIImageAnalysisService`、`AIMultimodalService` 的核心返回值已完成类型化。
+- [x] 新增 `AIAskQuestionRequest`，恢复 `POST /ai/assistant/ask` 的 JSON DTO 入参契约。
+- [x] 恢复原 `POST /ai/assistant/optimize/{routeId}` 路径，并保留当前别名 `GET /ai/assistant/optimize-route/{routeId}`。
+- [ ] `AIAnalyzeImageResponse` 与 `AIImageAnalysisResponse` 的重复模型仍需在后续版本统一，统一前禁止直接删除任一类型。
+- [ ] 需要补充图像、多模态和个性化推荐 Controller 的 MockMvc 结果断言，并纳入 CI 门禁。
+
+### 1.4 需要提取为独立 DTO 的内部类
 
 当前 `AIController` 底部定义了 8 个 `static inner class` 请求 DTO，全部需要提取到 `dto/ai/` 目录：
 
@@ -756,6 +778,7 @@ backend/route-service/src/main/java/travel/route/dto/ai/
 ├── AIAdvancedChatRequest.java         (新建)
 ├── AIAnalyzeImageRequest.java         (新建)
 ├── AIAnalyzeImageResponse.java        (新建)
+├── AIAskQuestionRequest.java          (新建)
 ├── AIAskQuestionResponse.java         (新建)
 ├── AIAssistantChatRequest.java        (新建)
 ├── AIAssistantChatResponse.java       (新建)
@@ -814,9 +837,16 @@ backend/route-service/src/main/java/travel/route/service/impl/AIMultimodalServic
 
 ## 7. 验收标准
 
-1. `AIController` 中不再有任何 `Map<String, Object>` 作为 `@RequestBody` 或方法返回值。
+1. `AIController` 及拆分后的 AI 子控制器中不再有任何 `Map<String, Object>` 作为 `@RequestBody` 或方法返回值。
 2. 所有请求 DTO 都有 `jakarta.validation` 校验注解。
 3. `AIController` 底部的 `static inner class` 全部清除。
 4. `mvn compile` 零错误零警告（关于 unchecked cast）。
 5. 所有端点的 JSON 响应结构与前端约定一致。
 6. Service 接口（至少 `AIAssistantService` 和 `AIAdvancedService`）的返回值不再是 `Map`。
+
+## 8. 本轮验收记录
+
+- `mvn -q -pl route-service -am -DskipTests compile`：通过。
+- `mvn -q -Dtest=AIAssistantControllerTest -Dsurefire.failIfNoSpecifiedTests=false test`（在 `route-service` 模块执行）：通过，3 个测试全部通过。
+- 已验证的结果断言：问答 DTO 字段映射、空问题校验前置、旧优化路由 POST 路径、新优化路由 GET 别名。
+- 未宣称真实云端 Milvus/RabbitMQ 连通性；本轮 AI DTO 改造不依赖外部中间件，MySQL/Redis 仍按本机默认配置运行。

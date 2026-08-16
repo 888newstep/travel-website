@@ -26,6 +26,7 @@ public class MessageProducerService {
     private final MqMessageStatusService mqMessageStatusService;
     private final ObjectMapper objectMapper;
     private final boolean statusPersistenceEnabled;
+    private final boolean reliableNotificationProducerEnabled;
 
     /**
      * 消息状态表属于第一阶段可选能力，默认关闭，避免未执行数据库迁移时影响现有发布链路。
@@ -35,18 +36,33 @@ public class MessageProducerService {
             RabbitTemplate rabbitTemplate,
             MqMessageStatusService mqMessageStatusService,
             ObjectMapper objectMapper,
-            @Value("${mq.status-persistence.enabled:false}") boolean statusPersistenceEnabled) {
+            @Value("${mq.status-persistence.enabled:false}") boolean statusPersistenceEnabled,
+            @Value("${mq.reliable-notification.producer.enabled:false}")
+            boolean reliableNotificationProducerEnabled) {
         this.rabbitTemplate = rabbitTemplate;
         this.mqMessageStatusService = mqMessageStatusService;
         this.objectMapper = objectMapper;
         this.statusPersistenceEnabled = statusPersistenceEnabled;
+        this.reliableNotificationProducerEnabled = reliableNotificationProducerEnabled;
     }
 
     /**
      * 保留旧构造函数，兼容未开启状态持久化的单元测试和调用方。
      */
     public MessageProducerService(RabbitTemplate rabbitTemplate) {
-        this(rabbitTemplate, null, null, false);
+        this(rabbitTemplate, null, null, false, false);
+    }
+
+    /**
+     * 保留旧的四参数构造函数，避免现有单元测试和手工装配调用方受到影响。
+     */
+    public MessageProducerService(
+            RabbitTemplate rabbitTemplate,
+            MqMessageStatusService mqMessageStatusService,
+            ObjectMapper objectMapper,
+            boolean statusPersistenceEnabled) {
+        this(rabbitTemplate, mqMessageStatusService, objectMapper,
+                statusPersistenceEnabled, false);
     }
 
     /**
@@ -62,11 +78,14 @@ public class MessageProducerService {
                     Map.of(),
                     System.currentTimeMillis()
             );
-            String messageId = sendMessage(
-                    RabbitMQConfig.NOTIFICATION_EXCHANGE,
-                    RabbitMQConfig.NOTIFICATION_ROUTING_KEY,
-                    message
-            );
+            String exchange = reliableNotificationProducerEnabled
+                    ? RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE
+                    : RabbitMQConfig.NOTIFICATION_EXCHANGE;
+            String routingKey = reliableNotificationProducerEnabled
+                    ? RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY
+                    : RabbitMQConfig.NOTIFICATION_ROUTING_KEY;
+            String messageId = sendMessage(exchange, routingKey, message,
+                    reliableNotificationProducerEnabled);
             log.info("发送通知消息已提交，等待 broker confirm: messageId={}, userId={}, type={}",
                     messageId, userId, type);
         } catch (Exception e) {
@@ -124,23 +143,33 @@ public class MessageProducerService {
      * 为每条消息生成唯一关联号，配合 publisher confirm 识别异步投递结果。
      */
     private String sendMessage(String exchange, String routingKey, Object message) {
+        return sendMessage(exchange, routingKey, message, false);
+    }
+
+    private String sendMessage(
+            String exchange,
+            String routingKey,
+            Object message,
+            boolean forceMessageMetadata) {
         String messageId = UUID.randomUUID().toString();
         CorrelationData correlationData = new CorrelationData(messageId);
+        String messageType = message.getClass().getSimpleName();
 
-        if (!statusPersistenceEnabled) {
+        if (!statusPersistenceEnabled && !forceMessageMetadata) {
             rabbitTemplate.convertAndSend(exchange, routingKey, message, correlationData);
             log.debug("RabbitMQ message published: messageId={}, exchange={}, routingKey={}",
                     messageId, exchange, routingKey);
             return messageId;
         }
 
-        if (mqMessageStatusService == null || objectMapper == null) {
+        if (statusPersistenceEnabled && (mqMessageStatusService == null || objectMapper == null)) {
             throw new IllegalStateException("消息状态持久化已开启，但依赖未注入");
         }
 
-        String messageType = message.getClass().getSimpleName();
-        String payloadJson = serializePayload(message, messageId);
-        mqMessageStatusService.createPending(messageId, messageType, exchange, routingKey, payloadJson);
+        if (statusPersistenceEnabled) {
+            String payloadJson = serializePayload(message, messageId);
+            mqMessageStatusService.createPending(messageId, messageType, exchange, routingKey, payloadJson);
+        }
 
         try {
             rabbitTemplate.convertAndSend(
@@ -157,7 +186,9 @@ public class MessageProducerService {
         }
 
         // DISPATCHED 仅表示本地 RabbitTemplate 调用已返回，不代表 broker confirm 或消费者处理成功。
-        markDispatchedSafely(messageId, exchange, routingKey);
+        if (statusPersistenceEnabled) {
+            markDispatchedSafely(messageId, exchange, routingKey);
+        }
         log.debug("RabbitMQ message published: messageId={}, exchange={}, routingKey={}",
                 messageId, exchange, routingKey);
         return messageId;

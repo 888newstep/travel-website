@@ -2,6 +2,8 @@ package travel.common.service;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -30,9 +32,12 @@ public class RedisMessageIdempotencyService {
     private final Duration processingTtl;
     private final Duration completedTtl;
 
+    @Autowired
     public RedisMessageIdempotencyService(
             StringRedisTemplate redisTemplate,
+            @Value("${mq.reliable-notification.idempotency.processing-ttl-seconds:300}")
             long processingTtlSeconds,
+            @Value("${mq.reliable-notification.idempotency.completed-ttl-seconds:259200}")
             long completedTtlSeconds) {
         this.redisTemplate = redisTemplate;
         if (processingTtlSeconds <= 0 || completedTtlSeconds <= 0) {

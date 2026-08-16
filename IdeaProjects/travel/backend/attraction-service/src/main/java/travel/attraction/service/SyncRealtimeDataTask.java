@@ -5,6 +5,7 @@ import travel.common.entity.travel_realtime.AttractionRealtimeStatus;
 import travel.common.utils.ThirdApiUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +13,11 @@ import java.util.List;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(
+        name = "travel.scheduling.realtime-sync-enabled",
+        havingValue = "true",
+        matchIfMissing = true
+)
 public class SyncRealtimeDataTask {
 
     private static final Logger log = LoggerFactory.getLogger(SyncRealtimeDataTask.class);

@@ -6,6 +6,10 @@ mq:
     enabled: ${MQ_STATUS_PERSISTENCE_ENABLED:false}
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: ${FILE_STORAGE_MAX_FILE_SIZE:10MB}
+      max-request-size: ${FILE_STORAGE_MAX_REQUEST_SIZE:50MB}
   datasource:
     url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:travel_website}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:}
@@ -58,7 +62,7 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-      database: ${REDIS_DB:0}
+      database: ${REDIS_DB:3}
       lettuce:
         pool:
           max-active: 8
@@ -119,3 +123,12 @@ seata:
       server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
       namespace: ${NACOS_NAMESPACE:public}
       group: SEATA_GROUP
+
+file:
+  storage:
+    # 不再把 Windows 本地目录硬编码到业务代码，部署时可通过 FILE_STORAGE_ROOT_DIR 覆盖。
+    root-dir: ${FILE_STORAGE_ROOT_DIR:${user.home}/travel-resources}
+    public-path: ${FILE_STORAGE_PUBLIC_PATH:/resources/}
+    max-file-size-bytes: ${FILE_STORAGE_MAX_FILE_SIZE_BYTES:10485760}
+    max-batch-files: ${FILE_STORAGE_MAX_BATCH_FILES:10}
+    max-filename-length: ${FILE_STORAGE_MAX_FILENAME_LENGTH:255}

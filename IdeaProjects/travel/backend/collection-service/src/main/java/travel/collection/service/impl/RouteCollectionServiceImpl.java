@@ -24,8 +24,12 @@ import org.springframework.stereotype.Service;
 import travel.common.service.DistributedLockService;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.Map;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -164,7 +168,7 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "user", userId, "page", page, "size", size);
         List<?> cachedList = cacheUtil.get(cacheKey, List.class);
-        if (cachedList != null && !cachedList.isEmpty()) {
+        if (cachedList != null) {
             @SuppressWarnings("unchecked")
             List<RouteCollectionVO> cachedVOs = (List<RouteCollectionVO>) cachedList;
             return cachedVOs;
@@ -175,7 +179,8 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
                 .eq(RouteCollection::getItemType, "route")
                 .orderByDesc(RouteCollection::getCollectionTime);
 
-        IPage<RouteCollection> pageResult = page(new Page<>(page, size), queryWrapper);
+        // 收藏列表只返回当前页，不需要执行额外的 COUNT(*)。
+        IPage<RouteCollection> pageResult = page(new Page<>(page, size, false), queryWrapper);
         List<RouteCollection> collections = pageResult.getRecords();
 
         List<RouteCollectionVO> voList = convertToVOList(collections);
@@ -344,7 +349,7 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "public", "page", page, "size", size);
         List<?> cachedList = cacheUtil.get(cacheKey, List.class);
-        if (cachedList != null && !cachedList.isEmpty()) {
+        if (cachedList != null) {
             @SuppressWarnings("unchecked")
             List<RouteCollection> cachedCollections = (List<RouteCollection>) cachedList;
             return cachedCollections;
@@ -355,7 +360,7 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
                 .eq(RouteCollection::getItemType, "route")
                 .orderByDesc(RouteCollection::getCollectionTime);
 
-        IPage<RouteCollection> pageResult = page(new Page<>(page, size), queryWrapper);
+        IPage<RouteCollection> pageResult = page(new Page<>(page, size, false), queryWrapper);
         List<RouteCollection> collections = pageResult.getRecords();
 
         cacheUtil.set(cacheKey, collections, 30, TimeUnit.MINUTES);
@@ -364,12 +369,42 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     }
 
     private List<RouteCollectionVO> convertToVOList(List<RouteCollection> collections) {
+        if (collections == null || collections.isEmpty()) {
+            return List.of();
+        }
+
+        List<Integer> routeIds = collections.stream()
+                .filter(Objects::nonNull)
+                .map(RouteCollection::getRouteId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Integer, Route> routesById = Collections.emptyMap();
+        if (!routeIds.isEmpty()) {
+            try {
+                routesById = routeService.getByIds(routeIds).stream()
+                        .filter(Objects::nonNull)
+                        .filter(route -> route.getId() != null)
+                        .collect(Collectors.toMap(
+                                Route::getId,
+                                Function.identity(),
+                                (first, ignored) -> first));
+            } catch (Exception e) {
+                // 路线详情失败不影响收藏基础记录返回，避免跨服务抖动放大为列表整体失败。
+                log.warn("批量加载路线详情失败，降级返回基础收藏数据: routeIds={}, error={}",
+                        routeIds, e.getMessage());
+            }
+        }
+
+        Map<Integer, Route> resolvedRoutes = routesById;
         return collections.stream()
-                .map(this::convertToVO)
+                .filter(Objects::nonNull)
+                .map(collection -> convertToVO(collection, resolvedRoutes.get(collection.getRouteId())))
                 .collect(Collectors.toList());
     }
 
-    private RouteCollectionVO convertToVO(RouteCollection collection) {
+    private RouteCollectionVO convertToVO(RouteCollection collection, Route route) {
         RouteCollectionVO vo = new RouteCollectionVO();
         vo.setId(collection.getId());
         vo.setRouteId(collection.getRouteId());
@@ -378,14 +413,11 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
         vo.setIsPublic(collection.getIsPublic());
         vo.setNotes(collection.getNotes());
 
-        if (collection.getRouteId() != null) {
-            Route route = routeService.getById(collection.getRouteId().longValue());
-            if (route != null) {
-                vo.setRouteTitle(route.getTitle());
-                vo.setRouteCoverImage(route.getCoverImage());
-                vo.setRouteDurationDays(route.getDurationDays());
-                vo.setRouteDifficulty(route.getDifficulty());
-            }
+        if (route != null) {
+            vo.setRouteTitle(route.getTitle());
+            vo.setRouteCoverImage(route.getCoverImage());
+            vo.setRouteDurationDays(route.getDurationDays());
+            vo.setRouteDifficulty(route.getDifficulty());
         }
 
         return vo;
@@ -394,6 +426,8 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     private void invalidateUserCache(Integer userId) {
         String userCollectionsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "user", userId);
         cacheUtil.delete(userCollectionsCacheKey);
+        // 用户收藏发生变化时，按页缓存也必须失效，否则新增/删除收藏会被旧分页结果遮蔽。
+        cacheUtil.deleteByPattern(userCollectionsCacheKey + ":page:*:size:*");
     }
 
     private void invalidateRouteCountCache(Integer routeId) {

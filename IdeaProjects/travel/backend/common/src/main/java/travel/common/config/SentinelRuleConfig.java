@@ -7,6 +7,7 @@ import com.alibaba.csp.sentinel.slots.block.flow.FlowRule;
 import com.alibaba.csp.sentinel.slots.block.flow.FlowRuleManager;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.ArrayList;
@@ -19,9 +20,18 @@ import java.util.List;
 @Configuration
 public class SentinelRuleConfig {
 
+    @Value("${travel.performance.sentinel-rules-enabled:true}")
+    private boolean rulesEnabled = true;
+
     @PostConstruct
     public void initFlowRules() {
         List<FlowRule> rules = new ArrayList<>();
+
+        if (!rulesEnabled) {
+            FlowRuleManager.loadRules(rules);
+            log.warn("Sentinel flow rules disabled for isolated performance testing");
+            return;
+        }
 
         // 景点查询接口限流 - 应对高并发查询
         rules.add(createFlowRule("getAttractionById", RuleConstant.FLOW_GRADE_QPS, 100));
@@ -47,12 +57,18 @@ public class SentinelRuleConfig {
     public void initDegradeRules() {
         List<DegradeRule> rules = new ArrayList<>();
 
+        if (!rulesEnabled) {
+            DegradeRuleManager.loadRules(rules);
+            log.warn("Sentinel degrade rules disabled for isolated performance testing");
+            return;
+        }
+
         // 景点查询熔断 - 慢调用比例熔断
-        rules.add(createDegradeRule("getAttractionById", RuleConstant.DEGRADE_GRADE_RT, 200, 0.5, 10));
-        rules.add(createDegradeRule("getAttractionsByCity", RuleConstant.DEGRADE_GRADE_RT, 300, 0.5, 10));
+        rules.add(createDegradeRule("getAttractionById", RuleConstant.DEGRADE_GRADE_RT, 200, 5, 10));
+        rules.add(createDegradeRule("getAttractionsByCity", RuleConstant.DEGRADE_GRADE_RT, 300, 5, 10));
 
         // 路线规划熔断 - 异常比例熔断
-        rules.add(createDegradeRule("planOptimalRoute", RuleConstant.DEGRADE_GRADE_EXCEPTION_RATIO, 0, 0.5, 10));
+        rules.add(createDegradeRule("planOptimalRoute", RuleConstant.DEGRADE_GRADE_EXCEPTION_RATIO, 0, 5, 10));
 
         DegradeRuleManager.loadRules(rules);
         log.info("Sentinel 熔断规则加载完成，共 {} 条", rules.size());
@@ -66,12 +82,12 @@ public class SentinelRuleConfig {
         return rule;
     }
 
-    private DegradeRule createDegradeRule(String resource, int grade, double threshold, double minRequestAmount, int statIntervalMs) {
+    private DegradeRule createDegradeRule(String resource, int grade, double threshold, int minRequestAmount, int statIntervalMs) {
         DegradeRule rule = new DegradeRule();
         rule.setResource(resource);
         rule.setGrade(grade);
         rule.setCount(threshold);
-        rule.setMinRequestAmount((int) minRequestAmount);
+        rule.setMinRequestAmount(minRequestAmount);
         rule.setStatIntervalMs(statIntervalMs * 1000);
         rule.setTimeWindow(10); // 熔断10秒后恢复
         return rule;

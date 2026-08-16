@@ -69,7 +69,8 @@ CREATE TABLE IF NOT EXISTS `attraction` (
     INDEX idx_city (city_id),
     INDEX idx_rating (rating DESC),
     INDEX idx_name (name),
-    INDEX idx_city_rating_cover (city_id, rating DESC, name, id)
+    INDEX idx_city_rating_id (city_id, rating DESC, id DESC),
+    INDEX idx_rating_id (rating DESC, id DESC)
 ) COMMENT='景点表' ENGINE=InnoDB;
 
 -- ============================================================

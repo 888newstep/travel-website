@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import travel.common.entity.messaging.MqMessageStatusRecord;
 import travel.common.mapper.messaging.MqMessageStatusMapper;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 
 @Slf4j
@@ -18,6 +20,7 @@ public class MqMessageStatusService {
     public static final String CONFIRMED = "CONFIRMED";
     public static final String RETURNED = "RETURNED";
     public static final String FAILED = "FAILED";
+    public static final String RETRYING = "RETRYING";
 
     private final MqMessageStatusMapper mapper;
 
@@ -68,6 +71,57 @@ public class MqMessageStatusService {
         logTransition(messageId, FAILED, mapper.markFailed(messageId, formatError(cause)));
     }
 
+    public List<MqMessageStatusRecord> findCompensationCandidates(
+            LocalDateTime staleBefore,
+            int maxRetryCount,
+            int limit) {
+        if (staleBefore == null) {
+            throw new IllegalArgumentException("staleBefore不能为空");
+        }
+        validatePositive(maxRetryCount, "maxRetryCount");
+        validatePositive(limit, "limit");
+        return mapper.findCompensationCandidates(staleBefore, maxRetryCount, limit);
+    }
+
+    /**
+     * 使用带状态条件的 UPDATE 抢占一条补偿记录，避免多实例同时重发同一消息。
+     */
+    public boolean claimForCompensation(
+            Long id,
+            LocalDateTime staleBefore,
+            int maxRetryCount) {
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException("消息状态记录 id 必须为正数");
+        }
+        if (staleBefore == null) {
+            throw new IllegalArgumentException("staleBefore不能为空");
+        }
+        validatePositive(maxRetryCount, "maxRetryCount");
+        return mapper.claimForCompensation(id, staleBefore, maxRetryCount) == 1;
+    }
+
+    public void markCompensationDispatched(Long id) {
+        if (id == null || id <= 0) {
+            log.warn("补偿消息状态更新缺少有效 id: id={}", id);
+            return;
+        }
+        logTransition(String.valueOf(id), DISPATCHED, mapper.markCompensationDispatched(id));
+    }
+
+    public void markCompensationFailed(
+            Long id,
+            Throwable cause,
+            LocalDateTime nextAttemptTime) {
+        if (id == null || id <= 0) {
+            log.warn("补偿消息失败状态更新缺少有效 id: id={}", id);
+            return;
+        }
+        if (nextAttemptTime == null) {
+            throw new IllegalArgumentException("nextAttemptTime不能为空");
+        }
+        mapper.markCompensationFailed(id, formatError(cause), nextAttemptTime);
+    }
+
     private void logTransition(String messageId, String targetStatus, int affectedRows) {
         if (affectedRows == 0) {
             log.debug("消息状态未迁移: messageId={}, targetStatus={}, 可能已被并发回调处理",
@@ -84,6 +138,12 @@ public class MqMessageStatusService {
 
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private void validatePositive(int value, String fieldName) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(fieldName + "必须为正数");
+        }
     }
 
     private String formatError(Throwable cause) {

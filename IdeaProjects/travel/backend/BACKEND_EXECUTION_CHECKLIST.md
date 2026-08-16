@@ -1534,7 +1534,7 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 
 ## Phase 8: AIAdvanced DTO 边界收口与 SP 级交付计划
 
-更新时间：2026-08-10
+更新时间：2026-08-16
 
 状态：进行中。当前目标不是继续堆叠功能，而是把已有功能收敛为可验证、可观测、可压测、可复盘的工程成果。
 
@@ -1551,7 +1551,7 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 - [x] `AIPlanRouteRequest.preferences` DTO 化为 `AIPlanRoutePreferences`，显式约束目的地、天数、出行风格、交通偏好和预算。
 - [x] `AIPlanRouteRequest.constraints` DTO 化为 `AIPlanRouteConstraints`，支持每日时长、必游/避开景点和固定时间窗口。
 - [x] 使用 `JsonNode extensions` 兼容动态扩展字段，未知字段通过 `@JsonAnySetter` 保留并限制最多20个。
-- [x] 固定时间窗口增加 HH:mm 格式校验和结束时间不得早于开始时间的跨字段校验。
+- [x] 固定时间窗口增加 HH:mm 格式校验和结束时间必须晚于开始时间的跨字段校验。
 - [x] `AIAdvancedService.planRoute` 改为接收强类型偏好与约束 DTO，Controller 不再向 Service 传递路线规划 Map。
 - [x] 新增 `AIAdvancedControllerTest` 4 个契约测试，覆盖 DTO 绑定、扩展字段保留、非法天数、倒序时间窗口和约束冲突错误码。
 - [x] 新增 `AIPlanConstraintScheduler`，将每日时长、必游景点、避开景点和固定时间窗口落实到 `dailyPlans.activities` 结果。
@@ -1559,15 +1559,21 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 - [x] 避开景点采用大小写不敏感的包含匹配；固定时间窗口要求活动完整落入窗口；每日时长只累计活动分钟数，不累计空档。
 - [x] 修正固定窗口游标：长活动无法放入时不消费窗口，后续可行的短活动仍可安排。
 - [x] 新增结果断言，覆盖必游出现、避开过滤、窗口完整包含、每日总分钟数上限、冲突和容量不足。
+- [x] 增加可选活动前瞻：餐厅等非必游活动若会阻塞本日剩余必游景点的容量或固定窗口，则跳过可选活动，避免贪心调度造成错误失败。
+- [x] 增加逐日结果断言：验证必游活动顺序、必游不被默认避开规则误伤、每日日志活动分钟数独立受限，以及窗口不足时的具体落点和失败景点名称。
+- [x] 零长度时间窗口（如 `09:00-09:00`）在 DTO 校验层直接拒绝，并增加 Controller 契约测试。
 
 ### 8.2 本轮验证结果
 
 - `mvn -q -pl route-service -am -DskipTests compile`：通过。
 - `mvn -q -pl route-service -am -DforkCount=1 -DreuseForks=false test`：通过。
-- 本轮前基线为 route-service 99 个测试，失败0、错误0、跳过0；本轮新增 `RouteOptimizationControllerTest` 6 个后，route-service 全量回归为105个测试，失败0、错误0、跳过0；上游 common 模块 Rabbit 发布测试1个通过，联动合计106个测试。
+- 本轮前基线为 route-service 99 个测试，失败0、错误0、跳过0；本轮新增 `RouteOptimizationControllerTest` 6 个和 `AIAssistantControllerTest` 3 个后，route-service 全量回归为108个测试，失败0、错误0、跳过0；上游 common 模块 Rabbit 发布测试1个通过，联动合计109个测试。
 - 本轮新增路线规划行为/冲突测试 8 个，新增 Controller 约束异常映射测试 1 个。
+- 本轮新增路线约束回归断言 5 个、零长度时间窗口 Controller 测试 1 个；定向执行 `AIAdvancedServiceImplTest` 20 个和 `AIAdvancedControllerTest` 8 个，失败0、错误0。
+- route-service 本轮已生成 23 个 Surefire 测试报告，合计 113 个测试，失败0、错误0；但全量 Maven 命令在报告生成后 240 秒内未正常退出，未将该命令标记为通过，测试进程收尾问题转入 P8.7 排查。
 - P8.2 本轮新增 `AISmartItinerary` 服务与 Controller 测试 6 个，验证动态偏好绑定、稳定结果 DTO、缓存命中和参数校验。
 - 本轮新增 `AIControllerTest` 3 个，验证 `/ai/itinerary/generate` 的动态偏好绑定、预算透传、天数上限和偏好字段数量上限。
+- 本轮新增 `AIAssistantControllerTest` 3 个，验证问答请求 DTO 绑定、空问题校验前置、旧优化 POST 路径和新别名路径的结果字段断言。
 - 本轮新增 `/ai/recommend` DTO 契约测试 1 个，验证 `JsonNode` 偏好绑定、AI 调用参数保留和响应字段断言。
 - 本轮新增 `/ai/advanced/guide` DTO 契约测试 3 个，验证动态偏好保留为 `JsonNode`、天数上限、偏好字段数量上限和校验失败时不调用 Service。
 - 本轮新增图像分析动态 payload 转换测试 1 个，验证 `AIAnalyzeImageResponse.details` 使用 `Map<String, JsonNode>`，并过滤第三方内部 `success/error` 元数据。
@@ -1583,9 +1589,22 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 - Milvus 边界确认：旅游后端无 Milvus 依赖和运行时配置，云端 Milvus 仅服务 `newagent`/`novel_agent`，本项目后续若接入必须新增独立适配器、配置和集成测试。
 - 全仓 `mvn -q test` 当前受既有多模块测试类路径/Mockito 隔离问题影响，后续在 P8.7 统一治理，不将该失败归因于本轮路线约束改造。
 
-### 8.3 后续执行顺序
+### 8.3 本轮验证结果（2026-08-16）
 
-#### P8.1 [已完成] 先收口 AIAdvanced 请求契约
+- 新增 `deploy/scripts/check-infra-health.ps1`：混合基础设施只读健康检查脚本，输出可读的 TCP/协议级连通状态报告，零写入操作，凭证通过 `.env` 注入。
+- 环境配置加载：`.env` 文件成功读取，DB_HOST、RABBITMQ_HOST 等覆盖生效。
+- MySQL `127.0.0.1:3306` — TCP ✅；认证跳过（应用层由 Spring Boot 环境变量注入密码连接）。
+- Redis `127.0.0.1:6379` — TCP ✅；服务器端启用 requirepass，应用层由 Spring Boot 环境变量注入密码连接。
+- RabbitMQ `<CLOUD_HOST_PLACEHOLDER>:5672` — AMQP TCP ✅；Management `15672` HTTP ✅ → **API 响应 200，节点名 `rabbit@98a46279fbab`**。凭证 `admin/<PASSWORD_PLACEHOLDER>` 经 Management API Basic Auth 认证成功，确认云端 RabbitMQ 生产凭据已就绪。PowerShell 无 PSCloudAMQP 模块，无法做底层 AMQP 握手测试；应用层由 Spring Boot 通过配置文件注入 `RABBITMQ_USERNAME/PASSWORD`，后续需部署服务后以真实业务消息验证 publisher confirm/consumption/DLQ 链路。
+- Milvus `<CLOUD_HOST_PLACEHOLDER>:19530` — gRPC TCP ✅；本项目无依赖确认。
+- Nacos `localhost:8848` — TCP ❌（本机未启动）。
+- common 模块编译 + 测试：48 个测试全部通过，BUILD SUCCESS。
+- attraction-service、route-service、collection-service、file-service 全部静默编译通过（无报错退出）。
+- RabbitMQ 云端预检更新：TCP 可达性持续有效，**Management API Basic Auth 200 + 节点信息确认可访问**（2026-08-16 追加验证）。仍未宣称 AMQP 发布确认或消费链路真实验收完成——需要部署服务后发一条测试消息验证完整链路。
+
+### 8.4 后续执行顺序
+
+#### P8.2 [已完成] 先收口 AIAdvanced 请求契约
 
 1. 将 `AIPlanRouteRequest.preferences` 从动态 Map 拆为 `AIPlanRoutePreferences`，字段至少包含 `destination`、`days`、`travelStyle`、`transportPreference` 和 `budget`。
 2. 将 `AIPlanRouteRequest.constraints` 拆为 `AIPlanRouteConstraints`，字段至少包含 `maxDailyHours`、`mustVisitAttractions`、`avoidAttractions` 和 `fixedTimeWindows`。
@@ -1639,12 +1658,59 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 
 #### P8.3 做可量化的数据库、缓存和接口性能优化
 
-1. 为景点检索、路线列表、收藏列表、未读统计建立基线：记录 QPS、平均延迟、P95、P99、错误率、缓存命中率和数据库慢查询数。
-2. 使用 JMeter 或 Gatling 固化至少三种场景：正常读流量、热点景点突发流量、深分页和高并发缓存未命中。
-3. 检查联合索引的最左匹配、覆盖列和排序方向，所有新增索引必须提供 `EXPLAIN` 结果和写入成本评估。
-4. 对 Redis 热点 key 增加 TTL 抖动、空值缓存、单飞重建和必要的热点拆分；记录命中率、回源率、锁竞争和重建耗时。
-5. 对 Feign、AI 外部调用和文件服务配置连接超时、读取超时、最大响应体和并发隔离，禁止使用无界等待。
-6. 将每次压测数据归档到 `docs/performance/`，记录机器规格、数据规模、并发数、预热方式、版本号和结论，保证数据可复现。
+本轮增量完成：
+
+- [x] 新增 `docs/performance/README.md`，明确 Win11 本机 MySQL/Redis、云端 RabbitMQ/Milvus 的测试边界、前置条件和结果采集要求。
+- [x] 新增 `attraction-normal-read.jmx`、`attraction-hotspot-burst.jmx`、`attraction-cursor-deep-page.jmx` 三套 JMeter 5.6.3 非 GUI 场景，支持 `-Jhost`、`-Jport`、`-Jthreads`、`-JdurationSeconds` 参数覆盖。
+- [x] 游标深分页场景通过 JSON PostProcessor 提取 `data.lastRating` 和 `data.lastId`，动态构造下一页 `rating:id` 游标，避免硬编码分页游标。
+- [x] 新增 `RESULT_TEMPLATE.md` 和 `data/cursor-samples.csv`，并将实际结果与原始 `.jtl`、HTML 报告统一归档到 `docs/performance/results/formal-20260812/`。
+- [x] 2026-08-12 本机预检：MySQL `127.0.0.1:3306`、Redis `127.0.0.1:6379` 和 JMeter 5.6.3 可用；云端 RabbitMQ `<CLOUD_HOST_PLACEHOLDER>:5672/15672`、Milvus `<CLOUD_HOST_PLACEHOLDER>:19530` 可达，但均不纳入本轮读接口请求链路。
+- [x] attraction-service 正式执行 `normal-read`、`hotspot-burst`、`cursor-deep-page` 三个场景各 3 轮，共 9 轮；HTTP/业务断言错误率均为 0%。
+- [x] 建立迁移前正式基线：normal-read 吞吐 `2889.72~3665.22/s`、平均 RT `2.55~3.24ms`；hotspot-burst 吞吐 `19.35~39.94/s`、平均 RT `1215.18~2493.65ms`；cursor-deep-page 吞吐 `3001.71~3747.51/s`、平均 RT `2.66~4.45ms`。
+- [x] 发现并记录热点突发瓶颈：50 并发下出现秒级延迟，P95 `2304~4595ms`、P99 `2504.5~5983.22ms`，不得包装为性能达标。
+- [x] `AttractionServiceImpl.getByCityId()` 与游标查询统一为 `rating DESC, id DESC` 稳定排序；非法游标改为安全返回空结果，并新增 `CursorPageResultTest` 断言。
+- [x] 在本机 MySQL 执行幂等索引迁移，新增 `idx_city_rating_id(city_id, rating DESC, id DESC)` 与 `idx_rating_id(rating DESC, id DESC)`；城市查询真实 `EXPLAIN` 从 `idx_city + Using filesort` 变为 `idx_city_rating_id + Extra=NULL`。
+- [x] 修正覆盖索引实验文档：明确完整 `Attraction` 查询包含大字段，新增索引属于排序索引；仅窄投影允许验证 `Using index`，禁止误称为完整实体覆盖索引。
+- [x] 修复 Redis 手工 `ObjectMapper` 未注册 `JavaTimeModule` 的缓存序列化缺陷，新增 `RedisConfigTest` 验证包含 `LocalDateTime` 的 `Attraction` 序列化/反序列化。
+- [x] `mvn -q -pl common -am test`、`mvn -q -pl attraction-service -am test`、`mvn -q -DskipTests compile` 和最新 attraction-service JAR 打包均通过。
+- [x] 最新 JAR 的真实 Redis 缓存契约已复测：城市查询和关键词查询的响应数据稳定，缓存键可观察，城市 TTL 约 `3600s`、搜索 TTL 约 `1800s`，业务 `cache_hits` 和 `cache_misses` 均有增量；证据见 `docs/performance/results/cache-verification-20260812-cleanup-fix/`。该结论使用业务计数，不以 Redis 全局 `keyspace_hits/keyspace_misses` 替代。
+- [x] 索引迁移和 Redis 序列化修复后的双隔离三场景短回归已完成：`normal-read`、`hotspot-burst`、`cursor-deep-page` 各持续 30 秒，Sentinel 静态规则和实时同步写任务均显式关闭，三场景 HTTP/业务断言错误数均为 0；证据见 `docs/performance/results/post-fix-20260813-pure-read-180s/`。
+- [x] 默认 Sentinel 规则单独完成诊断回归：`searchAttractions` 超过 QPS 30 后返回业务 `429`（HTTP 仍为 200），无 HTTP 5xx；证据见 `docs/performance/results/post-fix-20260813-match-contains/`。该目录只证明限流规则生效，不得作为无错误性能成绩。
+- [x] 修复性能脚本的日志隔离问题：默认以 `INFO/WARN` 启动压测服务，避免同步 DEBUG 日志污染长尾；需要排障时可显式传入 `-VerboseServiceLogs`。生产默认日志配置未改变。
+- [x] 修复后正式三轮复测已完成：三个场景各 3 轮、每轮 90 秒，三轮均显式关闭 Sentinel 静态规则、实时同步写任务和详细服务日志，9 个场景轮次 JMeter 错误数均为 0；证据见 `docs/performance/results/post-fix-20260813-formal-round-1-quiet-logs/`、`post-fix-20260813-formal-round-2-quiet-logs/` 和 `post-fix-20260813-formal-round-3-quiet-logs/`。
+- [x] 增加默认关闭的 `travel.performance.metrics-endpoints-enabled` 开关；仅性能回归脚本临时开启，并限制 `GET /actuator/**` 与 `GET /druid/*.json` 只能由 `127.0.0.1` 访问，避免为了采集指标而扩大线上运维端点暴露面。
+- [x] 扩展性能指标采集：按服务 PID 记录进程 CPU/内存/线程/句柄快照，若存在 `jcmd` 则记录 JVM `PerfCounter.print`，并保存 Actuator 指标、Druid 基础统计及各自的不可用原因；未实际复测前不把这些字段填成性能结论。
+- [x] 收口外部调用超时：OpenFeign 默认连接 `1000ms`、读取 `3000ms`；高德路径规划 `RestTemplate` 默认连接 `3000ms`、读取 `5000ms`；高德天气、百度 AI 和问答 AI 的 OkHttp 客户端增加总调用超时，避免无界等待占满业务线程。
+- [x] 新增 `route-list-normal-read.jmx`、`collection-list-normal-read.jmx` 和 `notification-unread-read.jmx`，分别覆盖路线列表、收藏列表和未读统计，并固化 HTTP/业务响应断言、端口、并发和 JWT 注入参数。
+- [x] 性能 README 增加路线/收藏/未读场景的数据规模快照、单线程预热、JWT 失效和空数据剔除规则；JWT 只通过 `-Jtoken` 临时注入，不写入仓库和结果目录。
+- [x] 优化收藏列表读链路：关闭无用 `COUNT(*)`，空列表缓存可命中，分页缓存按用户正确失效；路线详情由逐条 Feign 调用改为一次 `/routes/batch` 批量调用，批量失败保留基础收藏数据降级。
+- [x] 新增 `RouteCollectionServiceImplTest` 3 个结果断言，覆盖空列表缓存、批量调用替代 N+1、分页关闭 count 和批量失败降级。
+- [x] 未读统计和当前用户通知列表优先读取 `SecurityContext` 中的 JWT 用户 ID，避免每次请求回源 user-service；无请求上下文时保留原 Feign 兜底，并新增 2 个认证主体/兜底断言。
+- [x] 新增 `BoundedHttpBodyReader`，为高德、百度 AI、OpenAI 和高德路径规划响应增加 `1 MiB` 默认上限；已知 `Content-Length` 提前拒绝，分块响应流式超过上限时中断，并支持 `EXTERNAL_MAX_RESPONSE_BYTES` 覆盖。
+- [x] 新增 provider 级 `ExternalCallBulkhead`，使用公平 `Semaphore` 隔离高德、百度 AI 和 OpenAI 同步调用；默认并发上限分别为 `32/8/8`，获取许可最多等待 `50ms`，超限沿用现有 fallback/异常边界。
+- [x] 高德 8 个、百度 AI 6 个和 OpenAI 1 个 OkHttp 调用全部使用 `try-with-resources` 管理并发许可，确保异常、超时和响应体超限时许可仍能释放；`ExternalCallBulkheadTest` 已覆盖拒绝和幂等释放。
+- [x] `application.properties` 与 `application-prod.properties` 均支持 `EXTERNAL_ACQUIRE_TIMEOUT_MS`、`AMAP_MAX_CONCURRENT_CALLS`、`BAIDU_AI_MAX_CONCURRENT_CALLS` 和 `OPENAI_MAX_CONCURRENT_CALLS` 覆盖。
+- [x] 文件服务新增 `FileStoragePolicy`：上传目录配置化，原始文件名执行路径净化和长度限制，脚本/可执行扩展名拒绝，单文件默认 `10 MiB`、单批默认 `10` 个；Spring Multipart 请求上限默认 `10/50 MiB`。
+- [x] 文件服务的两套历史上传入口、下载和删除入口统一复用存储策略；数据库保存失败时清理已落盘文件，下载/删除拒绝超出根目录的数据库路径。
+- [x] 新增 `FileStoragePolicyTest` 5 个断言和 `ResourceFileControllerTest` 3 个结果断言，覆盖 Windows 路径剥离、超大文件、危险扩展名、路径穿越、批量数量限制，以及上传/批量上传/下载失败不能返回成功。
+- [x] 新增 `run-authenticated-read-baseline.ps1`，统一执行路线列表、收藏列表和未读统计的 JWT 注入、服务端口预检、单线程预热、三轮正式执行、JTL/HTML/断言失败归档；路线/收藏默认 10 并发、未读默认 20 并发，实测服务未启动时会在压测前终止，不生成伪造基线。
+
+1. [~] attraction-service 景点读取的迁移前基线、修复后短回归和修复后三轮正式复测均已建立，且下一轮已具备 JVM/进程/Actuator/Druid 关联证据采集能力；路线列表、收藏列表、未读统计已完成独立脚本和契约建设，但正式基线仍待执行，当前不能据此宣称全项目接口性能达标。
+2. [x] 使用 JMeter 固化正常读、热点突发和游标深分页场景，并增加 HTTP 200、业务响应断言和游标提取断言；断言口径已修正为兼容统一响应体的 JSON 字段出现次数，默认限流诊断另行保留业务 `429` 结果。
+3. [~] 已完成城市排序联合索引迁移并提供迁移前后 `EXPLAIN`；全局排序索引仍需在更大数据量下复测优化器选择、扫描行数和写入成本。
+4. [x] Redis `JavaTimeModule` 序列化缺陷、真实缓存键、TTL、命中/回源计数和响应稳定性均已验证；证据分别见 `RedisConfigTest` 和 `docs/performance/results/cache-verification-20260812-cleanup-fix/`。
+5. [x] 修复后三轮双隔离正式复测已完成：每个场景 90 秒、共 3 轮，`normal-read`、`hotspot-burst`、`cursor-deep-page` 均为 0 错误；正式结果中的吞吐、P95/P99 和最大 RT 仍存在轮次波动，不能把单轮最高吞吐当作稳定容量上限。
+6. [~] 路线列表、收藏列表、未读统计已建立独立 JMeter 场景和统一执行脚本，并完成 XML/JMeter 加载校验；收藏列表已消除路线详情 N+1，未读统计已减少当前用户 Feign 回源；正式基线仍待真实测试用户 JWT、数据快照、缓存预热和至少三轮正式执行，避免把景点读接口结果外推到其他服务。
+7. [~] Feign、地图和 AI HTTP 客户端已经补齐有限连接/读取/总调用超时、响应体上限和 provider 级并发隔离；真实外部依赖超时故障演练仍待完成，当前不能宣称外部调用治理整体闭环。
+8. [x] 已归档迁移前 9 轮正式原始 `.jtl`、HTML 报告、环境信息和依赖快照；修复后缓存验证、短回归、三轮正式复测和 Sentinel 诊断均使用独立结果目录，未覆盖 `formal-20260812/`。
+
+下一轮执行顺序与验收条件：
+
+1. [~] 已补齐关联 CPU、GC、Druid 活跃连接、Redis 命中/回源、MySQL 慢查询和固定数据快照所需的采集入口；仍需用同一安静日志和双隔离口径重新执行至少 3 轮，才能确认 `hotspot-burst` 最大 RT 波动是否来自环境噪声、缓存重建还是资源争用。
+2. [~] 已完成路线列表、收藏列表、未读统计的 JMeter 场景、鉴权注入、业务断言、统一执行脚本和数据快照/预热规则；下一步使用真实测试用户和固定数据快照执行单线程预热加三轮正式基线，并分别记录 P95/P99、错误率、Redis 命中/回源、Druid 连接池和进程资源。
+3. [~] Feign、地图和 AI 外部调用的连接超时、读取超时、总调用超时、最大响应体和 provider 级并发隔离已完成代码核对；文件服务上传/落盘边界已完成代码核对，真实外部依赖故障演练仍需补齐，禁止使用无界等待。
+4. [ ] 在更大数据量下重新执行城市查询和全局排序查询 `EXPLAIN`，同时记录索引选择、估计扫描行数、`Using filesort`/`Using index`、写入耗时和索引体积；没有完整投影覆盖证据时不得称为覆盖索引。
+5. [ ] P8.3 只有在其他核心接口基线、全局索引大数据复测和外部依赖隔离完成后，才可整体标记为完成；当前三轮景点读复测不能代表全项目性能验收。
 
 #### P8.4 补齐分布式可靠性和数据一致性
 
@@ -1652,11 +1718,18 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 
 - [x] RabbitMQ 连接配置切换为可通过环境变量覆盖的云端地址，凭证不写入代码。
 - [x] RabbitMQ 发布端增加 correlated confirm、returned message、mandatory 和消息关联号。
-- [~] 已完成 RabbitMQ 发布状态表第一阶段：`mq_message_status` 实体、Mapper、条件状态迁移、可选持久化开关、发布端 `PENDING -> DISPATCHED`、confirm ack/nack/returned 回调和结果断言测试；增量迁移脚本见 `docs/infrastructure/MQ_MESSAGE_STATUS_MIGRATION.sql`。本地 MySQL 尚未执行迁移，云端 AMQP 凭证和真实 confirm 尚未验证。
-- [ ] 仍需补充消费端幂等、重试队列、死信队列和补偿任务；既有队列未直接追加 DLX 参数，避免云端同名队列声明冲突。
+* [x] RabbitMQ 发布端 correlated confirm + returned + mandatory + 唯一关联号已上线，结果断言测试通过（[RabbitReliableMessageRepublisherTest](common/src/test/java/travel/common/service/RabbitReliableMessageRepublisherTest.java)）。
+* [x] MQ 消息状态持久化第一阶段完成：mq_message_status 实体、Mapper、SQL 条件更新、可选持久化开关 MQ_STATUS_PERSISTENCE_ENABLED 和 publish 端 PENDING -> DISPATCHED + confirm ack/nack/returned 回调，增量迁移见 [MQ_MESSAGE_STATUS_MIGRATION.sql](docs/infrastructure/MQ_MESSAGE_STATUS_MIGRATION.sql)。
+* [x] 版本化可靠通知 V1 拓扑已完成：主交换机/队列、三档 TTL 重试队列（5s/30s/120s）、死信交换机/队列，默认不生效。
+* [x] 生产端可靠通知开关已加入 MessageProducerService，MQ_RELIABLE_NOTIFICATION_PRODUCER_ENABLED=true 后自动发到新版本化交换机。
+* [x] 消费端 ReliableNotificationConsumer 手动 ACK + Redis 双层幂等 + DB source_message_id 唯一键兜底；消费者测试 13 个全部通过（[ReliableNotificationConsumerTest](collection-service/src/test/java/travel/collection/messaging/ReliableNotificationConsumerTest.java)）。
+* [x] 补偿任务 MqMessageCompensationTask 默认关闭，批量查询 → 原子抢占 → re-publish → confirm/return 回调收敛；测试覆盖正确重发、抢占竞争、re-publish 异常写回 FAILED+nextAttemptTime、脏载荷拦截和配置边界（[MqMessageCompensationTaskTest](common/src/test/java/travel/common/service/MqMessageCompensationTaskTest.java)）。
+* [x] Redis 幂等服务测试 7 个通过（[RedisMessageIdempotencyServiceTest](common/src/test/java/travel/common/service/RedisMessageIdempotencyServiceTest.java)），拓扑 Bean 测试 4 个通过（[ReliableNotificationRabbitConfigTest](common/src/test/java/travel/common/config/ReliableNotificationRabbitConfigTest.java)）。
+* [x] 数据库初始化 SQL 已更新：`notification.source_message_id` 列和唯一索引加入 [init_complete.sql](collection-service/src/main/resources/db/init_complete.sql)，增量迁移见 [MQ_RELIABLE_NOTIFICATION_MIGRATION.sql](docs/infrastructure/MQ_RELIABLE_NOTIFICATION_MIGRATION.sql)。
+* [~] 本地 MySQL 仍未执行迁移脚本；云端 AMQP 凭证和生产链路仍未在真实 broker 上验收。所有结论来自 Mock + 编译验证。
 
 1. 梳理收藏、路线生成、文件上传、消息通知和跨服务写操作的事务边界，明确哪些场景使用 Seata，哪些场景使用最终一致性。
-2. 对消息生产、消费、重试、死信和补偿链路补充状态机测试，验证重复投递、消费超时、服务重启和补偿任务幂等。
+2. ~~对消息生产、消费、重试、死信和补偿链路补充状态机测试~~ — 代码完成：共 49 个单测（common + collection-service），失败 0 错误 0。待真实 broker 故障演练。
 3. 对外部 AI 调用增加统一超时、重试、熔断、降级和错误分类，重试只允许用于幂等或具备幂等键的请求。
 4. 为路线生成和文件处理增加幂等请求号，避免用户重复点击造成重复任务、重复扣费或重复写入。
 5. 对定时任务增加分布式锁、任务超时、失败告警和手工重跑入口，保留任务执行记录与结果摘要。

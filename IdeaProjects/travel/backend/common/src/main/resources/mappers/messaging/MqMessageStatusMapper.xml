@@ -10,7 +10,7 @@
             dispatched_at = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
         WHERE message_id = #{messageId}
-          AND status = 'PENDING'
+          AND status IN ('PENDING', 'RETRYING')
     </update>
 
     <update id="markConfirmed">
@@ -20,7 +20,7 @@
             last_error = NULL,
             updated_at = CURRENT_TIMESTAMP
         WHERE message_id = #{messageId}
-          AND status IN ('PENDING', 'DISPATCHED')
+          AND status IN ('PENDING', 'DISPATCHED', 'RETRYING')
     </update>
 
     <update id="markReturned">
@@ -31,7 +31,7 @@
             next_attempt_time = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
         WHERE message_id = #{messageId}
-          AND status IN ('PENDING', 'DISPATCHED', 'CONFIRMED')
+          AND status IN ('PENDING', 'DISPATCHED', 'CONFIRMED', 'RETRYING')
     </update>
 
     <update id="markFailed">
@@ -42,6 +42,71 @@
             next_attempt_time = CURRENT_TIMESTAMP,
             updated_at = CURRENT_TIMESTAMP
         WHERE message_id = #{messageId}
-          AND status IN ('PENDING', 'DISPATCHED')
+          AND status IN ('PENDING', 'DISPATCHED', 'RETRYING')
+    </update>
+
+    <select id="findCompensationCandidates" resultType="travel.common.entity.messaging.MqMessageStatusRecord">
+        SELECT id,
+               message_id,
+               message_type,
+               exchange_name,
+               routing_key,
+               payload_json,
+               status,
+               retry_count,
+               last_error,
+               next_attempt_time,
+               dispatched_at,
+               confirmed_at,
+               created_at,
+               updated_at
+        FROM mq_message_status
+        WHERE retry_count &lt; #{maxRetryCount}
+          AND (
+                (status IN ('FAILED', 'RETURNED')
+                    AND (next_attempt_time IS NULL OR next_attempt_time &lt;= CURRENT_TIMESTAMP))
+                OR
+                (status IN ('PENDING', 'DISPATCHED', 'RETRYING')
+                    AND updated_at &lt;= #{staleBefore})
+              )
+        ORDER BY id ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="claimForCompensation">
+        UPDATE mq_message_status
+        SET status = 'RETRYING',
+            last_error = 'compensation claimed',
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND retry_count &lt; #{maxRetryCount}
+          AND (
+                (status IN ('FAILED', 'RETURNED')
+                    AND (next_attempt_time IS NULL OR next_attempt_time &lt;= CURRENT_TIMESTAMP))
+                OR
+                (status IN ('PENDING', 'DISPATCHED', 'RETRYING')
+                    AND updated_at &lt;= #{staleBefore})
+              )
+    </update>
+
+    <update id="markCompensationDispatched">
+        UPDATE mq_message_status
+        SET status = 'DISPATCHED',
+            dispatched_at = CURRENT_TIMESTAMP,
+            last_error = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND status = 'RETRYING'
+    </update>
+
+    <update id="markCompensationFailed">
+        UPDATE mq_message_status
+        SET status = 'FAILED',
+            retry_count = retry_count + 1,
+            last_error = LEFT(#{errorMessage}, 1000),
+            next_attempt_time = #{nextAttemptTime},
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = #{id}
+          AND status = 'RETRYING'
     </update>
 </mapper>

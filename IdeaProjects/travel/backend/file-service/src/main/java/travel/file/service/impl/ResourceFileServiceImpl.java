@@ -11,10 +11,12 @@ import travel.common.mapper.user_community_mapper.FileCommentMapper;
 import travel.common.mapper.user_community_mapper.FileTagMapper;
 import travel.common.mapper.travel_recommendation_mapper.ResourceFileMapper;
 import travel.file.service.ResourceFileService;
+import travel.file.storage.FileStoragePolicy;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,44 +32,23 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     private final ResourceFileMapper resourceFileMapper;
     private final FileTagMapper fileTagMapper;
     private final FileCommentMapper fileCommentMapper;
-
-    private static final String RESOURCE_DIR = "c:/resources/";
-    private static final String RESOURCE_PATH = "/resources/";
+    private final FileStoragePolicy fileStoragePolicy;
 
     @Override
     public Map<String, Object> uploadFile(MultipartFile file, Integer userId, String description) {
         Map<String, Object> result = new HashMap<>();
+        Path storedPath = null;
+        boolean saved = false;
         try {
-            if (file.isEmpty()) {
-                result.put("success", false);
-                result.put("msg", "文件为空");
-                return result;
-            }
-
-            File dir = new File(RESOURCE_DIR);
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
-
-            String originalFilename = file.getOriginalFilename();
-            if (originalFilename == null) {
-                result.put("success", false);
-                result.put("msg", "文件名不能为空");
-                return result;
-            }
-            String fileName = UUID.randomUUID() + "__" + originalFilename;
-            String filePath = RESOURCE_DIR + fileName;
-
-            file.transferTo(new File(filePath));
-
-            String fileType = originalFilename.substring(originalFilename.lastIndexOf(".") + 1);
+            FileStoragePolicy.StoredFile storedFile = fileStoragePolicy.store(file);
+            storedPath = storedFile.path();
 
             ResourceFile resourceFile = new ResourceFile();
             resourceFile.setFileId(UUID.randomUUID().toString());
-            resourceFile.setFileName(originalFilename);
-            resourceFile.setFilePath(RESOURCE_PATH + fileName);
-            resourceFile.setFileSize(file.getSize());
-            resourceFile.setFileType(fileType);
+            resourceFile.setFileName(storedFile.originalFilename());
+            resourceFile.setFilePath(fileStoragePolicy.toPublicPath(storedFile.storedFilename()));
+            resourceFile.setFileSize(storedFile.size());
+            resourceFile.setFileType(storedFile.fileType());
             resourceFile.setUploadTime(LocalDateTime.now());
             resourceFile.setUploadUserId(userId);
             resourceFile.setDescription(description);
@@ -79,27 +60,35 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
             resourceFile.setCreatedAt(LocalDateTime.now());
             resourceFile.setUpdatedAt(LocalDateTime.now());
 
-            boolean saved = save(resourceFile);
+            saved = save(resourceFile);
             if (saved) {
                 result.put("success", true);
                 result.put("fileId", resourceFile.getId());
-                result.put("fileName", originalFilename);
+                result.put("fileName", storedFile.originalFilename());
                 result.put("filePath", resourceFile.getFilePath());
             } else {
-                new File(filePath).delete();
                 result.put("success", false);
                 result.put("msg", "文件上传失败，数据库保存失败");
             }
+        } catch (IllegalArgumentException e) {
+            result.put("success", false);
+            result.put("msg", e.getMessage());
         } catch (Exception e) {
             log.error("文件上传失败", e);
             result.put("success", false);
-            result.put("msg", "文件上传失败: " + e.getMessage());
+            result.put("msg", "文件上传失败");
+        } finally {
+            if (!saved) {
+                fileStoragePolicy.deleteQuietly(storedPath);
+            }
         }
         return result;
     }
 
     @Override
     public List<Map<String, Object>> batchUploadFiles(List<MultipartFile> files, Integer userId, String description) {
+        fileStoragePolicy.validateBatchSize(files == null ? 0 : files.size());
+        files.forEach(fileStoragePolicy::validate);
         List<Map<String, Object>> results = new ArrayList<>();
         for (MultipartFile file : files) {
             results.add(uploadFile(file, userId, description));
@@ -165,16 +154,17 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     public boolean deleteFile(Integer fileId) {
         try {
+            if (fileId == null || fileId <= 0) {
+                return false;
+            }
             ResourceFile resourceFile = getById(fileId);
             if (resourceFile == null) {
                 return false;
             }
 
-            String filePath = RESOURCE_DIR + resourceFile.getFilePath().substring(RESOURCE_PATH.length());
-            File file = new File(filePath);
-            if (file.exists()) {
-                file.delete();
-            }
+            Path storedPath = fileStoragePolicy.resolveStoredPath(
+                    resourceFile.getFilePath(), resourceFile.getFileName());
+            fileStoragePolicy.deleteQuietly(storedPath);
 
             return removeById(fileId);
         } catch (Exception e) {
@@ -743,37 +733,18 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     public ResourceFile uploadResourceFile(MultipartFile file, String category, String description) {
         log.info("上传资源文件: category={}, description={}", category, description);
+        Path storedPath = null;
+        boolean saved = false;
         try {
-            if (file.isEmpty()) {
-                log.error("文件为空");
-                return null;
-            }
-
-            File dir = new File(RESOURCE_DIR);
-            if (!dir.exists()) {
-                dir.mkdirs();
-            }
-
-            String originalFilename = file.getOriginalFilename();
-            if (originalFilename == null) {
-                log.error("文件名不能为空");
-                return null;
-            }
-
-            String fileName = UUID.randomUUID() + "__" + originalFilename;
-            String filePath = RESOURCE_DIR + fileName;
-            file.transferTo(new File(filePath));
-
-            String fileType = originalFilename.contains(".")
-                    ? originalFilename.substring(originalFilename.lastIndexOf(".") + 1)
-                    : "";
+            FileStoragePolicy.StoredFile storedFile = fileStoragePolicy.store(file);
+            storedPath = storedFile.path();
 
             ResourceFile resourceFile = new ResourceFile();
             resourceFile.setFileId(UUID.randomUUID().toString());
-            resourceFile.setFileName(originalFilename);
-            resourceFile.setFilePath(RESOURCE_PATH + fileName);
-            resourceFile.setFileSize(file.getSize());
-            resourceFile.setFileType(fileType);
+            resourceFile.setFileName(storedFile.originalFilename());
+            resourceFile.setFilePath(fileStoragePolicy.toPublicPath(storedFile.storedFilename()));
+            resourceFile.setFileSize(storedFile.size());
+            resourceFile.setFileType(storedFile.fileType());
             resourceFile.setUploadTime(LocalDateTime.now());
             resourceFile.setCategory(category);
             resourceFile.setDescription(description);
@@ -786,21 +757,31 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
             resourceFile.setCreatedAt(LocalDateTime.now());
             resourceFile.setUpdatedAt(LocalDateTime.now());
 
-            boolean saved = save(resourceFile);
+            saved = save(resourceFile);
             if (!saved) {
-                new File(filePath).delete();
                 log.error("文件上传失败，数据库保存失败");
                 return null;
             }
             return resourceFile;
+        } catch (IllegalArgumentException e) {
+            log.warn("文件上传请求被拒绝: reason={}", e.getMessage());
+            return null;
         } catch (Exception e) {
             log.error("上传资源文件失败", e);
             return null;
+        } finally {
+            if (!saved) {
+                fileStoragePolicy.deleteQuietly(storedPath);
+            }
         }
     }
 
     @Override
     public List<ResourceFile> batchUploadResourceFiles(MultipartFile[] files, String category) {
+        fileStoragePolicy.validateBatchSize(files == null ? 0 : files.length);
+        for (MultipartFile file : files) {
+            fileStoragePolicy.validate(file);
+        }
         log.info("批量上传资源文件: category={}, count={}", category, files.length);
         List<ResourceFile> resourceFiles = new ArrayList<>();
         for (MultipartFile file : files) {
@@ -813,16 +794,24 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     public String downloadResourceFile(Long id) {
         log.info("下载资源文件: id={}", id);
+        if (id == null || id <= 0) {
+            return null;
+        }
         ResourceFile file = getById(id.intValue());
         if (file == null) {
             return null;
         }
-        // 返回文件的实际磁盘路径
-        String filePath = file.getFilePath();
-        if (filePath != null && filePath.startsWith(RESOURCE_PATH)) {
-            return RESOURCE_DIR + filePath.substring(RESOURCE_PATH.length());
+        try {
+            Path storedPath = fileStoragePolicy.resolveStoredPath(file.getFilePath(), file.getFileName());
+            if (!Files.isRegularFile(storedPath)) {
+                log.warn("资源文件不存在: id={}, path={}", id, storedPath);
+                return null;
+            }
+            return storedPath.toString();
+        } catch (IllegalArgumentException e) {
+            log.warn("资源文件路径非法: id={}, reason={}", id, e.getMessage());
+            return null;
         }
-        return RESOURCE_DIR + file.getFileName();
     }
 
     @Override

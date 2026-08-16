@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
  * RabbitMQ 发布状态记录。
  *
  * <p>DISPATCHED 只表示本地 RabbitTemplate 接受了发送调用，
- * CONFIRMED 才表示 broker 返回了 publisher confirm；二者不能混用。</p>
+ * CONFIRMED 才表示 broker 返回了 publisher confirm；二者不能混用。
+ * RETRYING 表示补偿任务已经原子抢占该记录，避免多实例重复发送。</p>
  */
 @Data
 @TableName("mq_message_status")

@@ -5,16 +5,20 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import travel.common.entity.user_community.Notification;
 import travel.common.entity.user_community.User;
 import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
 import travel.common.mapper.user_community_mapper.NotificationMapper;
+import travel.common.vo.NotificationMessageVO;
 import travel.collection.service.NotificationService;
 import travel.collection.service.UserService;
 import travel.collection.util.CurrentUserSupport;
 import travel.common.utils.ThirdApiUtil;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.slf4j.Logger;
@@ -57,6 +61,59 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Notification createReliableNotification(
+            String sourceMessageId,
+            NotificationMessageVO message) {
+        if (sourceMessageId == null || sourceMessageId.isBlank()) {
+            throw new IllegalArgumentException("sourceMessageId cannot be blank");
+        }
+        if (message == null) {
+            throw new IllegalArgumentException("notification message cannot be null");
+        }
+
+        Notification existing = lambdaQuery()
+                .eq(Notification::getSourceMessageId, sourceMessageId)
+                .one();
+        if (existing != null) {
+            return existing;
+        }
+
+        Notification notification = new Notification();
+        notification.setUserId(message.getUserId());
+        notification.setType(message.getType());
+        notification.setTitle(message.getTitle());
+        notification.setContent(message.getContent());
+        notification.setRedirectUrl(resolveRedirectUrl(message));
+        notification.setSourceMessageId(sourceMessageId);
+        notification.setIsRead(false);
+        notification.setCreatedAt(LocalDateTime.now());
+        notification.setUpdatedAt(LocalDateTime.now());
+
+        try {
+            save(notification);
+            return notification;
+        } catch (DuplicateKeyException duplicateKeyException) {
+            // 两个消费者同时越过 Redis 快速路径时，唯一键竞争仍应收敛为成功。
+            Notification concurrent = lambdaQuery()
+                    .eq(Notification::getSourceMessageId, sourceMessageId)
+                    .one();
+            if (concurrent != null) {
+                return concurrent;
+            }
+            throw duplicateKeyException;
+        }
+    }
+
+    private String resolveRedirectUrl(NotificationMessageVO message) {
+        if (message.getExtraData() == null) {
+            return null;
+        }
+        Object redirectUrl = message.getExtraData().get("redirectUrl");
+        return redirectUrl == null ? null : String.valueOf(redirectUrl);
+    }
+
+    @Override
     public List<Notification> getByUserId(Integer userId, Integer page, Integer size) {
         LambdaQueryWrapper<Notification> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Notification::getUserId, userId);
@@ -67,8 +124,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     public List<Notification> getCurrentUserNotifications(Integer page, Integer size) {
-        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
-        return getByUserId(currentUser.getId(), page, size);
+        return getByUserId(resolveCurrentUserId(), page, size);
     }
 
     @Override
@@ -91,9 +147,8 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean markAllAsRead() {
-        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         LambdaQueryWrapper<Notification> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Notification::getUserId, currentUser.getId());
+        queryWrapper.eq(Notification::getUserId, resolveCurrentUserId());
         queryWrapper.eq(Notification::getIsRead, false);
 
         Notification notification = new Notification();
@@ -120,11 +175,29 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     public Integer getUnreadCount() {
-        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         LambdaQueryWrapper<Notification> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Notification::getUserId, currentUser.getId());
+        queryWrapper.eq(Notification::getUserId, resolveCurrentUserId());
         queryWrapper.eq(Notification::getIsRead, false);
         return (int) count(queryWrapper);
+    }
+
+    /**
+     * 优先使用 JWT 过滤器写入的认证主体，避免每次通知读请求都回源 user-service。
+     * 非 HTTP 线程或历史调用未建立 SecurityContext 时保留原有 Feign 兜底。
+     */
+    private Integer resolveCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated()) {
+            Object principal = authentication.getPrincipal();
+            if (principal instanceof Number number
+                    && number.longValue() > 0
+                    && number.longValue() <= Integer.MAX_VALUE) {
+                return number.intValue();
+            }
+        }
+
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
+        return currentUser.getId();
     }
 
     @Override

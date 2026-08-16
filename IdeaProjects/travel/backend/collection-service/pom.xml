@@ -23,6 +23,13 @@
             <artifactId>common</artifactId>
         </dependency>
 
+        <!-- Collection controllers and services use Lombok annotations directly. -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Spring Boot -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

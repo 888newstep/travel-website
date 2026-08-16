@@ -191,6 +191,26 @@ class AIAdvancedControllerTest {
     }
 
     @Test
+    void shouldRejectZeroLengthTimeWindowBeforeCallingService() throws Exception {
+        String requestBody = """
+                {
+                  "constraints": {
+                    "fixedTimeWindows": [
+                      {"start": "09:00", "end": "09:00"}
+                    ]
+                  }
+                }
+                """;
+
+        mockMvc.perform(post("/ai/advanced/plan")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(requestBody))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(aiAdvancedService);
+    }
+
+    @Test
     void shouldBindGuidePreferencesAsJsonNodesAndForwardToService() throws Exception {
         when(aiAdvancedService.generateTravelGuide(any(), anyInt(), anyMap()))
                 .thenReturn(AITravelGuideContent.builder().success(true).days(2).build());

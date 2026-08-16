@@ -40,11 +40,23 @@ public class CursorPageResult<T> {
         if (cursor == null || cursor.isBlank()) {
             return null;
         }
-        String[] parts = cursor.split(":");
+        String[] parts = cursor.split(":", -1);
         if (parts.length != 2) {
             return null;
         }
-        return new BigDecimal[]{new BigDecimal(parts[0]), new BigDecimal(parts[1])};
+        try {
+            BigDecimal rating = new BigDecimal(parts[0]);
+            BigDecimal id = new BigDecimal(parts[1]);
+            if (rating.signum() < 0
+                    || id.signum() <= 0
+                    || id.scale() > 0
+                    || id.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
+                return null;
+            }
+            return new BigDecimal[]{rating, id};
+        } catch (NumberFormatException ex) {
+            // 游标来自客户端，非法格式应按“无效游标”处理，不能冒泡为 500。
+            return null;
+        }
     }
 }
-
