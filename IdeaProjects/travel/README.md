@@ -106,21 +106,17 @@ flowchart LR
 
 ## 技术栈
 
+全栈概览（后端完整技术栈详见 [backend/README.md](backend/README.md)，前端详见 [frontend/README.md](frontend/README.md)）：
+
 | 层级 | 技术 |
 |------|------|
-| 后端框架 | Spring Boot 3.3.5, Spring Cloud 2023.0.3, Spring Cloud Alibaba 2023.0.3.2 |
-| 语言 | Java 17 |
-| 服务治理 | Nacos, Spring Cloud Gateway, OpenFeign, LoadBalancer |
-| 数据层 | MySQL 8.0, MyBatis-Plus 3.5.8, Druid 连接池 |
-| 缓存与锁 | Redis, Redisson 3.37, Spring Data Redis |
-| 消息 | RabbitMQ（可靠投递 + 定时重投 + Redis 幂等） |
-| AI | DashScope（通义千问）2.14, 百度 AI SDK, OkHttp |
-| 算法 | JTS 1.19 几何计算, 自研遗传算法 TSP |
-| 任务调度 | XXL-Job 2.4.1 |
-| 限流与容错 | Sentinel, 自定义 RateLimiter |
-| 前端 | React 19, TypeScript, Vite 6, React Router 7, Axios, Tailwind CSS 4 |
-| API 文档 | Knife4j 4.5 / OpenAPI 3.0 |
-| 部署 | Docker, Docker Compose, Nginx |
+| 后端 | Spring Boot 3.3.5 · Spring Cloud 2023.0.3 · Spring Cloud Alibaba 2023.0.3.2 · Java 17 · MyBatis-Plus 3.5.8 · Druid 1.2.23 |
+| 前端 | React 19 · TypeScript · Vite 6 · React Router 7 · Axios · Tailwind CSS 4 |
+| 基础设施 | MySQL 8.0 · Redis（Redisson 3.37）· RabbitMQ（可靠消息投递）· Nacos · XXL-Job 2.4.1 |
+| AI | DashScope（通义千问）2.14 · 百度 AI SDK · 高德地图 · OkHttp |
+| 安全与治理 | Spring Security + JWT（jjwt 0.12.5）· Sentinel · Knife4j 4.5 / OpenAPI 3.0 |
+| 算法 | JTS 1.19 几何计算 · 自研遗传算法 TSP |
+| 部署 | Docker · Docker Compose · Nginx |
 
 ---
 
@@ -152,17 +148,13 @@ Copy-Item deploy\.env.example deploy\.env
 cd backend/nacos/nacos
 bin/startup.cmd -m standalone
 
-# 2. 编译并依次启动六个微服务（每个终端一个）
+# 2. 编译后端
 cd backend
 mvn clean package -DskipTests
-java -jar user-service/target/user-service-1.0-SNAPSHOT.jar        # 8091
-java -jar attraction-service/target/attraction-service-1.0-SNAPSHOT.jar  # 8092
-java -jar route-service/target/route-service-1.0-SNAPSHOT.jar      # 8093
-java -jar collection-service/target/collection-service-1.0-SNAPSHOT.jar  # 8094
-java -jar file-service/target/file-service-1.0-SNAPSHOT.jar        # 8095
-java -jar gateway/target/gateway-1.0-SNAPSHOT.jar                  # 8090
 
-# 3. 启动前端（可选，或使用 Nginx 托管 dist）
+# 3. 依次启动 6 个微服务（命令与端口详见 backend/README.md「启动服务」）
+
+# 4. 启动前端（可选，或使用 Nginx 托管 dist）
 cd frontend
 npm install
 npm run dev                                                       # http://localhost:3000
@@ -187,7 +179,7 @@ docker compose -f deploy/docker-compose.yml up --build -d
 
 统一响应结构：`{ "code": 200, "message": "操作成功", "data": {...}, "timestamp": 1704067200000, "success": true }`。
 
-所有请求经网关 `http://localhost:8090/api/**`。
+所有请求经网关 `http://localhost:8090/api/**`。完整接口表见 [backend/README.md](backend/README.md#主要-api)，以下为代表性调用示例：
 
 ### 用户登录
 
@@ -248,38 +240,16 @@ curl -X POST -F "file=@guide.pdf" http://localhost:8090/api/file/upload
 
 ```
 travel/
-├── backend/                        # 后端（Spring Cloud 多模块 Maven 工程）
-│   ├── common/                     # 公共层：实体/统一响应/异常/基础设施配置
-│   │   └── src/main/java/travel/common/
-│   │       ├── config/             # MyBatis-Plus/Redis/Redisson/RabbitMQ/Sentinel/Security 配置
-│   │       ├── entity/             # 20+ 张数据表对应实体
-│   │       ├── service/            # 分布式锁/消息生产/可靠消息重投/Redis 幂等
-│   │       ├── utils/              # JWT/限流/高德地图/缓存/Result 等工具
-│   │       └── exception/          # 全局异常处理与业务异常体系
-│   ├── gateway/                    # 统一网关：路由/鉴权/CORS/Sentinel 限流
-│   ├── user-service/               # 用户与认证
-│   ├── attraction-service/         # 景点/城市/美食/实时状态
-│   ├── route-service/              # 路线/路径算法/AI 智能体（核心域）
-│   │   └── src/main/java/travel/route/
-│   │       ├── algorithm/          # 遗传算法 TSP 优化器
-│   │       ├── controller/         # Route / AI 系列控制器
-│   │       ├── dto/ai/             # AI 请求响应模型（行程/预算/攻略/多模态…）
-│   │       ├── service/            # 智能路线/优化/实时调整/个性化推荐/推荐算法
-│   │       └── feign/              # 跨服务调用客户端
-│   ├── collection-service/         # 游记/评论/收藏/分享/通知/反馈
-│   └── file-service/               # 文件上传与标签管理
-├── frontend/                       # 前端（React 19 + Vite + TypeScript）
-│   ├── src/api/                    # 按域封装的 API 客户端
-│   ├── src/pages/                  # 首页/景点/路线/AI 对话/实时/社区等 16 个页面
-│   ├── src/components/             # 通用组件与布局
-│   ├── src/lib/                    # 请求封装/鉴权（token 存储）
-│   └── scripts/                    # 本地开发脚本
-├── deploy/                         # Docker Compose / Dockerfile / Nginx / 环境变量模板
-├── docs/                           # 实习指南、数据库实验报告
-├── ops/scripts/                    # 运维脚本（健康检查等）
-├── scripts/                        # 开发脚本（API smoke 测试）
-├── start-all.bat / stop-all.bat    # Windows 一键启动/停止
-└── STARTUP_GUIDE.md                # 详细启动指南
+├── backend/            # Spring Cloud 多模块后端（common / gateway / user-service / attraction-service /
+│                       #   route-service / collection-service / file-service）
+│                       #   ※ 技术栈、模块结构、启动与 API 详见 backend/README.md
+├── frontend/           # React 19 + Vite + TypeScript（详见 frontend/README.md）
+├── deploy/             # Docker Compose / Dockerfile / Nginx / 环境变量模板
+├── docs/               # 实习指南、数据库实验报告
+├── ops/scripts/        # 运维脚本（健康检查等）
+├── scripts/            # 开发脚本（API smoke 测试）
+├── start-all.bat / stop-all.bat   # Windows 一键启动/停止
+└── STARTUP_GUIDE.md    # 详细启动指南
 ```
 
 ---

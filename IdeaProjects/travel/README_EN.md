@@ -107,21 +107,17 @@ flowchart LR
 
 ## Tech Stack
 
+Full-stack overview (full backend stack in [backend/README.md](backend/README.md), frontend in [frontend/README.md](frontend/README.md)):
+
 | Layer | Technology |
 |-------|------------|
-| Backend framework | Spring Boot 3.3.5, Spring Cloud 2023.0.3, Spring Cloud Alibaba 2023.0.3.2 |
-| Language | Java 17 |
-| Service governance | Nacos, Spring Cloud Gateway, OpenFeign, LoadBalancer |
-| Data layer | MySQL 8.0, MyBatis-Plus 3.5.8, Druid connection pool |
-| Cache & lock | Redis, Redisson 3.37, Spring Data Redis |
-| Messaging | RabbitMQ (reliable delivery + scheduled retry + Redis idempotency) |
-| AI | DashScope (Qwen) 2.14, Baidu AI SDK, OkHttp |
-| Algorithms | JTS 1.19 geometry, in-house genetic-algorithm TSP |
-| Task scheduling | XXL-Job 2.4.1 |
-| Rate limiting & resilience | Sentinel, custom RateLimiter |
-| Frontend | React 19, TypeScript, Vite 6, React Router 7, Axios, Tailwind CSS 4 |
-| API docs | Knife4j 4.5 / OpenAPI 3.0 |
-| Deployment | Docker, Docker Compose, Nginx |
+| Backend | Spring Boot 3.3.5 · Spring Cloud 2023.0.3 · Spring Cloud Alibaba 2023.0.3.2 · Java 17 · MyBatis-Plus 3.5.8 · Druid 1.2.23 |
+| Frontend | React 19 · TypeScript · Vite 6 · React Router 7 · Axios · Tailwind CSS 4 |
+| Infrastructure | MySQL 8.0 · Redis (Redisson 3.37) · RabbitMQ (reliable messaging) · Nacos · XXL-Job 2.4.1 |
+| AI | DashScope (Qwen) 2.14 · Baidu AI SDK · AMap · OkHttp |
+| Security & governance | Spring Security + JWT (jjwt 0.12.5) · Sentinel · Knife4j 4.5 / OpenAPI 3.0 |
+| Algorithms | JTS 1.19 geometry · in-house genetic-algorithm TSP |
+| Deployment | Docker · Docker Compose · Nginx |
 
 ---
 
@@ -153,17 +149,13 @@ Copy-Item deploy\.env.example deploy\.env
 cd backend/nacos/nacos
 bin/startup.cmd -m standalone
 
-# 2. Build and start the six microservices (one terminal each)
+# 2. Build the backend
 cd backend
 mvn clean package -DskipTests
-java -jar user-service/target/user-service-1.0-SNAPSHOT.jar        # 8091
-java -jar attraction-service/target/attraction-service-1.0-SNAPSHOT.jar  # 8092
-java -jar route-service/target/route-service-1.0-SNAPSHOT.jar      # 8093
-java -jar collection-service/target/collection-service-1.0-SNAPSHOT.jar  # 8094
-java -jar file-service/target/file-service-1.0-SNAPSHOT.jar        # 8095
-java -jar gateway/target/gateway-1.0-SNAPSHOT.jar                  # 8090
 
-# 3. Start frontend (optional, or use Nginx to serve dist)
+# 3. Start the 6 microservices in turn (commands & ports in backend/README.md "启动服务")
+
+# 4. Start frontend (optional, or use Nginx to serve dist)
 cd frontend
 npm install
 npm run dev                                                       # http://localhost:3000
@@ -188,7 +180,7 @@ Copy `deploy/.env.example` to `deploy/.env` and fill in: `DB_PASSWORD`, `REDIS_P
 
 Unified response structure: `{ "code": 200, "message": "...", "data": {...}, "timestamp": 1704067200000, "success": true }`.
 
-All requests go through the gateway `http://localhost:8090/api/**`.
+All requests go through the gateway `http://localhost:8090/api/**`. Full API table in [backend/README.md](backend/README.md#主要-api); below are representative examples:
 
 ### User login
 
@@ -249,38 +241,16 @@ curl -X POST -F "file=@guide.pdf" http://localhost:8090/api/file/upload
 
 ```
 travel/
-├── backend/                        # Backend (Spring Cloud multi-module Maven project)
-│   ├── common/                     # Common layer: entities / unified response / exceptions / infra config
-│   │   └── src/main/java/travel/common/
-│   │       ├── config/             # MyBatis-Plus / Redis / Redisson / RabbitMQ / Sentinel / Security config
-│   │       ├── entity/             # Entities for 20+ database tables
-│   │       ├── service/            # Distributed lock / message producer / reliable retry / Redis idempotency
-│   │       ├── utils/              # JWT / rate limiting / AMap / cache / Result utilities
-│   │       └── exception/          # Global exception handling and business exception hierarchy
-│   ├── gateway/                    # Unified gateway: routing / auth / CORS / Sentinel rate limiting
-│   ├── user-service/               # Users & authentication
-│   ├── attraction-service/         # Attractions / cities / food / real-time status
-│   ├── route-service/              # Routes / path algorithms / AI agents (core domain)
-│   │   └── src/main/java/travel/route/
-│   │       ├── algorithm/          # Genetic-algorithm TSP optimizer
-│   │       ├── controller/         # Route / AI series controllers
-│   │       ├── dto/ai/             # AI request/response models (itinerary / budget / guide / multimodal…)
-│   │       ├── service/            # Smart route / optimization / real-time adjust / personalized recommendation
-│   │       └── feign/              # Cross-service call clients
-│   ├── collection-service/         # Travelogues / comments / favorites / shares / notifications / feedback
-│   └── file-service/               # File upload & tag management
-├── frontend/                       # Frontend (React 19 + Vite + TypeScript)
-│   ├── src/api/                    # Domain-packaged API clients
-│   ├── src/pages/                  # 16 pages: home / attractions / routes / AI chat / real-time / community…
-│   ├── src/components/             # Common components & layout
-│   ├── src/lib/                    # Request wrappers / auth (token storage)
-│   └── scripts/                    # Local dev scripts
-├── deploy/                         # Docker Compose / Dockerfile / Nginx / env templates
-├── docs/                           # Internship guide, database experiment report
-├── ops/scripts/                    # Ops scripts (health check, etc.)
-├── scripts/                        # Dev scripts (API smoke test)
-├── start-all.bat / stop-all.bat    # Windows one-click start / stop
-└── STARTUP_GUIDE.md                # Detailed startup guide
+├── backend/            # Spring Cloud multi-module backend (common / gateway / user-service / attraction-service /
+│                       #   route-service / collection-service / file-service)
+│                       #   ※ Tech stack, module structure, startup & API: see backend/README.md
+├── frontend/           # React 19 + Vite + TypeScript (see frontend/README.md)
+├── deploy/             # Docker Compose / Dockerfile / Nginx / env templates
+├── docs/               # Internship guide, database experiment report
+├── ops/scripts/        # Ops scripts (health check, etc.)
+├── scripts/            # Dev scripts (API smoke test)
+├── start-all.bat / stop-all.bat   # Windows one-click start / stop
+└── STARTUP_GUIDE.md    # Detailed startup guide
 ```
 
 ---
