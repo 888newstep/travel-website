@@ -1,0 +1,125 @@
+# ============================================
+# 智慧旅游系统 — CI/CD Pipeline
+# ============================================
+# 触发条件：
+#   - push 到 main/master 分支
+#   - 任何 PR
+#
+# 流程：
+#   1. Checkout 代码
+#   2. 设置 JDK 17
+#   3. 启动 MySQL + Redis 服务容器
+#   4. 使用 Maven 编译 & 测试（backend）
+#   5. 前端依赖安装 + 类型检查 & 构建（frontend）
+# ============================================
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ==================== 后端 编译 & 测试 ====================
+  backend:
+    name: Backend Build & Test
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: change-me
+          MYSQL_DATABASE: travel_website
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h localhost -uroot -pchange-me --silent"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: 创建 .env 文件（CI 用默认值）
+        run: cp deploy/.env.example deploy/.env
+
+      - name: Maven 编译
+        working-directory: backend
+        run: mvn compile -B
+
+      - name: Maven 测试
+        working-directory: backend
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_NAME: travel_website
+          DB_USERNAME: root
+          DB_PASSWORD: change-me
+          REDIS_HOST: 127.0.0.1
+          REDIS_PORT: "6379"
+          JWT_SECRET: test-jwt-secret-for-ci-only-must-be-long-enough-32-chars
+        run: mvn verify -B
+
+      - name: 上传测试报告
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: surefire-reports
+          path: backend/**/target/surefire-reports
+
+  # ==================== 前端 类型检查 & 构建 ====================
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装依赖
+        working-directory: frontend
+        run: npm ci
+
+      - name: 类型检查
+        working-directory: frontend
+        run: npm run lint
+
+      - name: 生产构建
+        working-directory: frontend
+        run: npm run build
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-dist
+          path: frontend/dist

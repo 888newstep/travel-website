@@ -14,7 +14,7 @@ for /f "tokens=2" %%a in ('tasklist /fi "imagename eq java.exe" /nh ^| findstr /
 )
 
 echo.
-echo ✓ 微服务已停止
+echo [OK] 微服务已停止
 echo.
 echo 如需停止 Nacos，请运行: backend\nacos\nacos\bin\shutdown.cmd
 echo.
