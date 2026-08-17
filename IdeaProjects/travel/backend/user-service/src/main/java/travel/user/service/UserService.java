@@ -3,7 +3,6 @@ package travel.user.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import travel.common.entity.user_community.User;
 
-import java.util.Map;
 
 public interface UserService extends IService<User> {
 

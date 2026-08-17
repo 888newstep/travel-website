@@ -3,7 +3,6 @@ package travel.route.algorithm;
 import lombok.RequiredArgsConstructor;
 import travel.common.entity.travel_recommendation.Attraction;
 import travel.route.service.AttractionService;
-import travel.common.utils.AMapService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -18,37 +17,6 @@ public class RoutePlanAlgorithm {
     private static final Logger log = LoggerFactory.getLogger(RoutePlanAlgorithm.class);
 
     private final AttractionService attractionService;
-
-    private final AMapService aMapService;
-
-    /**
-     * 动态调整算法参数（根据景点数量、行程天数、用户偏好）
-     */
-    private AlgorithmParams getDynamicParams(int attractionCount, int maxDays, String preference) {
-        AlgorithmParams params = new AlgorithmParams();
-        if (attractionCount > 10) {
-            params.setPopulationSize(100);
-            params.setMaxGenerations(150);
-        } else {
-            params.setPopulationSize(60);
-            params.setMaxGenerations(80);
-        }
-
-        return params;
-    }
-
-    /**
-     * 算法参数封装
-     */
-    private static class AlgorithmParams {
-        private int populationSize = 80;
-        private int maxGenerations = 120;
-
-        public int getPopulationSize() { return populationSize; }
-        public void setPopulationSize(int populationSize) { this.populationSize = populationSize; }
-        public int getMaxGenerations() { return maxGenerations; }
-        public void setMaxGenerations(int maxGenerations) { this.maxGenerations = maxGenerations; }
-    }
 
     /**
      * 路线染色体（遗传算法使用）

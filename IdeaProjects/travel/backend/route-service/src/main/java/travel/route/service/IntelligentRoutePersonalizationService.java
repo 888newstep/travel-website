@@ -237,20 +237,6 @@ public class IntelligentRoutePersonalizationService {
         }
     }
 
-    private int extractDays(Object daysObj) {
-        if (daysObj instanceof Number number) {
-            return number.intValue();
-        }
-        if (daysObj instanceof String value) {
-            try {
-                return Integer.parseInt(value);
-            } catch (NumberFormatException ignored) {
-                return DEFAULT_DAYS;
-            }
-        }
-        return DEFAULT_DAYS;
-    }
-
     private int resolveDays(Integer days) {
         return days == null || days < 1 || days > 30 ? DEFAULT_DAYS : days;
     }

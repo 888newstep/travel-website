@@ -16,7 +16,6 @@ import travel.route.dto.route.RealTimeAdjustmentResult;
 import travel.route.dto.route.RealTimeTrafficFactors;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;

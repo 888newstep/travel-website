@@ -2,8 +2,6 @@ package travel.route.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import com.fasterxml.jackson.databind.JsonNode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import travel.common.entity.route_planning.Route;
 import travel.common.utils.CacheUtil;
@@ -28,7 +26,6 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class AISmartItineraryServiceImpl implements AISmartItineraryService {
 
-    private static final Logger log = LoggerFactory.getLogger(AISmartItineraryServiceImpl.class);
     private static final String ITINERARY_PREFIX = "ai:itinerary:v2:";
 
     private final RouteService routeService;

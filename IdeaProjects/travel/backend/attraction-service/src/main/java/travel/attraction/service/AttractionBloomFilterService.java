@@ -11,7 +11,6 @@ import travel.common.entity.travel_recommendation.Attraction;
 import travel.common.mapper.travel_recommendation_mapper.AttractionMapper;
 
 import jakarta.annotation.PostConstruct;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 

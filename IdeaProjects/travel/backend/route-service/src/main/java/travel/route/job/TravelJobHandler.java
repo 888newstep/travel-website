@@ -6,7 +6,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import travel.common.utils.CacheUtil;
-import travel.route.service.RouteService;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
@@ -21,7 +20,6 @@ public class TravelJobHandler {
 
     private static final Logger log = LoggerFactory.getLogger(TravelJobHandler.class);
 
-    private final RouteService routeService;
     private final CacheUtil cacheUtil;
 
     /**

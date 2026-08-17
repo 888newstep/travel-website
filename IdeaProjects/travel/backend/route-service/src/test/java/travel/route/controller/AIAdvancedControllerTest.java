@@ -234,7 +234,7 @@ class AIAdvancedControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.days").value(2));
 
-        ArgumentCaptor<Map> preferencesCaptor = ArgumentCaptor.forClass(Map.class);
+        ArgumentCaptor<Map<String, JsonNode>> preferencesCaptor = ArgumentCaptor.captor();
         verify(aiAdvancedService).generateTravelGuide(eq(1), eq(2), preferencesCaptor.capture());
 
         Map<?, ?> preferences = preferencesCaptor.getValue();

@@ -1,7 +1,6 @@
 package travel.route.dto.route;
 
 import java.util.List;
-import java.util.Map;
 
 public class RouteOptimizationSuggestionResult {
     private Integer routeId;

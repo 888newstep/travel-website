@@ -323,14 +323,4 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     private void sendAppAdjustNotification(String phone, String routeName, String adjustReason) {
         log.info("向手机号{}发送APP行程调整推送：路线{}，原因{}", phone, routeName, adjustReason);
     }
-
-    /**
-     * 分页查询辅助方法
-     */
-    private List<Notification> page(int offset, int limit, LambdaQueryWrapper<Notification> queryWrapper) {
-        // 实际项目中应该使用MyBatis-Plus的分页插件
-        // 这里暂时使用limit查询
-        queryWrapper.last("LIMIT " + offset + ", " + limit);
-        return list(queryWrapper);
-    }
 }

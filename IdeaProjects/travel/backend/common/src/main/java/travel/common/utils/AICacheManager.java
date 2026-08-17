@@ -22,7 +22,6 @@ public class AICacheManager {
     private static final String AI_RECOMMEND_PREFIX = "ai:recommend";
     private static final String AI_ITINERARY_PREFIX = "ai:itinerary";
     private static final String AI_ATTRACTION_PREFIX = "ai:attraction";
-    private static final String AI_CHAT_PREFIX = "ai:chat";
     private static final String AI_IMAGE_PREFIX = "ai:image";
 
     // 高德地图缓存键前缀
@@ -31,17 +30,11 @@ public class AICacheManager {
     private static final String AMAP_PLACE_PREFIX = "amap:place";
     private static final String AMAP_TRAFFIC_PREFIX = "amap:traffic";
 
-    // 百度AI缓存键前缀
-    private static final String BAIDU_SCENE_PREFIX = "baidu:scene";
-    private static final String BAIDU_DISH_PREFIX = "baidu:dish";
-    private static final String BAIDU_OCR_PREFIX = "baidu:ocr";
-
     // 缓存过期时间（秒）
     private static final long QA_CACHE_TTL = 3600; // 1小时
     private static final long RECOMMEND_CACHE_TTL = 7200; // 2小时
     private static final long ITINERARY_CACHE_TTL = 86400; // 24小时
     private static final long ATTRACTION_CACHE_TTL = 86400; // 24小时
-    private static final long CHAT_CACHE_TTL = 1800; // 30分钟
     private static final long IMAGE_CACHE_TTL = 86400; // 24小时
 
     private static final long WEATHER_CACHE_TTL = 1800; // 30分钟（天气变化较快）

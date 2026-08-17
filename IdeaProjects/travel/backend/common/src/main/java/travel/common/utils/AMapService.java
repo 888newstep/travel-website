@@ -101,9 +101,9 @@ public class AMapService {
 
             Map<String, Object> geoResult = reverseGeocode(lng, lat);
             if (geoResult != null) {
-                @SuppressWarnings("unchecked")
-                Map<String, Object> addressComponent = (Map<String, Object>) geoResult.get("addressComponent");
-                if (addressComponent != null && addressComponent.get("adcode") != null) {
+                Object addressRaw = geoResult.get("addressComponent");
+                if (addressRaw instanceof Map<?, ?> addressComponent
+                        && addressComponent.get("adcode") != null) {
                     String adcode = addressComponent.get("adcode").toString();
                     return getWeather(adcode);
                 }

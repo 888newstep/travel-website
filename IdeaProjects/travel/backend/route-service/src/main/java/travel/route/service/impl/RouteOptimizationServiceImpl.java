@@ -433,7 +433,6 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
             // 综合评分
             double qualityScore = (averageRating * 0.4) + (attractionsPerDay * 0.3) + (diversityScore * 0.3);
 
-            Map<String, Object> evaluation = new HashMap<>();
             log.info("评估路线质量成功: routeId={}, qualityScore={}", routeId, qualityScore);
             return RouteQualityEvaluationResult.builder()
                     .routeId(routeId)

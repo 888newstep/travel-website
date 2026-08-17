@@ -8,7 +8,6 @@ import travel.common.mapper.travel_realtime_mapper.AttractionRealtimeStatusMappe
 import travel.common.utils.AMapService;
 
 import java.time.LocalDateTime;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 

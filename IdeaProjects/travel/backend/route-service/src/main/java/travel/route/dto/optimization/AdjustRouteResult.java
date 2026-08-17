@@ -3,7 +3,6 @@ package travel.route.dto.optimization;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.travel_recommendation.Attraction;
 import java.util.List;
-import java.util.Map;
 
 public class AdjustRouteResult {
     private Route originalRoute;

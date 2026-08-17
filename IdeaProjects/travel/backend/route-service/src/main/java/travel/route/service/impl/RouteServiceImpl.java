@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @SuppressWarnings("unchecked")
@@ -85,7 +84,7 @@ public class RouteServiceImpl extends ServiceImpl<RouteMapper, Route> implements
             throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
         }
 
-        if (!route.getUserId().equals(userId)) {
+        if (route.getUserId() == null || route.getUserId().longValue() != userId.longValue()) {
             throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
         }
     }
