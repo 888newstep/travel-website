@@ -1,12 +1,17 @@
 # 智慧旅游系统 (Smart Travel System)
 
+[English](README_EN.md) | 中文
+
 基于 Spring Cloud Alibaba 微服务架构 + React 构建的**企业级智慧旅游平台**，覆盖「AI 智能出行助手 → 路线规划 → 实时数据 → 用户社区」完整链路：6 大微服务 + 智能遗传算法路径优化 + 多模态 AI 能力 + 可靠消息投递，开箱即用的 Docker Compose 一键部署。
 
+[![CI/CD Pipeline](https://github.com/888newstep/travel-website/actions/workflows/ci.yml/badge.svg)](https://github.com/888newstep/travel-website/actions/workflows/ci.yml)
 [![JDK 17](https://img.shields.io/badge/JDK-17-blue.svg)](https://adoptium.net/)
 [![Spring Boot 3](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
 [![Spring Cloud Alibaba](https://img.shields.io/badge/Spring%20Cloud%20Alibaba-2023.0.3-red.svg)](https://github.com/alibaba/spring-cloud-alibaba)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
+
+An enterprise-grade **Smart Travel Platform** built on **Spring Cloud Alibaba microservices + React**, featuring a genetic-algorithm TSP route optimizer, a multimodal AI agent matrix (Qwen / Baidu AI / AMap), and production-grade reliable messaging (RabbitMQ + outbox + idempotent retry) — with one-command Docker Compose deployment.
 
 ## 为什么选择智慧旅游系统？
 
@@ -324,9 +329,15 @@ travel/
 
 ---
 
-## 贡献
+## Contributors
 
-如果你想参与贡献，请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。所有形式的贡献都欢迎！
+Thanks to the people who have contributed to this project:
+
+<a href="https://github.com/888newstep">
+  <img src="https://github.com/888newstep.png" width="40px" alt="888newstep" />
+</a>
+
+> Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions are welcome!
 
 ---
 
