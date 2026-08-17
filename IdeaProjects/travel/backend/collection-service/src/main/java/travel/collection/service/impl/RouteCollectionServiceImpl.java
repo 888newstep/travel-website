@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
-import io.seata.spring.annotation.GlobalTransactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Lazy;
 import travel.common.entity.route_planning.Route;
@@ -44,7 +43,6 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     private final UserService userService;
     private final CacheUtil cacheUtil;
 
-    @GlobalTransactional(timeoutMills = 300000, name = "collect-route-tx")
     @Override
     public boolean collectRoute(Integer routeId, Integer userId) {
         String lockKey = "collect:" + userId + ":" + routeId;
