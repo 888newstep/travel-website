@@ -1595,7 +1595,7 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 - 环境配置加载：`.env` 文件成功读取，DB_HOST、RABBITMQ_HOST 等覆盖生效。
 - MySQL `127.0.0.1:3306` — TCP ✅；认证跳过（应用层由 Spring Boot 环境变量注入密码连接）。
 - Redis `127.0.0.1:6379` — TCP ✅；服务器端启用 requirepass，应用层由 Spring Boot 环境变量注入密码连接。
-- RabbitMQ `<CLOUD_HOST_PLACEHOLDER>:5672` — AMQP TCP ✅；Management `15672` HTTP ✅ → **API 响应 200，节点名 `rabbit@98a46279fbab`**。凭证 `admin/<PASSWORD_PLACEHOLDER>` 经 Management API Basic Auth 认证成功，确认云端 RabbitMQ 生产凭据已就绪。PowerShell 无 PSCloudAMQP 模块，无法做底层 AMQP 握手测试；应用层由 Spring Boot 通过配置文件注入 `RABBITMQ_USERNAME/PASSWORD`，后续需部署服务后以真实业务消息验证 publisher confirm/consumption/DLQ 链路。
+- RabbitMQ `<CLOUD_HOST_PLACEHOLDER>:5672` — AMQP TCP ✅；Management `15672` HTTP ✅ → **API 响应 200，节点 `rabbit@***`**。云端 RabbitMQ 生产凭据已配置到 `deploy/.env`（用户名与密码均通过环境变量注入，不落 Git），经 Management API Basic Auth 认证成功。PowerShell 无 PSCloudAMQP 模块，无法做底层 AMQP 握手测试；应用层由 Spring Boot 读取 `RABBITMQ_USERNAME/PASSWORD`，后续需部署服务后以真实业务消息验证 publisher confirm/consumption/DLQ 链路。
 - Milvus `<CLOUD_HOST_PLACEHOLDER>:19530` — gRPC TCP ✅；本项目无依赖确认。
 - Nacos `localhost:8848` — TCP ❌（本机未启动）。
 - common 模块编译 + 测试：48 个测试全部通过，BUILD SUCCESS。

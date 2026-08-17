@@ -67,7 +67,7 @@ spring:
           min-idle: 0
           max-wait: 3000ms
   rabbitmq:
-    host: ${RABBITMQ_HOST:<CLOUD_HOST_PLACEHOLDER>}
+    host: ${RABBITMQ_HOST:}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:}
     password: ${RABBITMQ_PASSWORD:}

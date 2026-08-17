@@ -68,7 +68,7 @@ spring:
           max-wait: 3000ms
         shutdown-timeout: 100ms
   rabbitmq:
-    host: ${RABBITMQ_HOST:<CLOUD_HOST_PLACEHOLDER>}
+    host: ${RABBITMQ_HOST:}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:}
     password: ${RABBITMQ_PASSWORD:}

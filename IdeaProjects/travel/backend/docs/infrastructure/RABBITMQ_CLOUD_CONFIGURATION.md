@@ -2,7 +2,7 @@
 
 ## 当前结论
 
-- `newagent` 和 `novel_agent` 中没有 RabbitMQ 配置，两个项目只把 `<CLOUD_HOST_PLACEHOLDER>` 用作 Milvus 云端地址。
+- `newagent` 和 `novel_agent` 中没有 RabbitMQ 配置，两个项目只把云端地址（占位 `<CLOUD_HOST_PLACEHOLDER>`）用作 Milvus 云端地址。
 - 本机在 2026-08-10 验证 `<CLOUD_HOST_PLACEHOLDER>:5672` 和 `<CLOUD_HOST_PLACEHOLDER>:15672` TCP 可达。
 - 旅游项目当前按 RabbitMQ 与 Milvus 使用同一云服务器处理，但该地址仍可通过 `RABBITMQ_HOST` 覆盖，不能把该推断当作永久基础设施事实。
 - RabbitMQ 可靠通知的代码链路已完成本地编译和 Mock 状态机验证；云端 AMQP 登录、publisher confirm、消费和故障恢复仍未验收。
@@ -102,7 +102,7 @@ RABBITMQ_VHOST=/
 
 2026-08-16 追加验证：
 
-- 云端凭证已配置到 `deploy/.env`（`admin/<PASSWORD_PLACEHOLDER>`），通过 Management API Basic Auth 认证成功。
+- 云端凭据已配置到 `deploy/.env`（只存放用户名/密码占位 `<cloud-user>/<cloud-password>`，真实值不落 Git），通过 Management API Basic Auth 认证成功。
 - Management API `/api/overview` → **HTTP 200**，节点名 `rabbit@98a46279fbab`。
 - AMQP TCP 5672 持续可达；PowerShell 无 PSCloudAMQP 模块无法做底层握手，但应用层凭据已通过 Management API 验证有效。
 - 健康检查脚本 `deploy/scripts/check-infra-health.ps1` 可直接复现所有结果。

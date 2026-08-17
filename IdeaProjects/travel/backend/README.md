@@ -87,7 +87,7 @@ java -jar file-service/target/file-service-1.0-SNAPSHOT.jar         # 8095
 | `DB_USERNAME` / `DB_PASSWORD` | - | 数据库账号（必须配置） |
 | `REDIS_HOST` / `REDIS_PORT` | localhost / 6379 | Redis 连接 |
 | `REDIS_PASSWORD` | - | Redis 密码（默认无） |
-| `RABBITMQ_HOST` / `RABBITMQ_PORT` | <CLOUD_HOST_PLACEHOLDER> / 5672 | RabbitMQ 连接 |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` | - / 5672 | RabbitMQ 连接（生产/云端必须通过环境变量注入） |
 | `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | - | RabbitMQ 账号 |
 | `JWT_SECRET` | - | JWT 签名密钥（生产必配强密钥） |
 | `NACOS_SERVER_ADDR` | localhost:8848 | Nacos 地址 |
