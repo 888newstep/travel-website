@@ -13,6 +13,7 @@ import travel.common.mapper.user_community_mapper.FeedbackMapper;
 import travel.collection.service.FeedbackService;
 import travel.collection.service.UserService;
 import travel.collection.util.CurrentUserSupport;
+import travel.common.security.AuthenticatedUserSupport;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,17 +21,22 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> implements FeedbackService {
 
+    private static final Set<String> FEEDBACK_TYPES = Set.of("suggestion", "bug", "complaint", "other");
+    private static final Set<String> FEEDBACK_STATUSES = Set.of("pending", "processing", "resolved");
+
     private final UserService userService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Feedback submitFeedback(Feedback feedback) {
+        validateFeedback(feedback);
         User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         feedback.setUserId(currentUser.getId());
         feedback.setStatus("pending");
@@ -45,7 +51,7 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
         LambdaQueryWrapper<Feedback> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(Feedback::getUserId, userId);
         queryWrapper.orderByDesc(Feedback::getCreatedAt);
-        Page<Feedback> feedbackPage = page(new Page<>(page, size), queryWrapper);
+        Page<Feedback> feedbackPage = page(createPage(page, size), queryWrapper);
         return feedbackPage.getRecords();
     }
 
@@ -74,6 +80,8 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean updateStatus(Long id, String status) {
+        AuthenticatedUserSupport.requireAdmin();
+        validateStatus(status);
         Feedback feedback = getById(id);
         if (feedback == null) {
             throw new BusinessException(ErrorCodeEnum.FEEDBACK_NOT_EXIST);
@@ -102,6 +110,13 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
 
     @Override
     public List<Feedback> getAllFeedbacks(Integer page, Integer size, String status, String type) {
+        AuthenticatedUserSupport.requireAdmin();
+        if (status != null && !status.isBlank()) {
+            validateStatus(status);
+        }
+        if (type != null && !type.isBlank()) {
+            validateType(type);
+        }
         LambdaQueryWrapper<Feedback> queryWrapper = new LambdaQueryWrapper<>();
         if (status != null && !status.isEmpty()) {
             queryWrapper.eq(Feedback::getStatus, status);
@@ -110,11 +125,12 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
             queryWrapper.eq(Feedback::getType, type);
         }
         queryWrapper.orderByDesc(Feedback::getCreatedAt);
-        return page(new Page<>(page, size), queryWrapper).getRecords();
+        return page(createPage(page, size), queryWrapper).getRecords();
     }
 
     @Override
     public Map<String, Object> getFeedbackStatistics() {
+        AuthenticatedUserSupport.requireAdmin();
         Map<String, Object> statistics = new HashMap<>();
 
         // 总数量
@@ -134,10 +150,11 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
         statistics.put("processingCount", (int) processingCount);
 
         // 已完成数量
-        LambdaQueryWrapper<Feedback> completedWrapper = new LambdaQueryWrapper<>();
-        completedWrapper.eq(Feedback::getStatus, "completed");
-        long completedCount = count(completedWrapper);
-        statistics.put("completedCount", (int) completedCount);
+        LambdaQueryWrapper<Feedback> resolvedWrapper = new LambdaQueryWrapper<>();
+        resolvedWrapper.eq(Feedback::getStatus, "resolved");
+        long resolvedCount = count(resolvedWrapper);
+        statistics.put("resolvedCount", (int) resolvedCount);
+        statistics.put("completedCount", (int) resolvedCount);
 
         // 类型统计
         statistics.put("byType", Map.of());
@@ -153,12 +170,17 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
     @Override
     public List<Feedback> getUserFeedbackList(Integer userId, int page, int size) {
         log.info("获取用户反馈列表: userId={}, page={}, size={}", userId, page, size);
-        return getByUserId(userId, page, size);
+        User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
+        return getByUserId(currentUser.getId(), page, size);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean replyFeedback(Long id, String replyContent) {
+        AuthenticatedUserSupport.requireAdmin();
+        if (replyContent == null || replyContent.isBlank() || replyContent.length() > 5000) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
         Feedback feedback = getById(id);
         if (feedback == null) {
             throw new BusinessException(ErrorCodeEnum.FEEDBACK_NOT_EXIST);
@@ -174,10 +196,11 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
 
     @Override
     public boolean markAsProcessed(Long feedbackId) {
+        AuthenticatedUserSupport.requireAdmin();
         log.info("标记反馈为已处理: feedbackId={}", feedbackId);
         Feedback feedback = getById(feedbackId);
         if (feedback == null) {
-            return false;
+            throw new BusinessException(ErrorCodeEnum.FEEDBACK_NOT_EXIST);
         }
         feedback.setStatus("resolved");
         feedback.setUpdatedAt(java.time.LocalDateTime.now());
@@ -186,13 +209,15 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
 
     @Override
     public List<Feedback> getFeedbackByType(String type, int page, int size) {
+        AuthenticatedUserSupport.requireAdmin();
+        validateType(type);
         log.info("根据类型获取反馈: type={}, page={}, size={}", type, page, size);
         LambdaQueryWrapper<Feedback> queryWrapper = new LambdaQueryWrapper<>();
         if (type != null && !type.isEmpty()) {
             queryWrapper.eq(Feedback::getType, type);
         }
         queryWrapper.orderByDesc(Feedback::getCreatedAt);
-        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Feedback> pageParam = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        Page<Feedback> pageParam = createPage(page, size);
         return page(pageParam, queryWrapper).getRecords();
     }
 
@@ -204,5 +229,33 @@ public class FeedbackServiceImpl extends ServiceImpl<FeedbackMapper, Feedback> i
                 Map.of("value", "complaint", "label", "投诉"),
                 Map.of("value", "other", "label", "其他")
         );
+    }
+
+    private void validateFeedback(Feedback feedback) {
+        if (feedback == null || feedback.getContent() == null || feedback.getContent().isBlank()
+                || feedback.getContent().length() > 5000
+                || (feedback.getContactInfo() != null && feedback.getContactInfo().length() > 100)) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        validateType(feedback.getType());
+    }
+
+    private void validateType(String type) {
+        if (type == null || !FEEDBACK_TYPES.contains(type)) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private void validateStatus(String status) {
+        if (status == null || !FEEDBACK_STATUSES.contains(status)) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private Page<Feedback> createPage(Integer page, Integer size) {
+        if (page == null || page < 0 || size == null || size <= 0 || size > 100) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        return new Page<>((long) page + 1, size);
     }
 }

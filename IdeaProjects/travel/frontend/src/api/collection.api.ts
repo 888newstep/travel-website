@@ -5,31 +5,22 @@ export interface RouteCollection {
     id?: number;
     userId: number;
     routeId: number;
-    note?: string;
+    notes?: string;
     category?: string;
     isPublic?: boolean;
-    createTime?: string;
+    collectionTime?: string;
 }
 
 export interface RouteCollectionVO extends RouteCollection {
     routeTitle?: string;
-    routeDescription?: string;
-    routeImage?: string;
+    routeCoverImage?: string;
+    routeDurationDays?: number;
+    routeDifficulty?: string;
 }
 
 export const collectionApi = {
-    collectRoute(routeId: number, userId: number) {
-        return apiClient.post<boolean>('/v1/route-collections/collect', { routeId, userId });
-    },
-
-    uncollectRoute(routeId: number, userId: number) {
-        return apiClient.delete<boolean>('/v1/route-collections/uncollect', {
-            data: { routeId, userId },
-        });
-    },
-
-    toggleCollection(routeId: number, userId: number) {
-        return apiClient.post<{ collected: boolean }>('/v1/route-collections/toggle', { routeId, userId });
+    toggleCollection(routeId: number) {
+        return apiClient.post<{ collected: boolean }>('/v1/route-collections/toggle', { routeId });
     },
 
     getUserCollections(userId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE_SMALL) {
@@ -38,18 +29,18 @@ export const collectionApi = {
         });
     },
 
-    checkCollected(userId: number, routeId: number) {
+    checkCollected(routeId: number) {
         return apiClient.get<boolean>('/v1/route-collections/check', {
-            params: { userId, routeId },
+            params: { routeId },
         });
     },
 
-    updateCollectionNotes(collectionId: number, userId: number, notes: string) {
-        return apiClient.put<boolean>(`/v1/route-collections/${collectionId}/notes`, { userId, notes });
+    updateCollectionNotes(collectionId: number, notes: string) {
+        return apiClient.put<boolean>(`/v1/route-collections/${collectionId}/notes`, { notes });
     },
 
-    updatePublicStatus(collectionId: number, userId: number, isPublic: boolean) {
-        return apiClient.put<boolean>(`/v1/route-collections/${collectionId}/public-status`, { userId, isPublic });
+    updatePublicStatus(collectionId: number, isPublic: boolean) {
+        return apiClient.put<boolean>(`/v1/route-collections/${collectionId}/public-status`, { isPublic });
     },
 
     getPublicCollections(page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE_SMALL) {
@@ -58,19 +49,9 @@ export const collectionApi = {
         });
     },
 
-    addCollection(collection: Omit<RouteCollection, 'id' | 'createTime'>) {
-        return apiClient.post<RouteCollection>('/v1/route-collections/add', collection);
-    },
-
-    removeCollection(userId: number, routeId: number) {
+    removeCollection(routeId: number) {
         return apiClient.delete('/v1/route-collections/remove', {
-            params: { userId, routeId },
-        });
-    },
-
-    updateCollectionNote(id: number, note: string) {
-        return apiClient.put('/v1/route-collections/update-note', null, {
-            params: { id, note },
+            params: { routeId },
         });
     },
 

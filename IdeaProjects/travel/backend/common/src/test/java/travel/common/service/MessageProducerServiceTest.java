@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class MessageProducerServiceTest {
@@ -36,15 +37,17 @@ class MessageProducerServiceTest {
 
     @Test
     void shouldAttachCorrelationDataWhenPublishingNotification() {
-        MessageProducerService service = new MessageProducerService(rabbitTemplate);
+        MessageProducerService service = new MessageProducerService(
+                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), false, true);
 
         service.sendNotification(7, "NOTICE", "title", "content");
 
         ArgumentCaptor<CorrelationData> correlationCaptor = ArgumentCaptor.forClass(CorrelationData.class);
         verify(rabbitTemplate).convertAndSend(
-                eq(RabbitMQConfig.NOTIFICATION_EXCHANGE),
-                eq(RabbitMQConfig.NOTIFICATION_ROUTING_KEY),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY),
                 any(NotificationMessageVO.class),
+                any(MessagePostProcessor.class),
                 correlationCaptor.capture());
         assertNotNull(correlationCaptor.getValue().getId());
     }
@@ -52,7 +55,7 @@ class MessageProducerServiceTest {
     @Test
     void shouldPersistStatusAndAttachMessageMetadataWhenEnabled() {
         MessageProducerService service = new MessageProducerService(
-                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), true);
+                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), true, true);
 
         service.sendNotification(7, "NOTICE", "title", "content");
 
@@ -61,8 +64,8 @@ class MessageProducerServiceTest {
         ArgumentCaptor<CorrelationData> correlationCaptor =
                 ArgumentCaptor.forClass(CorrelationData.class);
         verify(rabbitTemplate).convertAndSend(
-                eq(RabbitMQConfig.NOTIFICATION_EXCHANGE),
-                eq(RabbitMQConfig.NOTIFICATION_ROUTING_KEY),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY),
                 any(NotificationMessageVO.class),
                 postProcessorCaptor.capture(),
                 correlationCaptor.capture());
@@ -71,8 +74,8 @@ class MessageProducerServiceTest {
         verify(mqMessageStatusService).createPending(
                 eq(messageId),
                 eq("NotificationMessageVO"),
-                eq(RabbitMQConfig.NOTIFICATION_EXCHANGE),
-                eq(RabbitMQConfig.NOTIFICATION_ROUTING_KEY),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY),
                 anyString());
         verify(mqMessageStatusService).markDispatched(messageId);
 
@@ -85,11 +88,11 @@ class MessageProducerServiceTest {
     @Test
     void shouldMarkMessageFailedWhenRabbitTemplateRejectsPublish() {
         MessageProducerService service = new MessageProducerService(
-                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), true);
+                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), true, true);
         AmqpException publishException = new AmqpException("publish failed");
         doThrow(publishException).when(rabbitTemplate).convertAndSend(
-                eq(RabbitMQConfig.NOTIFICATION_EXCHANGE),
-                eq(RabbitMQConfig.NOTIFICATION_ROUTING_KEY),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY),
                 any(NotificationMessageVO.class),
                 any(MessagePostProcessor.class),
                 any(CorrelationData.class));
@@ -100,8 +103,8 @@ class MessageProducerServiceTest {
         verify(mqMessageStatusService).createPending(
                 messageIdCaptor.capture(),
                 eq("NotificationMessageVO"),
-                eq(RabbitMQConfig.NOTIFICATION_EXCHANGE),
-                eq(RabbitMQConfig.NOTIFICATION_ROUTING_KEY),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE),
+                eq(RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY),
                 anyString());
         verify(mqMessageStatusService).markFailed(eq(messageIdCaptor.getValue()), same(publishException));
         verify(mqMessageStatusService, never()).markDispatched(anyString());
@@ -110,7 +113,7 @@ class MessageProducerServiceTest {
     @Test
     void shouldNotFabricateFailedStatusWhenDispatchedUpdateFails() {
         MessageProducerService service = new MessageProducerService(
-                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), true);
+                rabbitTemplate, mqMessageStatusService, new ObjectMapper(), true, true);
         doThrow(new IllegalStateException("local mysql unavailable"))
                 .when(mqMessageStatusService).markDispatched(anyString());
 
@@ -145,5 +148,14 @@ class MessageProducerServiceTest {
         assertEquals("NotificationMessageVO", processed.getMessageProperties().getType());
         verify(mqMessageStatusService, never()).createPending(
                 anyString(), anyString(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void shouldSkipNotificationWhenReliableProducerIsDisabled() {
+        MessageProducerService service = new MessageProducerService(rabbitTemplate);
+
+        service.sendNotification(7, "NOTICE", "title", "content");
+
+        verifyNoInteractions(rabbitTemplate);
     }
 }

@@ -19,10 +19,11 @@ USE travel_website;
 CREATE TABLE IF NOT EXISTS `user` (
     id          INT PRIMARY KEY AUTO_INCREMENT COMMENT '用户ID',
     username    VARCHAR(50)  UNIQUE NOT NULL COMMENT '用户名',
-    email       VARCHAR(100) UNIQUE NOT NULL COMMENT '邮箱',
+    email       VARCHAR(100) UNIQUE COMMENT '邮箱（手机号注册时可为空）',
     password    VARCHAR(255) NOT NULL COMMENT '密码',
     avatar      VARCHAR(200) COMMENT '头像URL',
     phone       VARCHAR(20)  COMMENT '手机号',
+    user_type   INT NOT NULL DEFAULT 1 COMMENT '用户类型(1:普通用户,9:管理员)',
     created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_username (username),
@@ -103,13 +104,14 @@ CREATE TABLE IF NOT EXISTS `route_attractions` (
     id             INT PRIMARY KEY AUTO_INCREMENT COMMENT '关联ID',
     route_id       INT NOT NULL COMMENT '路线ID',
     attraction_id  INT NOT NULL COMMENT '景点ID',
-    day_number     INT DEFAULT 1 COMMENT '第几天',
-    visit_order    INT COMMENT '游览顺序',
+    day_number     INT NOT NULL DEFAULT 1 COMMENT '第几天',
+    visit_order    INT NOT NULL COMMENT '游览顺序',
     notes          TEXT COMMENT '备注',
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     FOREIGN KEY (route_id) REFERENCES route(id) ON DELETE CASCADE,
     FOREIGN KEY (attraction_id) REFERENCES attraction(id) ON DELETE CASCADE,
     UNIQUE KEY uk_route_attraction (route_id, attraction_id),
+    UNIQUE KEY uk_route_day_visit_order (route_id, day_number, visit_order),
     INDEX idx_route (route_id),
     INDEX idx_attraction (attraction_id),
     INDEX idx_day (route_id, day_number)
@@ -227,24 +229,24 @@ CREATE TABLE IF NOT EXISTS `travel_note_tags` (
 
 -- ============================================================
 -- 11. 用户收藏表 (合并 route_collection + travel_note_collection)
---     item_type: 'route' / 'travel_note'
+--     item_type: 'route' / 'travel_note' / 'route_comment'
 -- ============================================================
 CREATE TABLE IF NOT EXISTS `user_collection` (
     id              INT PRIMARY KEY AUTO_INCREMENT COMMENT '收藏ID',
     user_id         INT NOT NULL COMMENT '用户ID',
     item_id         INT NOT NULL COMMENT '被收藏项ID',
-    item_type       VARCHAR(20) NOT NULL COMMENT '类型: route/travel_note',
+    item_type       VARCHAR(20) NOT NULL COMMENT '类型: route/travel_note/route_comment',
     collection_type VARCHAR(20) DEFAULT 'collect' COMMENT '收藏方式: collect/like',
     notes           TEXT COMMENT '收藏备注',
     category        VARCHAR(50) COMMENT '分类',
     is_public       BOOLEAN DEFAULT FALSE COMMENT '是否公开',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
     FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE,
-    UNIQUE KEY uk_user_item (user_id, item_id, item_type),
+    UNIQUE KEY uk_user_item_action (user_id, item_id, item_type, collection_type),
     INDEX idx_user (user_id),
     INDEX idx_item (item_id, item_type),
     INDEX idx_category (category)
-) COMMENT='用户收藏表(路线+游记)' ENGINE=InnoDB;
+) COMMENT='用户行为表(收藏+点赞)' ENGINE=InnoDB;
 
 -- ============================================================
 -- 12. 路线评论表 (合并 route_rating + route_feedback)
@@ -253,10 +255,10 @@ CREATE TABLE IF NOT EXISTS `route_comment` (
     id                     INT PRIMARY KEY AUTO_INCREMENT COMMENT '评论ID',
     route_id               INT NOT NULL COMMENT '路线ID',
     user_id                INT NOT NULL COMMENT '用户ID',
-    rating                 DECIMAL(3,2) DEFAULT 5.0 COMMENT '综合评分(1-5)',
+    rating                 DECIMAL(3,2) DEFAULT NULL COMMENT '综合评分(1-5)',
     content                TEXT COMMENT '评论内容',
     images                 TEXT COMMENT '图片(JSON数组)',
-    likes_count            INT DEFAULT 0 COMMENT '点赞数',
+    likes_count            INT NOT NULL DEFAULT 0 COMMENT '点赞数',
     is_anonymous           BOOLEAN DEFAULT FALSE COMMENT '是否匿名',
     is_published           BOOLEAN DEFAULT TRUE COMMENT '是否发布',
     reply_to               INT COMMENT '回复评论ID',
@@ -275,8 +277,27 @@ CREATE TABLE IF NOT EXISTS `route_comment` (
     INDEX idx_user (user_id),
     INDEX idx_rating (rating DESC),
     INDEX idx_feedback_type (feedback_type),
-    INDEX idx_reply_to (reply_to)
+    INDEX idx_reply_to (reply_to),
+    INDEX idx_route_published_reply_created (route_id, is_published, reply_to, created_at),
+    INDEX idx_user_published_created (user_id, is_published, created_at)
 ) COMMENT='路线评论表(合并评分+反馈)' ENGINE=InnoDB;
+
+-- ============================================================
+-- 12.5 景点点评表
+-- ============================================================
+CREATE TABLE IF NOT EXISTS `attraction_review` (
+    id              INT PRIMARY KEY AUTO_INCREMENT COMMENT '点评ID',
+    attraction_id   INT NOT NULL COMMENT '景点ID',
+    user_id         INT NOT NULL COMMENT '用户ID',
+    rating          TINYINT NOT NULL DEFAULT 5 COMMENT '评分(1-5)',
+    content         TEXT COMMENT '点评内容',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_attraction (attraction_id),
+    INDEX idx_user (user_id),
+    INDEX idx_rating (rating DESC),
+    UNIQUE KEY uk_attraction_user (attraction_id, user_id)
+) COMMENT='景点点评表' ENGINE=InnoDB;
 
 -- ============================================================
 -- 13. 路线分享表
@@ -576,7 +597,7 @@ INSERT INTO route (title, description, city_id, duration_days, difficulty, cover
 ('青岛海滨3日游',     '崂山+栈桥+啤酒博物馆，山海之间',                 14, 3, '中等', 'https://routeimg.com/qingdao3d.jpg',     15, 2120,  398, TRUE);
 
 -- -------------------------------------------------------
--- 路线-景点关联 (28条)
+-- 路线-景点关联 (23条)
 -- -------------------------------------------------------
 INSERT INTO route_attractions (route_id, attraction_id, day_number, visit_order, notes) VALUES
 (1,  1,  1, 1, '早上8点入园，避开人流'),
@@ -601,37 +622,11 @@ INSERT INTO route_attractions (route_id, attraction_id, day_number, visit_order,
 (13, 16, 1, 1, '黄鹤楼上远眺长江大桥'),
 (14, 18, 1, 1, '鼓浪屿船票需提前网上预订'),
 (15, 19, 1, 1, '崂山建议乘坐索道上山'),
-(1,  3,  3, 1, '天坛回音壁体验'),
-(4,  5,  2, 1, '珠江夜游，看广州夜景'),
-(6,  10, 3, 1, '华清宫温泉体验'),
-(11, 11, 1, 1, '世界之窗+欢乐谷一日游'),
-(12, 18, 2, 1, '夫子庙夜游秦淮河'),
-(14, 17, 2, 1, '岳麓书院感受千年学府');
+(1,  3,  3, 1, '天坛回音壁体验');
 
 -- -------------------------------------------------------
--- 路线交通关联 (20条)
+-- 路线交通数据不写入固定种子，运行时通过高德 API 获取
 -- -------------------------------------------------------
-INSERT INTO route_transport (route_id, from_attraction_id, to_attraction_id, transport_id, transport_order, estimated_duration, distance, instructions, cost_estimate) VALUES
-(1,  1,  2,  5, 1, 120, 75.00, '走京藏高速，避开早高峰',          135.00),
-(2,  1,  3,  3, 1, 20,  5.00,  '乘坐地铁5号线至天坛东门',         3.00),
-(2,  3,  2,  5, 2, 90,  65.00,  '京藏高速直达八达岭',              120.00),
-(3,  4,  5,  3, 1, 45,  15.00, '乘坐地铁11号线转2号线',           6.00),
-(4,  6,  5,  2, 1, 30,  8.00,  '乘坐公交2号线直达',               4.00),
-(5,  7,  8,  6, 1, 90,  60.00, '乘坐成灌高铁，半小时一班',         30.00),
-(6,  9,  10, 4, 1, 40,  20.00, '打出租车约50元，车程30分钟',      50.00),
-(7,  9,  10, 3, 1, 35,  15.00, '地铁9号线转4号线',                5.00),
-(8,  11, 12, 8, 1, 60,  5.00,  '西湖游船，从断桥到灵隐',          25.00),
-(9,  13, 11, 7, 1, 20,  3.00,  '沿嘉陵江滨江路骑行',               0.00),
-(10, 14, 11, 2, 1, 25,  6.00,  '乘坐公交游2路',                    3.00),
-(12, 15, 18, 3, 1, 15,  4.00,  '地铁2号线到新街口',               2.00),
-(13, 16, 11, 7, 1, 20,  5.00,  '骑行东湖绿道，风景绝佳',           0.00),
-(14, 18, 17, 4, 1, 25,  10.00, '打车到岳麓山约30元',              30.00),
-(15, 19, 14, 5, 1, 40,  25.00, '自驾经胶州湾大桥',                 45.00),
-(1,  2,  3,  5, 2, 60,  40.00, '八达岭返回市区',                   80.00),
-(4,  5,  4,  3, 2, 20,  6.00,  '地铁到迪士尼站',                   4.00),
-(6,  10, 9,  2, 2, 30,  10.00, '公交307路到大雁塔',               2.00),
-(9,  11, 13, 3, 2, 25,  8.00,  '地铁1号线转2号线',                5.00),
-(13, 11, 16, 2, 2, 30,  12.00, '公交401路转402路',                 4.00);
 
 -- -------------------------------------------------------
 -- 景点实时状态 (20条，每个attraction_id仅一条)
@@ -662,16 +657,16 @@ INSERT INTO attraction_realtime_status (attraction_id, weather, temperature, cro
 -- 游记 (10条)
 -- -------------------------------------------------------
 INSERT INTO travel_note (user_id, title, content, cover_image, city_id, views_count, likes_count, comments_count, is_public) VALUES
-(1,  '北京三日游攻略',      '第一天：故宫博物院深度游，感受皇家气派...',          'https://travelimg.com/note1.jpg',  1,  3200, 256, 48, TRUE),
-(2,  '上海迪士尼亲子游',    '带娃游玩迪士尼的完整攻略，从早到晚不踩坑...',        'https://travelimg.com/note2.jpg',  2,  5600, 432, 89, TRUE),
-(3,  '广州美食探店记',      '在广州吃遍老字号，从早茶到夜宵...',                  'https://travelimg.com/note3.jpg',  3,  2100, 189, 35, TRUE),
-(4,  '成都慢生活体验',      '在成都感受巴适生活，火锅茶馆一个都不能少...',        'https://travelimg.com/note4.jpg',  5,  4500, 378, 67, TRUE),
-(5,  '西安历史之旅',        '十三朝古都的深度探索，穿越千年时光...',              'https://travelimg.com/note5.jpg',  6,  3800, 312, 52, TRUE),
-(6,  '杭州西湖骑行记',      '环西湖骑行30公里，每一帧都是画...',                  'https://travelimg.com/note6.jpg',  7,  5200, 456, 78, TRUE),
-(7,  '重庆火锅地图',        '三天吃了八家火锅，这份重庆火锅地图请收好...',        'https://travelimg.com/note7.jpg',  8,  6800, 589, 112,TRUE),
-(10, '南京梧桐大道',        '秋天的南京是最美的，梧桐大道走九遍...',              'https://travelimg.com/note8.jpg',  10, 1900, 234, 28, TRUE),
-(12, '武汉樱花季',          '三月武汉，樱花如雪，东湖磨山最美赏樱地...',          'https://travelimg.com/note9.jpg',  11, 4300, 567, 65, TRUE),
-(14, '厦门文艺打卡',        '鼓浪屿+沙坡尾+猫街，厦门三天文艺之旅...',           'https://travelimg.com/note10.jpg', 13, 3600, 389, 43, TRUE);
+(1,  '北京三日游攻略',      '第一天：故宫博物院深度游，感受皇家气派...',          'https://travelimg.com/note1.jpg',  1,  3200, 256, 0, TRUE),
+(2,  '上海迪士尼亲子游',    '带娃游玩迪士尼的完整攻略，从早到晚不踩坑...',        'https://travelimg.com/note2.jpg',  2,  5600, 432, 0, TRUE),
+(3,  '广州美食探店记',      '在广州吃遍老字号，从早茶到夜宵...',                  'https://travelimg.com/note3.jpg',  3,  2100, 189, 0, TRUE),
+(4,  '成都慢生活体验',      '在成都感受巴适生活，火锅茶馆一个都不能少...',        'https://travelimg.com/note4.jpg',  5,  4500, 378, 0, TRUE),
+(5,  '西安历史之旅',        '十三朝古都的深度探索，穿越千年时光...',              'https://travelimg.com/note5.jpg',  6,  3800, 312, 0, TRUE),
+(6,  '杭州西湖骑行记',      '环西湖骑行30公里，每一帧都是画...',                  'https://travelimg.com/note6.jpg',  7,  5200, 456, 0, TRUE),
+(7,  '重庆火锅地图',        '三天吃了八家火锅，这份重庆火锅地图请收好...',        'https://travelimg.com/note7.jpg',  8,  6800, 589, 0, TRUE),
+(10, '南京梧桐大道',        '秋天的南京是最美的，梧桐大道走九遍...',              'https://travelimg.com/note8.jpg',  10, 1900, 234, 0, TRUE),
+(12, '武汉樱花季',          '三月武汉，樱花如雪，东湖磨山最美赏樱地...',          'https://travelimg.com/note9.jpg',  11, 4300, 567, 0, TRUE),
+(14, '厦门文艺打卡',        '鼓浪屿+沙坡尾+猫街，厦门三天文艺之旅...',           'https://travelimg.com/note10.jpg', 13, 3600, 389, 0, TRUE);
 
 -- -------------------------------------------------------
 -- 游记标签 (30条)

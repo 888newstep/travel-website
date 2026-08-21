@@ -1,5 +1,7 @@
 package travel.collection.controller;
 
+import travel.common.exception.ExceptionPropagation;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.collection.service.UserStatisticsService;
@@ -31,7 +33,7 @@ public class UserStatisticsController {
             return Result.success("获取统计信息成功", stats);
         } catch (Exception e) {
             log.error("获取用户统计信息失败: error={}", e.getMessage());
-            return Result.error("获取统计信息失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -42,12 +44,14 @@ public class UserStatisticsController {
     @GetMapping("/{userId}")
     public Result<Map<String, Object>> getUserStatsById(@PathVariable Integer userId) {
         try {
+            var currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
+            userId = currentUser.getId();
             log.info("获取用户统计信息请求: userId={}", userId);
             Map<String, Object> stats = userStatisticsService.getUserStats(userId);
             return Result.success("获取统计信息成功", stats);
         } catch (Exception e) {
             log.error("获取用户统计信息失败: userId={}, error={}", userId, e.getMessage());
-            return Result.error("获取统计信息失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 }

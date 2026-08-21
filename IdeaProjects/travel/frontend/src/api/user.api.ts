@@ -13,6 +13,10 @@ export interface RegisterRequest {
     agreement?: boolean;
 }
 
+export interface CaptchaResponse {
+    demoCode: string;
+}
+
 export interface User {
     id: number;
     username: string;
@@ -63,9 +67,8 @@ export const userApi = {
 
 
     async sendCaptcha(phone: string) {
-        const response: any = await apiClient.post('/users/captcha', null, {
+        return apiClient.post<CaptchaResponse>('/users/captcha', null, {
             params: { phone },
         });
-        return response as boolean;
     },
 };

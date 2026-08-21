@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import travel.common.config.AIConfig;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.travel_recommendation.Attraction;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.common.utils.BoundedHttpBodyReader;
 import travel.common.utils.CacheUtil;
 import travel.common.utils.ExternalCallBulkhead;
@@ -39,7 +41,7 @@ import java.util.concurrent.TimeUnit;
 public class RealAIAssistantServiceImpl implements AIAssistantService {
 
     private static final Logger log = LoggerFactory.getLogger(RealAIAssistantServiceImpl.class);
-    private static final String AI_PREFIX = "ai:";
+    private static final String AI_PREFIX = "ai:assistant:v2:openai:";
     private static final String SOURCE_OPENAI = "openai";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
@@ -60,6 +62,7 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
 
     @Override
     public AIAskQuestionResponse askQuestion(String question, Integer userId) {
+        ensureOpenAIAvailable();
         String cacheKey = AI_PREFIX + "qa:" + question.hashCode();
 
         @SuppressWarnings("unchecked")
@@ -71,15 +74,14 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
 
         try {
             String answer = callOpenAI(question);
-            Map<String, Object> result = AIAssistantResponseSupport.buildAskQuestionPayload(question, answer, 0.95, SOURCE_OPENAI);
+            Map<String, Object> result = AIAssistantResponseSupport.buildAskQuestionPayload(
+                    question, answer, SOURCE_OPENAI);
             cacheUtil.set(cacheKey, result, 60, TimeUnit.MINUTES);
             log.info("OpenAI question answered: question={}", question);
             return AIAssistantResponseSupport.toAskQuestionResponse(result);
         } catch (Exception e) {
-            log.error("OpenAI question failed, fallback applied: question={}", question, e);
-            return AIAssistantResponseSupport.toAskQuestionResponse(
-                    AIAssistantResponseSupport.buildFallbackAskQuestionPayload(question)
-            );
+            log.error("OpenAI question failed: question={}", question, e);
+            throw dependencyFailure(e);
         }
     }
 
@@ -87,7 +89,7 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
     public AIOptimizeRouteResponse optimizeRouteByAI(Integer routeId) {
         Route route = routeService.getById(routeId);
         if (route == null) {
-            return AIAssistantResponseSupport.buildRouteNotFound(routeId);
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
         }
 
         try {
@@ -98,10 +100,10 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
                     "Give concrete and practical suggestions."
             );
             String suggestion = callOpenAI(prompt);
-            return AIAssistantResponseSupport.buildOptimizationSuccess(routeId, suggestion, 90, SOURCE_OPENAI);
+            return AIAssistantResponseSupport.buildOptimizationSuccess(routeId, suggestion, SOURCE_OPENAI);
         } catch (Exception e) {
-            log.error("OpenAI route optimization failed, fallback applied: routeId={}", routeId, e);
-            return AIAssistantResponseSupport.buildOptimizationFallback(routeId, e.getMessage());
+            log.error("OpenAI route optimization failed: routeId={}", routeId, e);
+            throw dependencyFailure(e);
         }
     }
 
@@ -109,9 +111,10 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
     public AIAttractionIntroResponse getAttractionIntro(Integer attractionId) {
         Attraction attraction = attractionService.getById(attractionId);
         if (attraction == null) {
-            return AIAssistantResponseSupport.buildAttractionNotFound(attractionId);
+            throw new BusinessException(ErrorCodeEnum.ATTRACTION_NOT_EXIST);
         }
 
+        ensureOpenAIAvailable();
         String cacheKey = AI_PREFIX + "intro:" + attractionId;
         @SuppressWarnings("unchecked")
         Map<String, Object> cached = cacheUtil.get(cacheKey, Map.class);
@@ -131,25 +134,18 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
                     attractionId,
                     attraction.getName(),
                     intro,
-                    null,
-                    "\u5efa\u8bae\u767d\u5929\u524d\u5f80",
-                    "2-3\u5c0f\u65f6",
                     SOURCE_OPENAI
             );
             cacheUtil.set(cacheKey, result, 24, TimeUnit.HOURS);
             return AIAssistantResponseSupport.toAttractionIntroResponse(result);
         } catch (Exception e) {
-            log.error("OpenAI attraction intro failed, fallback applied: attractionId={}", attractionId, e);
-            return AIAssistantResponseSupport.toAttractionIntroResponse(
-                    AIAssistantResponseSupport.buildAttractionIntroFallbackPayload(attraction, attractionId, e.getMessage())
-            );
+            log.error("OpenAI attraction intro failed: attractionId={}", attractionId, e);
+            throw dependencyFailure(e);
         }
     }
 
     private String callOpenAI(String question) throws IOException {
-        if (!Boolean.TRUE.equals(aiConfig.getEnabled())) {
-            throw new IllegalStateException("AI service is disabled");
-        }
+        ensureOpenAIAvailable();
 
         String url = aiConfig.getApiUrl() + "/chat/completions";
         Map<String, Object> requestBody = new HashMap<>();
@@ -204,6 +200,21 @@ public class RealAIAssistantServiceImpl implements AIAssistantService {
         messages.add(userMessage);
 
         return messages;
+    }
+
+    private void ensureOpenAIAvailable() {
+        if (!Boolean.TRUE.equals(aiConfig.getEnabled())
+                || aiConfig.getApiKey() == null || aiConfig.getApiKey().isBlank()
+                || aiConfig.getApiUrl() == null || aiConfig.getApiUrl().isBlank()) {
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
+        }
+    }
+
+    private RuntimeException dependencyFailure(Exception exception) {
+        if (exception instanceof BusinessException businessException) {
+            return businessException;
+        }
+        return new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
     }
 
     private String routeCityName(Route route) {

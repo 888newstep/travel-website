@@ -5,6 +5,11 @@ mq:
   status-persistence:
     enabled: ${MQ_STATUS_PERSISTENCE_ENABLED:false}
 
+travel:
+  auth:
+    captcha:
+      demo-mode: ${CAPTCHA_DEMO_MODE:false}
+
 spring:
   profiles:
     active: dev

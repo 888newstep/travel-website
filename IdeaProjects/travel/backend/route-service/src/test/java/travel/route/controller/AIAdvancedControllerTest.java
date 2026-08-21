@@ -19,6 +19,7 @@ import travel.route.dto.ai.AIPlanRouteResponse;
 import travel.route.dto.ai.AITravelGuideContent;
 import travel.route.service.AIAdvancedService;
 import travel.route.service.QwenService;
+import travel.common.exception.GlobalExceptionHandler;
 
 import java.util.Map;
 
@@ -29,6 +30,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -57,6 +59,7 @@ class AIAdvancedControllerTest {
         validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders.standaloneSetup(aiAdvancedController)
+                .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
     }
@@ -146,10 +149,24 @@ class AIAdvancedControllerTest {
         mockMvc.perform(post("/ai/advanced/plan")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestBody))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(400))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(4000))
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("constraint conflict"));
+                .andExpect(jsonPath("$.message").value("参数错误"));
+    }
+
+    @Test
+    void shouldHideUnexpectedPlanFailureBehindHttp500() throws Exception {
+        when(aiAdvancedService.planRoute(
+                any(AIPlanRoutePreferences.class), nullable(AIPlanRouteConstraints.class)))
+                .thenThrow(new RuntimeException("database password leaked"));
+
+        mockMvc.perform(post("/ai/advanced/plan")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"preferences\":{\"days\":1}}"))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("系统异常，请稍后重试"));
     }
 
     @Test

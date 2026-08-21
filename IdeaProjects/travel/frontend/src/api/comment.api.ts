@@ -1,5 +1,5 @@
 import apiClient from '../utils/api';
-import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, DEFAULT_LIMIT, DEFAULT_LIMIT_SMALL } from '../constants';
+import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE, DEFAULT_LIMIT_SMALL } from '../constants';
 
 export interface RouteComment {
     id?: number;
@@ -29,18 +29,6 @@ export const commentApi = {
     getUserComments(userId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
         return apiClient.get<RouteComment[]>(`/route-comments/user/${userId}`, {
             params: { page, size },
-        });
-    },
-
-    likeComment(commentId: number, userId: number) {
-        return apiClient.post<boolean>(`/route-comments/${commentId}/like`, null, {
-            params: { userId },
-        });
-    },
-
-    unlikeComment(commentId: number, userId: number) {
-        return apiClient.post<boolean>(`/route-comments/${commentId}/unlike`, null, {
-            params: { userId },
         });
     },
 

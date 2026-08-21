@@ -350,6 +350,20 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
         return result;
     }
 
+    @Override
+    public boolean incrementViewCount(Integer id) {
+        if (id == null || id <= 0) {
+            return false;
+        }
+        boolean updated = baseMapper.incrementViewCount(id) > 0;
+        if (updated) {
+            cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ATTRACTION_KEY_PREFIX, "detail", id));
+            cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ATTRACTION_KEY_PREFIX, "mapper", id));
+            cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ATTRACTION_KEY_PREFIX, "all"));
+        }
+        return updated;
+    }
+
 
     @Override
     public CursorPageResult<Attraction> getByCursor(Integer cityId, String cursor, int size) {
@@ -480,6 +494,5 @@ public class AttractionServiceImpl extends ServiceImpl<AttractionMapper, Attract
         log.info("Invalidated attraction cache: cityId={}", cityId);
     }
 }
-
 
 

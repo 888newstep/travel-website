@@ -1,11 +1,14 @@
 package travel.collection.controller;
 
+import travel.common.exception.ExceptionPropagation;
+
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.common.entity.user_community.RouteShare;
 import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
+import travel.common.security.AuthenticatedUserSupport;
 import travel.collection.service.RouteShareService;
 import travel.common.utils.Result;
 import org.springframework.web.bind.annotation.*;
@@ -38,23 +41,26 @@ public class RouteShareController {
     public Result<RouteShare> generateShareCode(@RequestBody Map<String, Object> request) {
         try {
             Integer itemId = (Integer) request.get("itemId");
-            String itemType = (String) request.get("itemType");
-            Integer userId = (Integer) request.get("userId");
+            String requestedItemType = (String) request.get("itemType");
+            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
             Integer routeId = (Integer) request.get("routeId");
+            String itemType = "note".equals(requestedItemType) || "travel_note".equals(requestedItemType)
+                    ? "note" : "route";
+            Integer effectiveItemId = routeId != null ? routeId : itemId;
 
-            log.info("生成分享码请求: userId={}, routeId={}, itemId={}, itemType={}", userId, routeId, itemId, itemType);
+            log.info("生成分享码请求: userId={}, itemId={}, itemType={}", userId, effectiveItemId, itemType);
 
             RouteShare share = new RouteShare();
-            share.setItemId(itemId);
-            share.setItemType(itemType != null ? itemType : "route");
+            share.setItemId(effectiveItemId);
+            share.setItemType(itemType);
             share.setUserId(userId);
-            share.setRouteId(routeId);
+            share.setRouteId("route".equals(itemType) ? effectiveItemId : null);
 
             RouteShare result = routeShareService.generateShareCode(share);
             return Result.success("生成分享码成功", result);
         } catch (Exception e) {
             log.error("生成分享码失败: error={}", e.getMessage());
-            return Result.error("生成分享码失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -68,7 +74,7 @@ public class RouteShareController {
             return Result.success("验证成功", valid);
         } catch (Exception e) {
             log.error("验证分享码失败: error={}", e.getMessage());
-            return Result.error("验证失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -84,7 +90,7 @@ public class RouteShareController {
             return Result.success("获取分享信息成功", routeShare);
         } catch (Exception e) {
             log.error("获取分享路线信息失败: shareCode={}, error={}", shareCode, e.getMessage());
-            return Result.error("获取分享信息失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -100,7 +106,7 @@ public class RouteShareController {
             return Result.success("访问成功", routeInfo);
         } catch (Exception e) {
             log.error("访问分享路线失败: shareCode={}, error={}", shareCode, e.getMessage());
-            return Result.error("访问失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -115,12 +121,13 @@ public class RouteShareController {
                                                    @RequestParam(defaultValue = "0") int page,
                                                    @RequestParam(defaultValue = "10") int size) {
         try {
-            log.info("查询用户分享列表请求: userId={}, page={}, size={}", userId, page, size);
-            List<RouteShare> shares = routeShareService.getUserShares(userId, page, size);
+            Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
+            log.info("查询用户分享列表请求: userId={}, page={}, size={}", currentUserId, page, size);
+            List<RouteShare> shares = routeShareService.getUserShares(currentUserId, page, size);
             return Result.success("查询成功", shares);
         } catch (Exception e) {
             log.error("查询用户分享列表失败: userId={}, error={}", userId, e.getMessage());
-            return Result.error("查询失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -131,12 +138,13 @@ public class RouteShareController {
     @DeleteMapping("/cancel/{id}")
     public Result<Boolean> cancelShare(@PathVariable Long id) {
         try {
+            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
             log.info("取消分享请求: id={}", id);
-            boolean result = routeShareService.cancelShare(id);
+            boolean result = routeShareService.cancelShare(id.intValue(), userId);
             return Result.success("取消分享成功", result);
         } catch (Exception e) {
             log.error("取消分享失败: id={}, error={}", id, e.getMessage());
-            return Result.error("取消分享失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -147,12 +155,13 @@ public class RouteShareController {
     @PutMapping("/update/{id}")
     public Result<Boolean> updateShareSettings(@PathVariable Long id, @RequestBody Map<String, Object> settings) {
         try {
+            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
             log.info("更新分享设置请求: id={}", id);
-            boolean result = routeShareService.updateShareSettings(id, settings);
+            boolean result = routeShareService.updateShareSettings(id, userId, settings);
             return Result.success("更新设置成功", result);
         } catch (Exception e) {
             log.error("更新分享设置失败: id={}, error={}", id, e.getMessage());
-            return Result.error("更新设置失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -168,7 +177,7 @@ public class RouteShareController {
             return Result.success("记录成功", result);
         } catch (Exception e) {
             log.error("增加分享访问次数失败: shareCode={}, error={}", shareCode, e.getMessage());
-            return Result.error("记录失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -179,12 +188,13 @@ public class RouteShareController {
     @GetMapping("/statistics/{id}")
     public Result<Map<String, Object>> getShareStatistics(@PathVariable Long id) {
         try {
+            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
             log.info("获取分享统计信息请求: id={}", id);
-            Map<String, Object> statistics = routeShareService.getShareStatistics(id);
+            Map<String, Object> statistics = routeShareService.getShareStatistics(id, userId);
             return Result.success("获取统计信息成功", statistics);
         } catch (Exception e) {
             log.error("获取分享统计信息失败: id={}, error={}", id, e.getMessage());
-            return Result.error("获取统计信息失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -200,7 +210,7 @@ public class RouteShareController {
             return Result.success("获取成功", shares);
         } catch (Exception e) {
             log.error("获取热门分享失败: error={}", e.getMessage());
-            return Result.error("获取失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -210,19 +220,20 @@ public class RouteShareController {
     public Result<RouteShare> generateFileShareCode(@RequestBody Map<String, Object> request) {
         try {
             Integer fileId = (Integer) request.get("fileId");
+            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
 
             log.info("生成文件分享码请求: fileId={}", fileId);
 
             RouteShare share = new RouteShare();
             share.setItemId(fileId);
             share.setItemType("file");
-            share.setUserId(null);
+            share.setUserId(userId);
 
             RouteShare result = routeShareService.generateShareCode(share);
             return Result.success("生成分享码成功", result);
         } catch (Exception e) {
             log.error("生成文件分享码失败: error={}", e.getMessage());
-            return Result.error("生成分享码失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -235,19 +246,20 @@ public class RouteShareController {
             return Result.success("访问成功", accessUrl);
         } catch (Exception e) {
             log.error("访问分享文件失败: shareCode={}, error={}", shareCode, e.getMessage());
-            return Result.error("访问失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
     @PostMapping("/batch-cancel")
     public Result<Integer> batchCancelShares(@RequestBody List<Long> ids) {
         try {
+            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
             log.info("批量取消分享请求: count={}", ids.size());
-            int count = routeShareService.batchCancelShares(ids);
+            int count = routeShareService.batchCancelShares(ids, userId);
             return Result.success("批量取消成功", count);
         } catch (Exception e) {
             log.error("批量取消分享失败: error={}", e.getMessage());
-            return Result.error("批量取消失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 }

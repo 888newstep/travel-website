@@ -2,6 +2,8 @@
 
 更新日期：2026-08-07
 
+> 2026-08-20 状态说明：本文档保留为 DTO 治理历史记录。固定图片分析与伪多模态链路已整体删除，文中相关端点、Service 和 DTO 设计不再代表当前代码；现状以 `docs/showcase/CAPABILITY_BOUNDARIES.md` 为准。
+
 本文档是 `BACKEND_EXECUTION_CHECKLIST.md` 的补充，聚焦于 **Phase 1 Batch 4** 的剩余工作：
 将 `AIController` 中所有仍在使用 `Map<String, Object>` 作为入参/返回值的接口完成 DTO 化。
 
@@ -28,11 +30,11 @@
 - [x] 原 `AIController` 已按基础对话、助手、高级能力、图像、多模态拆分为多个职责单一的 Controller。
 - [x] Controller 层不再使用 `Map<String, Object>` 作为 `@RequestBody`、返回值或 `Result` 泛型。
 - [x] 请求 DTO 已接入 `jakarta.validation`，并通过 MockMvc 断言校验失败时不会调用 Service。
-- [x] `AIAssistantService`、`AIAdvancedService`、`AIImageAnalysisService`、`AIMultimodalService` 的核心返回值已完成类型化。
+- [x] `AIAssistantService`、`AIAdvancedService` 的核心返回值已完成类型化；原图片占位和多模态 Service 后续已删除。
 - [x] 新增 `AIAskQuestionRequest`，恢复 `POST /ai/assistant/ask` 的 JSON DTO 入参契约。
 - [x] 恢复原 `POST /ai/assistant/optimize/{routeId}` 路径，并保留当前别名 `GET /ai/assistant/optimize-route/{routeId}`。
-- [ ] `AIAnalyzeImageResponse` 与 `AIImageAnalysisResponse` 的重复模型仍需在后续版本统一，统一前禁止直接删除任一类型。
-- [ ] 需要补充图像、多模态和个性化推荐 Controller 的 MockMvc 结果断言，并纳入 CI 门禁。
+- [x] 删除占位链路后仅保留真实百度图像入口使用的 `AIAnalyzeImageResponse`，重复图片模型已清理。
+- [x] 百度图像 Controller 已补充 MockMvc 安全断言；伪多模态 Controller 已删除，不再补充无效契约测试。
 ### 1.2 仍需 DTO 化的端点（本次目标）
 
 | # | 端点 | 方法 | 当前请求类型 | 当前响应类型 | 复杂度 |
@@ -55,11 +57,11 @@
 - [x] 原 `AIController` 已按基础对话、助手、高级能力、图像、多模态拆分为职责单一的 Controller。
 - [x] Controller 层不再使用 `Map<String, Object>` 作为 `@RequestBody`、返回值或 `Result` 泛型。
 - [x] 请求 DTO 已接入 `jakarta.validation`，并通过 MockMvc 断言校验失败时不会调用 Service。
-- [x] `AIAssistantService`、`AIAdvancedService`、`AIImageAnalysisService`、`AIMultimodalService` 的核心返回值已完成类型化。
+- [x] `AIAssistantService`、`AIAdvancedService` 的核心返回值已完成类型化；原图片占位和多模态 Service 后续已删除。
 - [x] 新增 `AIAskQuestionRequest`，恢复 `POST /ai/assistant/ask` 的 JSON DTO 入参契约。
 - [x] 恢复原 `POST /ai/assistant/optimize/{routeId}` 路径，并保留当前别名 `GET /ai/assistant/optimize-route/{routeId}`。
-- [ ] `AIAnalyzeImageResponse` 与 `AIImageAnalysisResponse` 的重复模型仍需在后续版本统一，统一前禁止直接删除任一类型。
-- [ ] 需要补充图像、多模态和个性化推荐 Controller 的 MockMvc 结果断言，并纳入 CI 门禁。
+- [x] 删除占位链路后仅保留真实百度图像入口使用的 `AIAnalyzeImageResponse`，重复图片模型已清理。
+- [x] 百度图像 Controller 已补充 MockMvc 安全断言；伪多模态 Controller 已删除，不再补充无效契约测试。
 
 ### 1.4 需要提取为独立 DTO 的内部类
 
@@ -849,4 +851,4 @@ backend/route-service/src/main/java/travel/route/service/impl/AIMultimodalServic
 - `mvn -q -pl route-service -am -DskipTests compile`：通过。
 - `mvn -q -Dtest=AIAssistantControllerTest -Dsurefire.failIfNoSpecifiedTests=false test`（在 `route-service` 模块执行）：通过，3 个测试全部通过。
 - 已验证的结果断言：问答 DTO 字段映射、空问题校验前置、旧优化路由 POST 路径、新优化路由 GET 别名。
-- 未宣称真实云端 Milvus/RabbitMQ 连通性；本轮 AI DTO 改造不依赖外部中间件，MySQL/Redis 仍按本机默认配置运行。
+- 未宣称真实云端 RabbitMQ 业务链路已验收；本轮 AI DTO 改造不依赖 RabbitMQ，MySQL/Redis 仍按本机默认配置运行。

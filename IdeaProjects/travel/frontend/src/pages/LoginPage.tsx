@@ -49,8 +49,9 @@ export function LoginPage() {
     setMessage('')
 
     try {
-      await userApi.sendCaptcha(form.phone.trim())
-      setMessage('验证码已发送，请注意查收')
+      const response = await userApi.sendCaptcha(form.phone.trim())
+      updateField('captcha', response.demoCode)
+      setMessage(`本地演示验证码：${response.demoCode}`)
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '验证码发送失败，请稍后重试')
     } finally {

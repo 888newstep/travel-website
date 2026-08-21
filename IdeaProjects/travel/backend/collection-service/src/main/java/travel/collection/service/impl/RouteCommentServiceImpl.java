@@ -15,8 +15,10 @@ import travel.common.mapper.route_planning_mapper.RouteCommentMapper;
 import travel.collection.service.RouteCommentService;
 import travel.collection.service.RouteService;
 import travel.collection.service.UserService;
+import travel.common.service.DistributedLockService;
 import travel.common.utils.CacheUtil;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
@@ -30,9 +32,12 @@ import java.util.concurrent.TimeUnit;
 @RequiredArgsConstructor
 public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, RouteComment> implements RouteCommentService {
 
+    private static final String COMMENT_LIKE_LOCK_PREFIX = "route-comment-like";
+
     private final RouteService routeService;
     private final UserService userService;
     private final CacheUtil cacheUtil;
+    private final DistributedLockService distributedLockService;
 
     @Override
     public RouteComment createComment(Integer routeId, Integer userId, Double rating, String content, String images, Boolean isAnonymous, Integer replyTo) {
@@ -64,6 +69,9 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
             if (replyComment == null) {
                 throw new BusinessException(ErrorCodeEnum.COMMENT_NOT_EXIST);
             }
+            if (!routeId.equals(replyComment.getRouteId())) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "不能跨路线回复评论");
+            }
         }
 
         // 6. 创建评论
@@ -83,11 +91,8 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
         // 7. 保存到数据库
         save(routeComment);
 
-        // 8. 清除缓存
-        String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeId);
-        cacheUtil.delete(routeCommentsCacheKey);
-        String routeStatsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "stats", routeId);
-        cacheUtil.delete(routeStatsCacheKey);
+        // 评论列表使用分页键，必须按前缀失效；回复还需要清理父评论的回复缓存。
+        invalidateCommentCaches(routeComment, true);
 
         log.info("创建路线评论成功: routeId={}, userId={}, rating={}", routeId, userId, rating);
         return routeComment;
@@ -117,8 +122,9 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
 
         // 从数据库获取
         LambdaQueryWrapper<RouteComment> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(RouteComment::getIsPublished, true)
-                .eq(RouteComment::getReplyTo, null) // 只获取顶级评论
+        queryWrapper.eq(RouteComment::getRouteId, routeId)
+                .eq(RouteComment::getIsPublished, true)
+                .isNull(RouteComment::getReplyTo)
                 .orderByDesc(RouteComment::getCreatedAt);
 
         IPage<RouteComment> pageResult = page(new Page<>(page, size), queryWrapper);
@@ -154,8 +160,9 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
 
         // 从数据库获取
         LambdaQueryWrapper<RouteComment> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(RouteComment::getUserId, userId);
-        queryWrapper.orderByDesc(RouteComment::getCreatedAt);
+        queryWrapper.eq(RouteComment::getUserId, userId)
+                .eq(RouteComment::getIsPublished, true)
+                .orderByDesc(RouteComment::getCreatedAt);
 
         IPage<RouteComment> pageResult = page(new Page<>(page, size), queryWrapper);
         List<RouteComment> comments = pageResult.getRecords();
@@ -167,120 +174,77 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean likeComment(Integer commentId, Integer userId) {
-        if (commentId == null || commentId <= 0 || userId == null || userId <= 0) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
-        }
-
-        RouteComment routeComment = getById(commentId);
-        if (routeComment == null) {
-            throw new BusinessException(ErrorCodeEnum.COMMENT_NOT_EXIST);
-        }
-
-        // 检查是否已经点赞
-        String likeCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "like", commentId, "user", userId);
-        if (cacheUtil.exists(likeCacheKey)) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "已经点赞过该评论");
-        }
-
-        // 增加点赞数
-        routeComment.setLikesCount(routeComment.getLikesCount() + 1);
-        boolean result = updateById(routeComment);
-
-        if (result) {
-            // 缓存点赞记录
-            cacheUtil.set(likeCacheKey, true, 365, TimeUnit.DAYS);
-            // 清除缓存
-            if (routeComment.getRouteId() != null) {
-                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId());
-                cacheUtil.delete(routeCommentsCacheKey);
+        validateCommentAction(commentId, userId);
+        RouteComment routeComment = requirePublishedComment(commentId);
+        return distributedLockService.executeWithLock(commentLikeLockKey(commentId, userId), () -> {
+            if (baseMapper.countCommentLike(commentId, userId) > 0) {
+                return false;
             }
+            int inserted = baseMapper.insertCommentLike(commentId, userId);
+            requireSingleRow(inserted, "insert comment like");
+            requireSingleRow(baseMapper.incrementCommentLikeCount(commentId), "increment comment like count");
+            invalidateCommentListCaches(routeComment);
             log.info("点赞评论成功: commentId={}, userId={}", commentId, userId);
-        }
-
-        return result;
+            return true;
+        });
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean unlikeComment(Integer commentId, Integer userId) {
-        if (commentId == null || commentId <= 0 || userId == null || userId <= 0) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
-        }
-
-        RouteComment routeComment = getById(commentId);
-        if (routeComment == null) {
-            throw new BusinessException(ErrorCodeEnum.COMMENT_NOT_EXIST);
-        }
-
-        // 检查是否已经点赞
-        String likeCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "like", commentId, "user", userId);
-        if (!cacheUtil.exists(likeCacheKey)) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "还未点赞该评论");
-        }
-
-        // 减少点赞数
-        if (routeComment.getLikesCount() > 0) {
-            routeComment.setLikesCount(routeComment.getLikesCount() - 1);
-        }
-        boolean result = updateById(routeComment);
-
-        if (result) {
-            // 删除点赞记录
-            cacheUtil.delete(likeCacheKey);
-            // 清除缓存
-            if (routeComment.getRouteId() != null) {
-                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId());
-                cacheUtil.delete(routeCommentsCacheKey);
+        validateCommentAction(commentId, userId);
+        RouteComment routeComment = requirePublishedComment(commentId);
+        return distributedLockService.executeWithLock(commentLikeLockKey(commentId, userId), () -> {
+            int deleted = baseMapper.deleteCommentLike(commentId, userId);
+            if (deleted > 0) {
+                requireSingleRow(baseMapper.decrementCommentLikeCount(commentId), "decrement comment like count");
+                invalidateCommentListCaches(routeComment);
+                log.info("取消点赞评论成功: commentId={}, userId={}", commentId, userId);
             }
-            log.info("取消点赞评论成功: commentId={}, userId={}", commentId, userId);
-        }
-
-        return result;
+            return deleted > 0;
+        });
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public Map<String, Object> toggleLikeComment(Integer commentId, Integer userId) {
-        if (commentId == null || commentId <= 0 || userId == null || userId <= 0) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
-        }
-
-        RouteComment routeComment = getById(commentId);
-        if (routeComment == null) {
-            throw new BusinessException(ErrorCodeEnum.COMMENT_NOT_EXIST);
-        }
-
-        String likeCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "like", commentId, "user", userId);
-        boolean alreadyLiked = cacheUtil.exists(likeCacheKey);
-
-        if (alreadyLiked) {
-            // 取消点赞
-            if (routeComment.getLikesCount() > 0) {
-                routeComment.setLikesCount(routeComment.getLikesCount() - 1);
+        validateCommentAction(commentId, userId);
+        RouteComment routeComment = requirePublishedComment(commentId);
+        return distributedLockService.executeWithLock(commentLikeLockKey(commentId, userId), () -> {
+            boolean alreadyLiked = baseMapper.countCommentLike(commentId, userId) > 0;
+            boolean liked;
+            if (alreadyLiked) {
+                int deleted = baseMapper.deleteCommentLike(commentId, userId);
+                if (deleted > 0) {
+                    requireSingleRow(baseMapper.decrementCommentLikeCount(commentId), "decrement comment like count");
+                }
+                liked = false;
+            } else {
+                int inserted = baseMapper.insertCommentLike(commentId, userId);
+                requireSingleRow(inserted, "insert comment like");
+                requireSingleRow(baseMapper.incrementCommentLikeCount(commentId), "increment comment like count");
+                liked = true;
             }
-            updateById(routeComment);
-            cacheUtil.delete(likeCacheKey);
-            if (routeComment.getRouteId() != null) {
-                cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId()));
-            }
-            log.info("取消点赞评论成功: commentId={}, userId={}", commentId, userId);
-        } else {
-            // 点赞
-            routeComment.setLikesCount(routeComment.getLikesCount() + 1);
-            updateById(routeComment);
-            cacheUtil.set(likeCacheKey, true, 365, TimeUnit.DAYS);
-            if (routeComment.getRouteId() != null) {
-                cacheUtil.delete(CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId()));
-            }
-            log.info("点赞评论成功: commentId={}, userId={}", commentId, userId);
-        }
 
-        Map<String, Object> result = new HashMap<>();
-        result.put("liked", !alreadyLiked);
-        result.put("likeCount", routeComment.getLikesCount());
-        return result;
+            Integer likeCount = baseMapper.selectCommentLikeCount(commentId);
+            if (likeCount == null) {
+                throw new IllegalStateException("Comment disappeared while toggling like: " + commentId);
+            }
+            invalidateCommentListCaches(routeComment);
+            log.info("切换评论点赞状态成功: commentId={}, userId={}, liked={}, likeCount={}",
+                    commentId, userId, liked, likeCount);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("liked", liked);
+            result.put("likeCount", likeCount != null ? likeCount : 0);
+            return result;
+        });
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public boolean deleteComment(Integer commentId, Integer userId) {
         if (commentId == null || commentId <= 0 || userId == null || userId <= 0) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
@@ -296,23 +260,21 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
             throw new BusinessException(ErrorCodeEnum.NO_COMMENT_PERMISSION);
         }
 
-        // 删除评论
-        boolean result = removeById(commentId);
+        // 使用软删除保留回复关系，避免 ON DELETE SET NULL 将回复错误提升为顶级评论。
+        baseMapper.deleteAllCommentLikes(commentId);
+        routeComment.setLikesCount(0);
+        routeComment.setIsPublished(false);
+        routeComment.setUpdatedAt(LocalDateTime.now());
+        boolean result = updateById(routeComment);
 
-        if (result) {
-            // 清除缓存
-            if (routeComment.getRouteId() != null) {
-                String routeCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId());
-                cacheUtil.delete(routeCommentsCacheKey);
-                String routeStatsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "stats", routeComment.getRouteId());
-                cacheUtil.delete(routeStatsCacheKey);
-            }
-            String userCommentsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "user", userId);
-            cacheUtil.delete(userCommentsCacheKey);
-            log.info("删除评论成功: commentId={}, userId={}", commentId, userId);
+        if (!result) {
+            throw new IllegalStateException("Failed to soft delete comment: " + commentId);
         }
 
-        return result;
+        invalidateCommentCaches(routeComment, true);
+        log.info("删除评论成功: commentId={}, userId={}", commentId, userId);
+
+        return true;
     }
 
     @Override
@@ -337,22 +299,31 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
 
         // 从数据库获取
         LambdaQueryWrapper<RouteComment> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(RouteComment::getIsPublished, true);
+        queryWrapper.eq(RouteComment::getRouteId, routeId)
+                .eq(RouteComment::getIsPublished, true)
+                .isNull(RouteComment::getReplyTo);
 
         List<RouteComment> comments = list(queryWrapper);
         int totalComments = comments.size();
         double averageRating = 0.0;
         Map<Integer, Integer> ratingDistribution = new HashMap<>();
 
+        int ratedComments = 0;
         if (!comments.isEmpty()) {
             double totalRating = 0.0;
             for (RouteComment comment : comments) {
-                double rating = comment.getRating();
+                Double rating = comment.getRating();
+                if (rating == null) {
+                    continue;
+                }
                 totalRating += rating;
+                ratedComments++;
                 int ratingInt = (int) Math.round(rating);
                 ratingDistribution.put(ratingInt, ratingDistribution.getOrDefault(ratingInt, 0) + 1);
             }
-            averageRating = totalRating / totalComments;
+            if (ratedComments > 0) {
+                averageRating = totalRating / ratedComments;
+            }
         }
 
         Map<String, Object> statistics = new HashMap<>();
@@ -372,6 +343,8 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
         if (commentId == null || commentId <= 0 || page <= 0 || size <= 0) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
+
+        requirePublishedComment(commentId);
 
         // 尝试从缓存获取
         String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "replies", commentId, "page", page, "size", size);
@@ -402,6 +375,53 @@ public class RouteCommentServiceImpl extends ServiceImpl<RouteCommentMapper, Rou
         cacheUtil.set(cacheKey, replies, 30, TimeUnit.MINUTES);
 
         return replies;
+    }
+
+    private void validateCommentAction(Integer commentId, Integer userId) {
+        if (commentId == null || commentId <= 0 || userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private void requireSingleRow(int affectedRows, String operation) {
+        if (affectedRows != 1) {
+            throw new IllegalStateException(operation + " affected " + affectedRows + " rows");
+        }
+    }
+
+    private RouteComment requirePublishedComment(Integer commentId) {
+        RouteComment routeComment = getById(commentId);
+        if (routeComment == null || !Boolean.TRUE.equals(routeComment.getIsPublished())) {
+            throw new BusinessException(ErrorCodeEnum.COMMENT_NOT_EXIST);
+        }
+        return routeComment;
+    }
+
+    private String commentLikeLockKey(Integer commentId, Integer userId) {
+        return CacheUtil.generateKey(COMMENT_LIKE_LOCK_PREFIX, commentId, userId);
+    }
+
+    private void invalidateCommentCaches(RouteComment routeComment, boolean invalidateStatistics) {
+        invalidateCommentListCaches(routeComment);
+        if (invalidateStatistics && routeComment.getRouteId() != null) {
+            cacheUtil.delete(CacheUtil.generateKey(
+                    CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "stats", routeComment.getRouteId()));
+        }
+    }
+
+    private void invalidateCommentListCaches(RouteComment routeComment) {
+        if (routeComment.getRouteId() != null) {
+            cacheUtil.deleteByPattern(CacheUtil.generateKey(
+                    CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "route", routeComment.getRouteId(), "*"));
+        }
+        if (routeComment.getUserId() != null) {
+            cacheUtil.deleteByPattern(CacheUtil.generateKey(
+                    CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "user", routeComment.getUserId(), "*"));
+        }
+        if (routeComment.getReplyTo() != null) {
+            cacheUtil.deleteByPattern(CacheUtil.generateKey(
+                    CacheUtil.ROUTE_COMMENT_KEY_PREFIX, "replies", routeComment.getReplyTo(), "*"));
+        }
     }
 
 

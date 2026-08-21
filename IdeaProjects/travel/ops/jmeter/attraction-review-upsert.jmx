@@ -1,0 +1,269 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Attraction review concurrent upsert" enabled="true">
+      <stringProp name="TestPlan.comments">Each thread uses a distinct idempotency key so the database unique key and atomic upsert receive real concurrent writes.</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Test variables" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="service_host" elementType="Argument">
+            <stringProp name="Argument.name">service_host</stringProp>
+            <stringProp name="Argument.value">${__P(service_host,127.0.0.1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="service_port" elementType="Argument">
+            <stringProp name="Argument.name">service_port</stringProp>
+            <stringProp name="Argument.value">${__P(service_port,18092)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="service_context_path" elementType="Argument">
+            <stringProp name="Argument.name">service_context_path</stringProp>
+            <stringProp name="Argument.value">${__P(service_context_path,/api)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="attraction_id" elementType="Argument">
+            <stringProp name="Argument.name">attraction_id</stringProp>
+            <stringProp name="Argument.value">${__P(attraction_id,1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="threads" elementType="Argument">
+            <stringProp name="Argument.name">threads</stringProp>
+            <stringProp name="Argument.value">${__P(threads,100)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="connect_timeout_ms" elementType="Argument">
+            <stringProp name="Argument.name">connect_timeout_ms</stringProp>
+            <stringProp name="Argument.value">${__P(connect_timeout_ms,5000)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="response_timeout_ms" elementType="Argument">
+            <stringProp name="Argument.name">response_timeout_ms</stringProp>
+            <stringProp name="Argument.value">${__P(response_timeout_ms,30000)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP defaults" enabled="true">
+        <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+          <collectionProp name="Arguments.arguments"/>
+        </elementProp>
+        <stringProp name="HTTPSampler.domain">${service_host}</stringProp>
+        <stringProp name="HTTPSampler.port">${service_port}</stringProp>
+        <stringProp name="HTTPSampler.protocol">http</stringProp>
+        <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+        <stringProp name="HTTPSampler.concurrentPool">20</stringProp>
+        <stringProp name="HTTPSampler.connect_timeout">${connect_timeout_ms}</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">${response_timeout_ms}</stringProp>
+      </ConfigTestElement>
+      <hashTree/>
+
+      <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="Setup" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+      </SetupThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="setup:init" enabled="true">
+          <stringProp name="cacheKey">attraction-review-upsert-init-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+
+def token = System.getenv('TRAVEL_JMETER_TOKEN')
+def expectedThreads = vars.get('threads')
+def attractionId = vars.get('attraction_id')
+if (!token) {
+    throw new IllegalArgumentException('TRAVEL_JMETER_TOKEN must be configured')
+}
+if (!(expectedThreads ==~ /[1-9]\d*/)) {
+    throw new IllegalArgumentException('threads must be a positive integer')
+}
+if (!(attractionId ==~ /[1-9]\d*/)) {
+    throw new IllegalArgumentException('attraction_id must be a positive integer')
+}
+
+def runId = UUID.randomUUID().toString().replace('-', '')
+props.setProperty('travel.review.token', token)
+props.setProperty('travel.review.run_id', runId)
+props.setProperty('travel.review.expected_threads', expectedThreads)
+props.put('travel.review.successes', new AtomicInteger())
+props.put('travel.review.failures', new ConcurrentLinkedQueue())
+props.put('travel.review.ids', ConcurrentHashMap.newKeySet())
+
+SampleResult.setResponseCode('200')
+SampleResult.setResponseMessage("runId=${runId};threads=${expectedThreads};attractionId=${attractionId}")
+SampleResult.setResponseData("{\"runId\":\"${runId}\",\"threads\":${expectedThreads},\"attractionId\":${attractionId}}", 'UTF-8')
+SampleResult.setDataType('text')
+SampleResult.setSuccessful(true)
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent review writers" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <SyncTimer guiclass="TestBeanGUI" testclass="SyncTimer" testname="Synchronize all writers" enabled="true">
+          <intProp name="groupSize">0</intProp>
+          <longProp name="timeoutInMs">30000</longProp>
+        </SyncTimer>
+        <hashTree/>
+
+        <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Build unique review request" enabled="true">
+          <stringProp name="cacheKey">attraction-review-upsert-request-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+import groovy.json.JsonOutput
+
+def writerNumber = ctx.getThreadNum() + 1
+def runId = props.getProperty('travel.review.run_id')
+vars.put('review_idempotency_key', "review-${runId}-${writerNumber}")
+vars.put('review_body', JsonOutput.toJson([
+        rating: ((writerNumber - 1) % 5) + 1,
+        content: "concurrent-review-${runId}-${writerNumber}"
+]))
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223PreProcessor>
+        <hashTree/>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="review:upsert" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${review_body}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${service_context_path}/attractions/${attraction_id}/review</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Review headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${__property(travel.review.token)}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Idempotency-Key</stringProp>
+                <stringProp name="Header.value">${review_idempotency_key}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Validate upsert response" enabled="true">
+            <stringProp name="cacheKey">attraction-review-upsert-validate-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+import groovy.json.JsonSlurper
+
+def successes = props.get('travel.review.successes')
+def failures = props.get('travel.review.failures')
+def ids = props.get('travel.review.ids')
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (prev.getResponseCode() != '200' || body?.success != true || body?.code != 200 || !(body?.data?.id instanceof Number)) {
+        throw new IllegalStateException("http=${prev.getResponseCode()},body=${prev.getResponseDataAsString()}")
+    }
+    successes.incrementAndGet()
+    ids.add((body.data.id as Number).longValue())
+} catch (Exception exception) {
+    failures.add("thread=${ctx.getThreadNum() + 1},${exception.message}")
+    prev.setSuccessful(false)
+    prev.setResponseMessage(exception.message)
+}
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223PostProcessor>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+
+      <PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="Teardown" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+      </PostThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="teardown:assert" enabled="true">
+          <stringProp name="cacheKey">attraction-review-upsert-assert-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+import groovy.json.JsonOutput
+
+def expected = props.getProperty('travel.review.expected_threads') as int
+def successCount = props.get('travel.review.successes').get()
+def failures = props.get('travel.review.failures')
+def ids = props.get('travel.review.ids')
+def summary = [
+        expected: expected,
+        successes: successCount,
+        failures: failures.size(),
+        distinctReviewIds: ids.size(),
+        reviewIds: ids.toList()
+]
+SampleResult.setResponseCode('200')
+SampleResult.setResponseData(JsonOutput.toJson(summary), 'UTF-8')
+SampleResult.setDataType('text')
+if (successCount != expected || !failures.isEmpty() || ids.size() != 1) {
+    SampleResult.setSuccessful(false)
+    SampleResult.setResponseMessage("review upsert verification failed: ${JsonOutput.toJson(summary)};details=${failures}")
+} else {
+    SampleResult.setSuccessful(true)
+    SampleResult.setResponseMessage("review upsert verification passed: ${JsonOutput.toJson(summary)}")
+}
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

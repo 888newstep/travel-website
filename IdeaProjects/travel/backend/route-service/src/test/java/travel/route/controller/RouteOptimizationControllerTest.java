@@ -11,12 +11,17 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
 import travel.route.dto.optimization.ApplyOptimizationRequest;
 import travel.route.service.RouteOptimizationService;
+import travel.route.service.RouteService;
+import travel.common.exception.GlobalExceptionHandler;
 
+import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -40,6 +45,9 @@ class RouteOptimizationControllerTest {
     @Mock
     private RouteOptimizationService routeOptimizationService;
 
+    @Mock
+    private RouteService routeService;
+
     @InjectMocks
     private RouteOptimizationController routeOptimizationController;
 
@@ -48,17 +56,20 @@ class RouteOptimizationControllerTest {
         validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
         mockMvc = MockMvcBuilders.standaloneSetup(routeOptimizationController)
+                .setControllerAdvice(new GlobalExceptionHandler())
                 .setValidator(validator)
                 .build();
     }
 
     @AfterEach
     void tearDown() {
+        SecurityContextHolder.clearContext();
         validator.close();
     }
 
     @Test
     void shouldBindFrontendSuggestionPayload() throws Exception {
+        authenticate(42L);
         when(routeOptimizationService.applyOptimization(any(ApplyOptimizationRequest.class)))
                 .thenReturn(true);
 
@@ -67,9 +78,9 @@ class RouteOptimizationControllerTest {
                   "routeId": 7,
                   "suggestionId": 3,
                   "suggestion": {
-                    "type": "time",
+                    "type": "distance",
                     "targetAttractionId": 101,
-                    "deltaMinutes": 30
+                    "attractionOrder": [101, 102]
                   }
                 }
                 """;
@@ -89,13 +100,14 @@ class RouteOptimizationControllerTest {
         assertEquals(7, request.getRouteId());
         assertEquals(3, request.getSuggestionId());
         assertNotNull(request.getSuggestion());
-        assertEquals("time", request.getSuggestion().get("type").asText());
+        assertEquals("distance", request.getSuggestion().get("type").asText());
         assertEquals(101, request.getSuggestion().get("targetAttractionId").asInt());
-        assertEquals(30, request.getSuggestion().get("deltaMinutes").asInt());
+        assertEquals(2, request.getSuggestion().get("attractionOrder").size());
     }
 
     @Test
     void shouldBindLegacyOptimizationPayload() throws Exception {
+        authenticate(42L);
         when(routeOptimizationService.applyOptimization(any(ApplyOptimizationRequest.class)))
                 .thenReturn(true);
 
@@ -130,6 +142,7 @@ class RouteOptimizationControllerTest {
 
     @Test
     void shouldPreserveUnknownFieldsInBoundedExtensions() throws Exception {
+        authenticate(42L);
         when(routeOptimizationService.applyOptimization(any(ApplyOptimizationRequest.class)))
                 .thenReturn(true);
 
@@ -172,6 +185,17 @@ class RouteOptimizationControllerTest {
     }
 
     @Test
+    void shouldReturnUnauthorizedHttpStatusWithoutAuthentication() throws Exception {
+        mockMvc.perform(post("/route-optimization/apply")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"routeId\":7,\"suggestionId\":3}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(28002));
+
+        verifyNoInteractions(routeOptimizationService, routeService);
+    }
+
+    @Test
     void shouldRejectNonPositiveSuggestionIdBeforeCallingService() throws Exception {
         String requestBody = """
                 {"routeId":7,"suggestionId":0}
@@ -199,5 +223,10 @@ class RouteOptimizationControllerTest {
                 .andExpect(status().isBadRequest());
 
         verifyNoInteractions(routeOptimizationService);
+    }
+
+    private void authenticate(Long userId) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(userId, null, List.of()));
     }
 }

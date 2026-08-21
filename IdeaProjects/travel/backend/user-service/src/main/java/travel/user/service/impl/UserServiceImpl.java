@@ -20,40 +20,72 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.concurrent.TimeUnit;
-import java.util.Random;
+import java.security.SecureRandom;
+import java.util.UUID;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+    private static final long CAPTCHA_COOLDOWN_MILLIS = 60_000;
+
     private final CacheUtil cacheUtil;
 
     @Override
     public String sendCaptcha(String phone) {
-        String captcha = generateRandomCaptcha();
+        String cooldownKey = CacheUtil.generateKey("captcha_cooldown", phone);
+        String requestId = UUID.randomUUID().toString();
+        // 冷却窗口使用 Redis 原子抢占，防止多实例下重复发送。
+        if (!cacheUtil.tryLock(cooldownKey, requestId, CAPTCHA_COOLDOWN_MILLIS)) {
+            throw new BusinessException(429, "验证码发送过于频繁，请稍后再试");
+        }
 
+        String captcha = generateRandomCaptcha();
         String cacheKey = CacheUtil.generateKey(CacheUtil.CAPTCHA_KEY_PREFIX, phone);
         cacheUtil.set(cacheKey, captcha, 5, TimeUnit.MINUTES);
+        String storedCaptcha = cacheUtil.get(cacheKey, String.class);
+        if (!captcha.equals(storedCaptcha)) {
+            cacheUtil.releaseLock(cooldownKey, requestId);
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_REDIS_ERROR);
+        }
 
-        log.info("向手机号 {} 发送验证码: {}", phone, captcha);
+        log.info("验证码已生成并写入缓存: phone={}", maskPhone(phone));
 
         return captcha;
     }
 
     private String generateRandomCaptcha() {
-        Random random = new Random();
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 6; i++) {
-            sb.append(random.nextInt(10));
+            sb.append(SECURE_RANDOM.nextInt(10));
         }
         return sb.toString();
     }
 
-    private boolean validateCaptcha(String phone, String captcha) {
+    private String maskPhone(String phone) {
+        if (phone == null || phone.length() < 7) {
+            return "***";
+        }
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
+    }
+
+    private void consumeCaptcha(String phone, String captcha) {
+        if (captcha == null || captcha.isBlank()) {
+            throw new BusinessException(ErrorCodeEnum.CAPTCHA_ERROR);
+        }
         String cacheKey = CacheUtil.generateKey(CacheUtil.CAPTCHA_KEY_PREFIX, phone);
-        String cachedCaptcha = cacheUtil.get(cacheKey, String.class);
-        return captcha != null && captcha.equals(cachedCaptcha);
+        try {
+            if (!cacheUtil.consumeIfEquals(cacheKey, captcha)) {
+                throw new BusinessException(ErrorCodeEnum.CAPTCHA_ERROR);
+            }
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            log.error("验证码原子消费失败: phone={}", maskPhone(phone), exception);
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_REDIS_ERROR);
+        }
     }
 
     @Override
@@ -71,16 +103,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ErrorCodeEnum.USER_EXIST);
         }
 
-        if (!validateCaptcha(user.getPhone(), captcha)) {
-            throw new BusinessException(ErrorCodeEnum.CAPTCHA_ERROR);
-        }
+        consumeCaptcha(user.getPhone(), captcha);
 
         user.setPassword(PasswordEncoderUtil.encode(user.getPassword()));
+        user.setUserType(1);
 
         save(user);
-
-        String cacheKey = CacheUtil.generateKey(CacheUtil.CAPTCHA_KEY_PREFIX, user.getPhone());
-        cacheUtil.delete(cacheKey);
 
         return user;
     }
@@ -101,7 +129,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ErrorCodeEnum.PASSWORD_ERROR);
         }
 
-        String token = JwtHelper.createToken(user.getId().longValue(), 1);
+        Integer userType = user.getUserType() == null ? 1 : user.getUserType();
+        String token = JwtHelper.createToken(user.getId().longValue(), userType);
 
         return token;
     }
@@ -156,6 +185,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         User currentUser = getCurrentUser();
         user.setId(currentUser.getId());
         user.setPassword(currentUser.getPassword());
+        user.setUserType(currentUser.getUserType());
+        user.setCreatedAt(currentUser.getCreatedAt());
+        user.setUpdatedAt(java.time.LocalDateTime.now());
 
         updateById(user);
         return getById(user.getId());
@@ -177,10 +209,6 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean resetPassword(String phone, String captcha, String newPassword) {
-        if (!validateCaptcha(phone, captcha)) {
-            throw new BusinessException(ErrorCodeEnum.CAPTCHA_ERROR);
-        }
-
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(User::getPhone, phone);
 
@@ -189,11 +217,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ErrorCodeEnum.USER_NOT_EXIST);
         }
 
+        consumeCaptcha(phone, captcha);
         user.setPassword(PasswordEncoderUtil.encode(newPassword));
         updateById(user);
-
-        String cacheKey = CacheUtil.generateKey(CacheUtil.CAPTCHA_KEY_PREFIX, phone);
-        cacheUtil.delete(cacheKey);
 
         return true;
     }
@@ -229,6 +255,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(ErrorCodeEnum.UNAUTHORIZED);
         }
 
-        return JwtHelper.createToken(userId, 1);
+        User user = getById(userId.intValue());
+        if (user == null) {
+            throw new BusinessException(ErrorCodeEnum.USER_NOT_EXIST);
+        }
+        Integer userType = user.getUserType() == null ? 1 : user.getUserType();
+        return JwtHelper.createToken(userId, userType);
     }
 }

@@ -22,14 +22,25 @@ public class RateLimiter {
      * @return 是否允许通过
      */
     public boolean tryAcquire(String key, int limit, long windowSize) {
+        return tryAcquire(key, limit, windowSize, true);
+    }
+
+    public boolean tryAcquireStrict(String key, int limit, long windowSize) {
+        return tryAcquire(key, limit, windowSize, false);
+    }
+
+    private boolean tryAcquire(String key, int limit, long windowSize, boolean failOpen) {
+        if (key == null || key.isBlank() || limit <= 0 || windowSize <= 0) {
+            throw new IllegalArgumentException("Invalid rate limit arguments");
+        }
         try {
             long currentTime = System.currentTimeMillis();
             String windowKey = key + ":" + (currentTime / 1000 / windowSize);
 
-            Long count = cacheUtil.increment(windowKey, 1);
+            Long count = cacheUtil.incrementStrict(windowKey, 1);
 
             if (count == 1) {
-                cacheUtil.set(windowKey, count, windowSize, TimeUnit.SECONDS);
+                cacheUtil.expireStrict(windowKey, windowSize + 1, TimeUnit.SECONDS);
             }
 
             boolean allowed = count <= limit;
@@ -41,7 +52,7 @@ public class RateLimiter {
             return allowed;
         } catch (Exception e) {
             log.error("限流检查失败: key={}, error={}", key, e.getMessage(), e);
-            return true;
+            return failOpen;
         }
     }
 

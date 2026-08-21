@@ -97,6 +97,30 @@ class IntelligentRouteEvaluationServiceTest {
         assertTrue(result.getSuggestions().stream().anyMatch(item -> item.contains("low-cost") || item.contains("public transport") || item.contains("discount")));
     }
 
+    @Test
+    void shouldExposeUnavailableComparisonMetricsWithoutFabricatingValues() {
+        Route route = buildRoute(3, "incomplete-route", 1, 10, 1);
+        Attraction first = new Attraction();
+        first.setId(31);
+        first.setLongitude(BigDecimal.valueOf(120));
+        first.setLatitude(BigDecimal.valueOf(30));
+        Attraction second = new Attraction();
+        second.setId(32);
+
+        when(routeService.getById(3)).thenReturn(route);
+        when(routeAttractionService.getByRouteIdOrderByDayAndVisit(3L))
+                .thenReturn(List.of(buildRelation(31), buildRelation(32)));
+        when(attractionService.getById(31)).thenReturn(first);
+        when(attractionService.getById(32)).thenReturn(second);
+
+        RouteComparisonResult result = intelligentRouteEvaluationService.compareRoutes(List.of(3));
+
+        assertEquals(0.0, result.getRoutes().get(0).getAverageRating());
+        assertEquals(0.0, result.getRoutes().get(0).getEstimatedCost());
+        org.junit.jupiter.api.Assertions.assertNull(result.getRoutes().get(0).getEstimatedTime());
+        org.junit.jupiter.api.Assertions.assertNull(result.getRoutes().get(0).getTotalDistance());
+    }
+
     private Route buildRoute(Integer id, String title, Integer days, Integer views, Integer likes) {
         Route route = new Route();
         route.setId(id);

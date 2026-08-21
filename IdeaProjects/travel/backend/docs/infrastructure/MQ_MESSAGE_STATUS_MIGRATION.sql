@@ -1,11 +1,5 @@
--- RabbitMQ message status table migration for an existing travel_website database.
+-- RabbitMQ message status table migration for the currently selected database.
 -- Execute manually after backup; this script is intentionally not auto-imported by Spring Boot.
-
-CREATE DATABASE IF NOT EXISTS travel_website
-    CHARACTER SET utf8mb4
-    COLLATE utf8mb4_unicode_ci;
-
-USE travel_website;
 
 CREATE TABLE IF NOT EXISTS `mq_message_status` (
     id                 BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT 'message status record id',

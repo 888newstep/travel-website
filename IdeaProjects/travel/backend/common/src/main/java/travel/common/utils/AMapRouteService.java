@@ -8,9 +8,12 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * 高德地图路径规划服务
@@ -19,6 +22,9 @@ import java.util.*;
 @Slf4j
 @Component
 public class AMapRouteService {
+
+    private static final Pattern API_KEY_QUERY_PATTERN =
+            Pattern.compile("(?i)([?&]key=)[^&\\s]+");
 
     @Value("${amap.api-key}")
     private String apiKey;
@@ -59,33 +65,20 @@ public class AMapRouteService {
         if (waypoints == null || waypoints.size() < 2) {
             throw new IllegalArgumentException("至少需要2个坐标点");
         }
+        validateWaypoints(waypoints);
+        if (apiKey == null || apiKey.isBlank()) {
+            log.error("高德地图路径规划失败: AMAP_API_KEY 未配置");
+            return null;
+        }
 
         try {
-            // 构建路径规划请求
-            StringBuilder origin = new StringBuilder();
-            StringBuilder destination = new StringBuilder();
-            StringBuilder viaPoints = new StringBuilder();
-
-            origin.append(waypoints.get(0)[0]).append(",").append(waypoints.get(0)[1]);
-            destination.append(waypoints.get(waypoints.size() - 1)[0]).append(",")
-                    .append(waypoints.get(waypoints.size() - 1)[1]);
-
-            for (int i = 1; i < waypoints.size() - 1; i++) {
-                if (viaPoints.length() > 0) viaPoints.append("|");
-                viaPoints.append(waypoints.get(i)[0]).append(",").append(waypoints.get(i)[1]);
-            }
-
-            // 调用高德地图驾车路径规划API
-            String url = String.format(
-                    "%s/direction/driving?origin=%s&destination=%s&waypoints=%s&key=%s&strategy=0",
-                    apiUrl, origin, destination, viaPoints, apiKey
-            );
+            URI requestUri = buildRouteUri(waypoints);
 
             String responseBody;
             try (ExternalCallBulkhead.Permit ignored = bulkheadRegistry
                     .get(ExternalCallBulkheadRegistry.AMAP).acquire()) {
                 responseBody = restTemplate.execute(
-                        url,
+                        requestUri,
                         HttpMethod.GET,
                         null,
                         clientHttpResponse -> {
@@ -102,11 +95,56 @@ public class AMapRouteService {
             }
 
         } catch (Exception e) {
-            log.error("高德地图路径规划失败: {}", e.getMessage());
+            log.error("高德地图路径规划失败: type={}, message={}",
+                    e.getClass().getSimpleName(), sanitizeExceptionMessage(e));
         }
 
-        // 失败时返回估算值
-        return estimateRouteInfo(waypoints);
+        return null;
+    }
+
+    private URI buildRouteUri(List<double[]> waypoints) {
+        UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(apiUrl)
+                .pathSegment("direction", "driving")
+                .queryParam("origin", coordinate(waypoints.get(0)))
+                .queryParam("destination", coordinate(waypoints.get(waypoints.size() - 1)))
+                .queryParam("extensions", "all")
+                .queryParam("strategy", "0")
+                .queryParam("key", apiKey);
+
+        if (waypoints.size() > 2) {
+            StringJoiner viaPoints = new StringJoiner("|");
+            for (int index = 1; index < waypoints.size() - 1; index++) {
+                viaPoints.add(coordinate(waypoints.get(index)));
+            }
+            builder.queryParam("waypoints", viaPoints.toString());
+        }
+        return builder.build().encode().toUri();
+    }
+
+    private String coordinate(double[] point) {
+        return Double.toString(point[0]) + "," + Double.toString(point[1]);
+    }
+
+    private void validateWaypoints(List<double[]> waypoints) {
+        for (double[] point : waypoints) {
+            if (point == null || point.length < 2
+                    || !Double.isFinite(point[0]) || !Double.isFinite(point[1])
+                    || point[0] < -180 || point[0] > 180
+                    || point[1] < -90 || point[1] > 90) {
+                throw new IllegalArgumentException("路线包含无效经纬度");
+            }
+        }
+    }
+
+    private String sanitizeExceptionMessage(Exception exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            return exception.getClass().getSimpleName();
+        }
+        if (apiKey != null && !apiKey.isBlank()) {
+            message = message.replace(apiKey, "***");
+        }
+        return API_KEY_QUERY_PATTERN.matcher(message).replaceAll("$1***");
     }
 
     /**
@@ -115,20 +153,31 @@ public class AMapRouteService {
     private RouteInfo parseRouteResponse(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
-            JsonNode route = root.path("route").path("paths").get(0);
+            if (!"1".equals(root.path("status").asText())) {
+                log.error("高德地图路径规划返回失败: info={}, infocode={}",
+                        root.path("info").asText(), root.path("infocode").asText());
+                return null;
+            }
+            JsonNode paths = root.path("route").path("paths");
+            if (!paths.isArray() || paths.isEmpty()) {
+                log.warn("高德地图路径规划未返回可用路径");
+                return null;
+            }
+            JsonNode route = paths.get(0);
 
-            if (route == null) {
+            double distanceMeters = route.path("distance").asDouble(-1);
+            double durationSeconds = route.path("duration").asDouble(-1);
+            if (distanceMeters <= 0 || durationSeconds <= 0) {
+                log.warn("高德地图路径规划返回无效距离或时长");
                 return null;
             }
 
             RouteInfo info = new RouteInfo();
-            info.setDistance(route.path("distance").asDouble() / 1000.0); // 转换为公里
-            info.setDuration(route.path("duration").asDouble() / 60.0);   // 转换为分钟
+            info.setDistance(distanceMeters / 1000.0); // 转换为公里
+            info.setDuration(durationSeconds / 60.0);   // 转换为分钟
 
-            // 估算成本（考虑过路费和油费）
-            double tolls = route.path("tolls").asDouble();
-            double fuelCost = info.getDistance() * 0.8; // 每公里0.8元油费
-            info.setCost(tolls + fuelCost);
+            // 仅使用高德明确返回的过路费，不虚构车辆油耗成本。
+            info.setCost(route.path("tolls").asDouble());
 
             // 提取路径步骤
             JsonNode steps = route.path("steps");
@@ -148,45 +197,6 @@ public class AMapRouteService {
             log.error("解析高德地图响应失败: {}", e.getMessage());
             return null;
         }
-    }
-
-    /**
-     * 估算路径信息（当API调用失败时使用）
-     */
-    private RouteInfo estimateRouteInfo(List<double[]> waypoints) {
-        RouteInfo info = new RouteInfo();
-        double totalDistance = 0.0;
-
-        for (int i = 0; i < waypoints.size() - 1; i++) {
-            totalDistance += haversineDistance(
-                    waypoints.get(i)[0], waypoints.get(i)[1],
-                    waypoints.get(i + 1)[0], waypoints.get(i + 1)[1]
-            );
-        }
-
-        info.setDistance(totalDistance);
-        info.setDuration(totalDistance / 30.0 * 60); // 假设平均速度30km/h
-        info.setCost(totalDistance * 1.5); // 估算成本
-
-        return info;
-    }
-
-    /**
-     * Haversine公式计算两点间距离（公里）
-     */
-    private double haversineDistance(double lon1, double lat1, double lon2, double lat2) {
-        final double R = 6371.0; // 地球半径（公里）
-
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-        return R * c;
     }
 
     /**

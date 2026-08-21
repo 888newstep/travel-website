@@ -6,6 +6,7 @@ x-base-env: &base-env
   SPRING_CLOUD_NACOS_DISCOVERY_ENABLED: "false"
   SPRING_CLOUD_SENTINEL_ENABLED: "false"
   SEATA_ENABLED: "false"
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be configured}
 
 x-service-env: &service-env
   <<: *base-env
@@ -17,11 +18,22 @@ x-service-env: &service-env
   SPRING_DATA_REDIS_HOST: redis
   SPRING_DATA_REDIS_PORT: "6379"
   SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me}
-  SPRING_RABBITMQ_HOST: rabbitmq
-  SPRING_RABBITMQ_PORT: "5672"
-  SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-admin}
-  SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-change-me}
+  SPRING_DATA_REDIS_DATABASE: ${REDIS_DB:-3}
+  SPRING_RABBITMQ_HOST: ${RABBITMQ_HOST:?RABBITMQ_HOST must point to the cloud broker}
+  SPRING_RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+  SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME must be configured}
+  SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD must be configured}
   SPRING_RABBITMQ_VIRTUAL_HOST: ${RABBITMQ_VHOST:-/}
+  AMAP_API_KEY: ${AMAP_API_KEY:-}
+  BAIDU_APP_ID: ${BAIDU_APP_ID:-}
+  BAIDU_API_KEY: ${BAIDU_API_KEY:-}
+  BAIDU_SECRET_KEY: ${BAIDU_SECRET_KEY:-}
+  QWEN_API_KEY: ${QWEN_API_KEY:-}
+  CAPTCHA_DEMO_MODE: ${CAPTCHA_DEMO_MODE:-false}
+  MQ_RELIABLE_NOTIFICATION_TOPOLOGY_ENABLED: ${MQ_RELIABLE_NOTIFICATION_TOPOLOGY_ENABLED:-false}
+  MQ_RELIABLE_NOTIFICATION_PRODUCER_ENABLED: ${MQ_RELIABLE_NOTIFICATION_PRODUCER_ENABLED:-false}
+  MQ_RELIABLE_NOTIFICATION_CONSUMER_ENABLED: ${MQ_RELIABLE_NOTIFICATION_CONSUMER_ENABLED:-false}
+  MQ_STATUS_PERSISTENCE_ENABLED: ${MQ_STATUS_PERSISTENCE_ENABLED:-false}
 
 services:
   mysql:
@@ -62,23 +74,6 @@ services:
     networks:
       - travel-network
 
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: travel-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-admin}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change-me}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - travel-network
-
   user-service:
     build:
       context: ../..
@@ -94,8 +89,6 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     ports:
       - "8091:8091"
@@ -118,8 +111,6 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     ports:
       - "8092:8092"
@@ -144,8 +135,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
       attraction-service:
         condition: service_healthy
     ports:
@@ -169,8 +158,6 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
       user-service:
         condition: service_healthy
@@ -197,8 +184,6 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      rabbitmq:
         condition: service_healthy
     ports:
       - "8095:8095"

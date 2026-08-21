@@ -9,12 +9,18 @@ import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
 import travel.common.mapper.travel_realtime_mapper.AttractionRealtimeStatusMapper;
 import travel.attraction.service.AttractionRealtimeStatusService;
+import travel.attraction.dto.AttractionWarning;
 import travel.common.utils.CacheUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Locale;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -27,9 +33,12 @@ public class AttractionRealtimeStatusServiceImpl extends ServiceImpl<AttractionR
     
     // 缓存常量
     private static final String ATTRACTION_STATUS_PREFIX = "attraction:status:";
-    private static final String ATTRACTION_AVG_CROWD_PREFIX = "attraction:avg_crowd:";
     private static final String ACTIVE_WARNS_PREFIX = "attraction:active_warns";
     private static final int CACHE_EXPIRE_MINUTES = 30;
+    private static final int WARN_CACHE_EXPIRE_MINUTES = 5;
+    private static final int MAX_WARNING_SOURCE_RECORDS = 500;
+    private static final List<String> SEVERE_WEATHER_KEYWORDS = List.of(
+            "暴雨", "大雨", "雷", "台风", "冰雹", "暴雪", "大雪", "大风", "沙尘", "浓雾");
 
     @Override
     public AttractionRealtimeStatus getByAttractionId(Long attractionId) {
@@ -69,78 +78,38 @@ public class AttractionRealtimeStatusServiceImpl extends ServiceImpl<AttractionR
             return false;
         }
 
-        boolean success = true;
         for (AttractionRealtimeStatus status : statusList) {
-            try {
-                // 先查询是否存在
-                LambdaQueryWrapper<AttractionRealtimeStatus> queryWrapper = new LambdaQueryWrapper<>();
-                queryWrapper.eq(AttractionRealtimeStatus::getAttractionId, status.getAttractionId())
-                        .eq(AttractionRealtimeStatus::getDeleted, 0);
-
-                AttractionRealtimeStatus existingStatus = getOne(queryWrapper, false);
-                if (existingStatus != null) {
-                    // 更新
-                    status.setId(existingStatus.getId());
-                    status.setUpdateTime(LocalDateTime.now());
-                    updateById(status);
-                } else {
-                    // 新增
-                    status.setUpdateTime(LocalDateTime.now());
-                    save(status);
-                }
-                
-                // 清除缓存
-                String cacheKey = ATTRACTION_STATUS_PREFIX + status.getAttractionId();
-                cacheUtil.delete(cacheKey);
-                log.info("清除景点实时状态缓存: attractionId={}", status.getAttractionId());
-            } catch (Exception e) {
-                log.error("批量更新景点实时状态失败: {}", e.getMessage(), e);
-                success = false;
+            if (status == null || status.getAttractionId() == null || status.getAttractionId() <= 0) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
             }
-        }
+            LambdaQueryWrapper<AttractionRealtimeStatus> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(AttractionRealtimeStatus::getAttractionId, status.getAttractionId())
+                    .eq(AttractionRealtimeStatus::getDeleted, 0);
 
-        return success;
-    }
-
-    @Override
-    public Integer selectAvgCrowdCount(Long attractionId) {
-        if (attractionId == null || attractionId <= 0) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
-        }
-
-        // 生成缓存键
-        String cacheKey = ATTRACTION_AVG_CROWD_PREFIX + attractionId;
-        
-        // 尝试从缓存获取
-        Integer cachedAvgCrowdCount = cacheUtil.get(cacheKey, Integer.class);
-        if (cachedAvgCrowdCount != null) {
-            log.info("从缓存获取景点历史人流均值: attractionId={}", attractionId);
-            return cachedAvgCrowdCount;
-        }
-
-        try {
-            // 使用mapper查询历史人流均值
-            Integer avgCrowdCount = attractionRealtimeStatusMapper.selectAvgCrowdCount(attractionId);
-            if (avgCrowdCount != null) {
-                // 缓存结果
-                cacheUtil.set(cacheKey, avgCrowdCount, CACHE_EXPIRE_MINUTES, TimeUnit.MINUTES);
-                return avgCrowdCount;
+            AttractionRealtimeStatus existingStatus = getOne(queryWrapper, false);
+            status.setUpdateTime(LocalDateTime.now());
+            boolean saved;
+            if (existingStatus != null) {
+                status.setId(existingStatus.getId());
+                saved = updateById(status);
+            } else {
+                saved = save(status);
             }
-            
-            // 如果查询结果为null，返回默认值
-            log.warn("查询景点 {} 历史人流均值为null，返回默认值", attractionId);
-            return 500;
-        } catch (Exception e) {
-            log.error("查询景点 {} 历史人流均值失败: {}", attractionId, e.getMessage(), e);
-            // 异常情况下返回默认值
-            return 500;
+            if (!saved) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+            }
+
+            cacheUtil.delete(ATTRACTION_STATUS_PREFIX + status.getAttractionId());
+            log.info("清除景点实时状态缓存: attractionId={}", status.getAttractionId());
         }
+        cacheUtil.delete(ACTIVE_WARNS_PREFIX);
+        return true;
     }
 
     @Override
     public List<AttractionRealtimeStatus> selectNeedSyncStatus(Integer minutes) {
         if (minutes == null || minutes <= 0) {
-            minutes = 60; // 默认1小时
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
 
         LocalDateTime thresholdTime = LocalDateTime.now().minusMinutes(minutes);
@@ -183,6 +152,7 @@ public class AttractionRealtimeStatusServiceImpl extends ServiceImpl<AttractionR
         if (result) {
             String cacheKey = ATTRACTION_STATUS_PREFIX + status.getAttractionId();
             cacheUtil.delete(cacheKey);
+            cacheUtil.delete(ACTIVE_WARNS_PREFIX);
             log.info("清除景点实时状态缓存: attractionId={}", status.getAttractionId());
         }
         
@@ -198,14 +168,14 @@ public class AttractionRealtimeStatusServiceImpl extends ServiceImpl<AttractionR
         }
 
         // 尝试从缓存获取每个景点的状态
-        List<AttractionRealtimeStatus> result = new java.util.ArrayList<>();
+        Map<Long, AttractionRealtimeStatus> statusesByAttractionId = new LinkedHashMap<>();
         List<Long> missingAttractionIds = new java.util.ArrayList<>();
 
         for (Long attractionId : attractionIds) {
             String cacheKey = ATTRACTION_STATUS_PREFIX + attractionId;
             AttractionRealtimeStatus cachedStatus = cacheUtil.get(cacheKey, AttractionRealtimeStatus.class);
             if (cachedStatus != null) {
-                result.add(cachedStatus);
+                statusesByAttractionId.put(attractionId, cachedStatus);
             } else {
                 missingAttractionIds.add(attractionId);
             }
@@ -213,8 +183,8 @@ public class AttractionRealtimeStatusServiceImpl extends ServiceImpl<AttractionR
 
         // 如果所有景点状态都在缓存中，直接返回
         if (missingAttractionIds.isEmpty()) {
-            log.info("从缓存批量获取景点实时状态: count={}", result.size());
-            return result;
+            log.info("从缓存批量获取景点实时状态: count={}", statusesByAttractionId.size());
+            return orderStatuses(attractionIds, statusesByAttractionId);
         }
 
         // 从数据库查询缺失的景点状态
@@ -228,75 +198,44 @@ public class AttractionRealtimeStatusServiceImpl extends ServiceImpl<AttractionR
         for (AttractionRealtimeStatus status : dbStatuses) {
             String cacheKey = ATTRACTION_STATUS_PREFIX + status.getAttractionId();
             cacheUtil.set(cacheKey, status, CACHE_EXPIRE_MINUTES, TimeUnit.MINUTES);
-            result.add(status);
+            statusesByAttractionId.put(status.getAttractionId(), status);
         }
 
-        return result;
+        return orderStatuses(attractionIds, statusesByAttractionId);
     }
 
     /**
      * 获取活跃的预警信息
      */
     @SuppressWarnings("unchecked")
-    public List<Object> getActiveWarns() {
+    public List<AttractionWarning> getActiveWarns() {
         // 生成缓存键
         String cacheKey = ACTIVE_WARNS_PREFIX;
         
         // 尝试从缓存获取
-        List<Object> cachedWarns = cacheUtil.get(cacheKey, List.class);
+        List<AttractionWarning> cachedWarns = cacheUtil.get(cacheKey, List.class);
         if (cachedWarns != null) {
             log.info("从缓存获取活跃预警信息: count={}", cachedWarns.size());
             return cachedWarns;
         }
 
-        try {
-            // 模拟查询活跃的预警信息
-            List<Object> activeWarns = new java.util.ArrayList<>();
-            
-            // 假设从数据库查询到的预警信息
-            // 这里使用模拟数据
-            java.util.Map<String, Object> warn1 = new java.util.HashMap<>();
-            warn1.put("warnId", 1);
-            warn1.put("attractionId", 1001L);
-            warn1.put("attractionName", "故宫博物院");
-            warn1.put("warnType", "人流预警");
-            warn1.put("warnLevel", "严重");
-            warn1.put("warnMessage", "当前人流量已超过最大承载量的80%");
-            warn1.put("createTime", java.time.LocalDateTime.now().minusHours(1));
-            warn1.put("status", "active");
-            activeWarns.add(warn1);
-            
-            java.util.Map<String, Object> warn2 = new java.util.HashMap<>();
-            warn2.put("warnId", 2);
-            warn2.put("attractionId", 1002L);
-            warn2.put("attractionName", "长城");
-            warn2.put("warnType", "天气预警");
-            warn2.put("warnLevel", "中度");
-            warn2.put("warnMessage", "未来2小时内可能有大雨");
-            warn2.put("createTime", java.time.LocalDateTime.now().minusHours(2));
-            warn2.put("status", "active");
-            activeWarns.add(warn2);
-            
-            java.util.Map<String, Object> warn3 = new java.util.HashMap<>();
-            warn3.put("warnId", 3);
-            warn3.put("attractionId", 1003L);
-            warn3.put("attractionName", "西湖");
-            warn3.put("warnType", "交通预警");
-            warn3.put("warnLevel", "轻度");
-            warn3.put("warnMessage", "景区周边道路轻度拥堵");
-            warn3.put("createTime", java.time.LocalDateTime.now().minusHours(3));
-            warn3.put("status", "active");
-            activeWarns.add(warn3);
-            
-            // 缓存结果
-            cacheUtil.set(cacheKey, activeWarns, CACHE_EXPIRE_MINUTES, TimeUnit.MINUTES);
-            
-            log.info("获取到 {} 条活跃的预警信息", activeWarns.size());
-            return activeWarns;
-        } catch (Exception e) {
-            log.error("获取活跃预警信息失败: {}", e.getMessage(), e);
-            return new java.util.ArrayList<>();
+        LambdaQueryWrapper<AttractionRealtimeStatus> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(AttractionRealtimeStatus::getDeleted, 0)
+                .orderByDesc(AttractionRealtimeStatus::getUpdateTime)
+                .last("LIMIT " + MAX_WARNING_SOURCE_RECORDS);
+        List<AttractionWarning> activeWarns = new ArrayList<>();
+        for (AttractionRealtimeStatus realtimeStatus : list(queryWrapper)) {
+            addCrowdWarning(realtimeStatus, activeWarns);
+            addWeatherWarning(realtimeStatus, activeWarns);
         }
+        activeWarns.sort(Comparator
+                .comparingInt((AttractionWarning warning) -> warningSeverity(warning.getWarnLevel()))
+                .reversed()
+                .thenComparing(AttractionWarning::getCreateTime,
+                        Comparator.nullsLast(Comparator.reverseOrder())));
+        cacheUtil.set(cacheKey, activeWarns, WARN_CACHE_EXPIRE_MINUTES, TimeUnit.MINUTES);
+        log.info("获取到 {} 条活跃的预警信息", activeWarns.size());
+        return activeWarns;
     }
 
     /**
@@ -310,20 +249,61 @@ public class AttractionRealtimeStatusServiceImpl extends ServiceImpl<AttractionR
             return 0;
         }
         // 使用attractionRealtimeStatusMapper批量更新同步时间
-        return attractionRealtimeStatusMapper.batchUpdateSyncTime(attractionIds);
+        int updated = attractionRealtimeStatusMapper.batchUpdateSyncTime(attractionIds);
+        cacheUtil.delete(ACTIVE_WARNS_PREFIX);
+        return updated;
     }
 
-    /**
-     * 查询景点近7天人流均值（使用attractionRealtimeStatusMapper）
-     * @param attractionId 景点ID
-     * @return 人流均值
-     */
-    @Override
-    public Integer selectAvgCrowdCountUsingMapper(Long attractionId) {
-        if (attractionId == null || attractionId <= 0) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+    private void addCrowdWarning(
+            AttractionRealtimeStatus realtimeStatus, List<AttractionWarning> warnings) {
+        Integer crowdLevel = realtimeStatus.getCrowdLevel();
+        if (crowdLevel == null || crowdLevel < 4) {
+            return;
         }
-        // 使用attractionRealtimeStatusMapper的selectAvgCrowdCount方法查询
-        return attractionRealtimeStatusMapper.selectAvgCrowdCount(attractionId);
+        AttractionWarning warning = baseWarning(realtimeStatus, "crowd");
+        warning.setWarnType("人流预警");
+        warning.setWarnLevel(crowdLevel >= 5 ? "严重" : "较高");
+        warning.setWarnMessage(crowdLevel >= 5
+                ? "当前景点人流已达到最高预警等级，请暂缓前往"
+                : "当前景点人流较为拥挤，建议错峰游览");
+        warnings.add(warning);
+    }
+
+    private void addWeatherWarning(
+            AttractionRealtimeStatus realtimeStatus, List<AttractionWarning> warnings) {
+        String weather = realtimeStatus.getWeather();
+        if (weather == null || weather.isBlank()) {
+            return;
+        }
+        String normalizedWeather = weather.toLowerCase(Locale.ROOT);
+        if (SEVERE_WEATHER_KEYWORDS.stream().noneMatch(normalizedWeather::contains)) {
+            return;
+        }
+        AttractionWarning warning = baseWarning(realtimeStatus, "weather");
+        warning.setWarnType("天气预警");
+        warning.setWarnLevel("较高");
+        warning.setWarnMessage("当前景点天气为" + weather + "，请关注安全并合理调整行程");
+        warnings.add(warning);
+    }
+
+    private AttractionWarning baseWarning(AttractionRealtimeStatus realtimeStatus, String type) {
+        AttractionWarning warning = new AttractionWarning();
+        warning.setWarnId(type + ":" + realtimeStatus.getAttractionId());
+        warning.setAttractionId(realtimeStatus.getAttractionId());
+        warning.setCreateTime(realtimeStatus.getUpdateTime());
+        warning.setStatus("active");
+        return warning;
+    }
+
+    private int warningSeverity(String warnLevel) {
+        return "严重".equals(warnLevel) ? 3 : "较高".equals(warnLevel) ? 2 : 1;
+    }
+
+    private List<AttractionRealtimeStatus> orderStatuses(
+            List<Long> attractionIds, Map<Long, AttractionRealtimeStatus> statusesByAttractionId) {
+        return attractionIds.stream()
+                .map(statusesByAttractionId::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 }

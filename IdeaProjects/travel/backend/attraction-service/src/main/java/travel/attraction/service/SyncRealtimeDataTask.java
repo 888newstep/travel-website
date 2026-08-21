@@ -16,7 +16,7 @@ import java.util.List;
 @ConditionalOnProperty(
         name = "travel.scheduling.realtime-sync-enabled",
         havingValue = "true",
-        matchIfMissing = true
+        matchIfMissing = false
 )
 public class SyncRealtimeDataTask {
 

@@ -10,6 +10,8 @@ import travel.common.entity.user_community.TravelNoteTag;
 import travel.common.mapper.user_community_mapper.TravelNoteCollectionMapper;
 import travel.common.mapper.user_community_mapper.TravelNoteMapper;
 import travel.common.mapper.user_community_mapper.TravelNoteTagMapper;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.collection.service.TravelNoteService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,6 +19,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.time.LocalDateTime;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,9 +32,22 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     private final TravelNoteCollectionMapper travelNoteCollectionMapper;
     @Override
     @Transactional
-    public TravelNote createTravelNote(TravelNote travelNote, List<String> tags) {
+    public TravelNote createTravelNote(Integer userId, TravelNote travelNote, List<String> tags) {
+        if (userId == null || travelNote == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
         try {
-            save(travelNote);
+            travelNote.setId(null);
+            travelNote.setUserId(userId);
+            travelNote.setViewsCount(0);
+            travelNote.setLikesCount(0);
+            travelNote.setCommentsCount(0);
+            travelNote.setIsPublic(travelNote.getIsPublic() == null || travelNote.getIsPublic());
+            travelNote.setCreatedAt(LocalDateTime.now());
+            travelNote.setUpdatedAt(LocalDateTime.now());
+            if (!save(travelNote)) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+            }
 
             if (tags != null && !tags.isEmpty()) {
                 List<TravelNoteTag> noteTags = tags.stream()
@@ -47,6 +63,8 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
 
             log.info("创建游记成功: id={}, userId={}, title={}", travelNote.getId(), travelNote.getUserId(), travelNote.getTitle());
             return travelNote;
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("创建游记失败: userId={}, title={}", travelNote.getUserId(), travelNote.getTitle(), e);
             throw new RuntimeException("创建游记失败", e);
@@ -56,9 +74,10 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     @Override
     public List<Map<String, Object>> getHotTravelNotes(int limit) {
         try {
+            limit = Math.min(Math.max(limit, 1), 100);
             QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("is_public", true);
-            queryWrapper.orderByDesc("views_count", "likes_count", "comments_count");
+            queryWrapper.orderByDesc("views_count", "likes_count");
             queryWrapper.last("LIMIT " + limit);
 
             List<TravelNote> travelNotes = list(queryWrapper);
@@ -77,15 +96,29 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     }
     @Override
     @Transactional
-    public TravelNote updateTravelNote(Integer id, TravelNote travelNote, List<String> tags) {
+    public TravelNote updateTravelNote(Integer id, Integer userId, TravelNote travelNote, List<String> tags) {
+        if (id == null || userId == null || travelNote == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
         try {
             TravelNote existingNote = getById(id);
             if (existingNote == null) {
-                throw new RuntimeException("游记不存在");
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "游记不存在");
+            }
+            if (!userId.equals(existingNote.getUserId())) {
+                throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
             }
 
-            travelNote.setId(id);
-            updateById(travelNote);
+            existingNote.setTitle(travelNote.getTitle());
+            existingNote.setContent(travelNote.getContent());
+            existingNote.setCoverImage(travelNote.getCoverImage());
+            existingNote.setImages(travelNote.getImages());
+            existingNote.setCityId(travelNote.getCityId());
+            existingNote.setIsPublic(travelNote.getIsPublic());
+            existingNote.setUpdatedAt(LocalDateTime.now());
+            if (!updateById(existingNote)) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+            }
 
             if (tags != null) {
                 deleteTagsByNoteId(id);
@@ -100,10 +133,12 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
                 noteTags.forEach(this::saveTag);
             }
 
-            log.info("更新游记成功: id={}, userId={}, title={}", id, travelNote.getUserId(), travelNote.getTitle());
-            return travelNote;
+            log.info("更新游记成功: id={}, userId={}, title={}", id, userId, existingNote.getTitle());
+            return existingNote;
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("更新游记失败: id={}, userId={}, title={}", id, travelNote.getUserId(), travelNote.getTitle(), e);
+            log.error("更新游记失败: id={}, userId={}, title={}", id, userId, travelNote.getTitle(), e);
             throw new RuntimeException("更新游记失败", e);
         }
     }
@@ -111,16 +146,19 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     @Override
     @Transactional
     public boolean deleteTravelNote(Integer id, Integer userId) {
+        if (id == null || userId == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
         try {
             // 检查游记是否存在
             TravelNote travelNote = getById(id);
             if (travelNote == null) {
-                throw new RuntimeException("游记不存在");
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "游记不存在");
             }
             
             // 检查权限
             if (!travelNote.getUserId().equals(userId)) {
-                throw new RuntimeException("无权限删除此游记");
+                throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
             }
             
             // 删除标签
@@ -134,6 +172,8 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
             }
             
             return result;
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("删除游记失败: id={}, userId={}", id, userId, e);
             throw new RuntimeException("删除游记失败", e);
@@ -141,12 +181,16 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     }
 
     @Override
-    public Map<String, Object> getTravelNoteDetail(Integer id) {
+    public Map<String, Object> getTravelNoteDetail(Integer id, Integer currentUserId) {
         try {
             // 获取游记
             TravelNote travelNote = getById(id);
             if (travelNote == null) {
                 throw new RuntimeException("游记不存在");
+            }
+            if (!Boolean.TRUE.equals(travelNote.getIsPublic())
+                    && !Objects.equals(travelNote.getUserId(), currentUserId)) {
+                throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
             }
             
             // 增加浏览数
@@ -158,6 +202,8 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
             // 这里可以添加用户信息、标签信息等
             
             return result;
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("获取游记详情失败: id={}", id, e);
             throw new RuntimeException("获取游记详情失败", e);
@@ -167,6 +213,8 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     @Override
     public List<Map<String, Object>> getTravelNotes(int page, int size, Map<String, Object> filters) {
         try {
+            page = Math.max(page, 1);
+            size = Math.min(Math.max(size, 1), 100);
             // 构建查询条件
             QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("is_public", true);
@@ -203,11 +251,16 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     }
 
     @Override
-    public List<Map<String, Object>> getUserTravelNotes(Integer userId, int page, int size) {
+    public List<Map<String, Object>> getUserTravelNotes(Integer userId, Integer currentUserId, int page, int size) {
         try {
+            page = Math.max(page, 1);
+            size = Math.min(Math.max(size, 1), 100);
             // 构建查询条件
             QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("user_id", userId);
+            if (!Objects.equals(userId, currentUserId)) {
+                queryWrapper.eq("is_public", true);
+            }
             queryWrapper.orderByDesc("created_at");
             
             // 分页查询
@@ -352,10 +405,12 @@ public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelN
     @Override
     public List<Map<String, Object>> searchTravelNotes(String keyword, int page, int size) {
         try {
+            page = Math.max(page, 1);
+            size = Math.min(Math.max(size, 1), 100);
             // 构建查询条件
             QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
             queryWrapper.eq("is_public", true);
-            queryWrapper.like("title", keyword).or().like("content", keyword);
+            queryWrapper.and(wrapper -> wrapper.like("title", keyword).or().like("content", keyword));
             queryWrapper.orderByDesc("created_at");
             
             // 分页查询

@@ -28,7 +28,7 @@ public class RouteComment {
     private User user;
 
     @TableField("rating")
-    private Double rating = 5.0;
+    private Double rating;
 
     @TableField("content")
     private String content;

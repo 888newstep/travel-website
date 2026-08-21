@@ -10,7 +10,7 @@ import travel.common.utils.Result;
 
 import java.util.List;
 
-@FeignClient(name = "route-service", path = "/routes")
+@FeignClient(name = "route-service", path = "/api/routes")
 public interface RouteFeignClient {
 
     @GetMapping("/{id}")

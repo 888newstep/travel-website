@@ -169,7 +169,7 @@ export function HomePage() {
                   <article key={item.id} className="scenic-shell-soft surface-card-hover p-5">
                     <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
                       <span>{item.author || TEXT.ANONYMOUS}</span>
-                      <span>点赞 {item.likes || 0} · 评论 {item.comments || 0}</span>
+                      <span>点赞 {item.likes || 0}</span>
                     </div>
                     <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
                     <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-500">{item.excerpt || item.content || TEXT.NO_CONTENT}</p>

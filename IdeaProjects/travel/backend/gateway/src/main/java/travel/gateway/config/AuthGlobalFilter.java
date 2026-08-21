@@ -10,6 +10,7 @@ import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.core.Ordered;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -19,18 +20,31 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 
 @Component
 public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
     private static final Logger log = LoggerFactory.getLogger(AuthGlobalFilter.class);
+    private static final String USER_ID_HEADER = "X-User-Id";
+    private static final String USER_TYPE_HEADER = "X-User-Type";
+    private static final String USER_ROLE_HEADER = "X-User-Role";
+    private static final String CLIENT_IP_HEADER = "X-Client-IP";
 
-    private static final List<String> WHITE_LIST = List.of(
-            "/api/users/login", "/api/users/register", "/api/users/captcha",
-            "/api/attractions/**", "/api/cities/**", "/api/restaurants/**", "/api/realtime-status/**",
-            "/api/routes/**", "/api/travel-notes/**", "/api/ai/**", "/api/route-share/**",
-            "/swagger-ui/**", "/v3/api-docs/**", "/doc.html",
-            "/actuator/**"
+    private static final Set<String> PUBLIC_POST_PATHS = Set.of(
+            "/api/users/login", "/api/users/register", "/api/users/captcha"
+    );
+    private static final Set<String> PUBLIC_GET_PATHS = Set.of(
+            "/api/attractions", "/api/cities", "/api/restaurants", "/api/routes",
+            "/api/routes/search", "/api/travel-notes", "/api/route-share/validate",
+            "/swagger-ui", "/swagger-ui.html",
+            "/v3/api-docs", "/doc.html", "/actuator/health"
+    );
+    private static final List<String> PUBLIC_GET_PREFIXES = List.of(
+            "/api/attractions/", "/api/cities/", "/api/restaurants/", "/api/realtime-status/",
+            "/api/routes/city/", "/api/travel-notes/", "/swagger-ui/", "/v3/api-docs/",
+            "/api/route-share/info/", "/api/route-share/access/", "/api/route-share/file/access/",
+            "/actuator/health/"
     );
 
     @Value("${jwt.secret:}")
@@ -41,23 +55,24 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     @jakarta.annotation.PostConstruct
     void validateJwtSecret() {
         if (jwtSecret == null || jwtSecret.isBlank()) {
-            log.warn("JWT secret is not configured — authentication will pass all requests. "
-                    + "Set JWT_SECRET environment variable before deploying to production.");
-            secretConfigured = false;
-        } else {
-            secretConfigured = true;
+            throw new IllegalStateException("JWT_SECRET must be configured before the gateway can start");
         }
+        if (jwtSecret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 32 UTF-8 bytes");
+        }
+        secretConfigured = true;
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        // Skip authentication if JWT secret is not configured (e.g. test / local dev)
         if (!secretConfigured) {
-            return chain.filter(exchange);
+            exchange.getResponse().setStatusCode(HttpStatus.SERVICE_UNAVAILABLE);
+            return exchange.getResponse().setComplete();
         }
 
+        exchange = sanitizeForwardedHeaders(exchange);
         String path = exchange.getRequest().getURI().getPath();
-        if (WHITE_LIST.stream().anyMatch(pattern -> matchPath(path, pattern))) {
+        if (isPublicRequest(exchange, path)) {
             return chain.filter(exchange);
         }
 
@@ -75,22 +90,64 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             Object userType = claims.get("userType");
             Object role = claims.get("role");
 
-            exchange.getRequest().mutate()
-                    .header("X-User-Id", userId == null ? "" : String.valueOf(userId))
-                    .header("X-User-Type", userType == null ? "" : String.valueOf(userType))
-                    .header("X-User-Role", String.valueOf(role != null ? role : userType));
-            return chain.filter(exchange);
+            ServerWebExchange authenticatedExchange = exchange.mutate()
+                    .request(builder -> builder.headers(headers -> {
+                        headers.set(USER_ID_HEADER, userId == null ? "" : String.valueOf(userId));
+                        headers.set(USER_TYPE_HEADER, userType == null ? "" : String.valueOf(userType));
+                        headers.set(USER_ROLE_HEADER, String.valueOf(role != null ? role : userType));
+                    }))
+                    .build();
+            return chain.filter(authenticatedExchange);
         } catch (Exception exception) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
     }
 
-    private boolean matchPath(String path, String pattern) {
-        if (pattern.endsWith("/**")) {
-            return path.startsWith(pattern.substring(0, pattern.length() - 3));
+    private ServerWebExchange sanitizeForwardedHeaders(ServerWebExchange exchange) {
+        String clientIp = exchange.getRequest().getRemoteAddress() == null
+                ? "unknown"
+                : exchange.getRequest().getRemoteAddress().getAddress().getHostAddress();
+        return exchange.mutate()
+                .request(builder -> builder.headers(headers -> {
+                    headers.remove(USER_ID_HEADER);
+                    headers.remove(USER_TYPE_HEADER);
+                    headers.remove(USER_ROLE_HEADER);
+                    headers.remove(CLIENT_IP_HEADER);
+                    headers.set(CLIENT_IP_HEADER, clientIp);
+                }))
+                .build();
+    }
+
+    private boolean isPublicRequest(ServerWebExchange exchange, String path) {
+        HttpMethod method = exchange.getRequest().getMethod();
+        if (HttpMethod.OPTIONS.equals(method)) {
+            return true;
         }
-        return path.equals(pattern);
+        if (path.equals("/api/ai") || path.startsWith("/api/ai/")) {
+            return true;
+        }
+        if (HttpMethod.POST.equals(method) && PUBLIC_POST_PATHS.contains(path)) {
+            return true;
+        }
+        if (HttpMethod.POST.equals(method) && path.startsWith("/api/route-share/visit/")) {
+            return true;
+        }
+        if (!HttpMethod.GET.equals(method)) {
+            return false;
+        }
+        return PUBLIC_GET_PATHS.contains(path)
+                || PUBLIC_GET_PREFIXES.stream().anyMatch(path::startsWith)
+                || isPublicRouteDetail(path);
+    }
+
+    private boolean isPublicRouteDetail(String path) {
+        String prefix = "/api/routes/";
+        if (!path.startsWith(prefix)) {
+            return false;
+        }
+        String routeId = path.substring(prefix.length());
+        return !routeId.isEmpty() && routeId.chars().allMatch(Character::isDigit);
     }
 
     @Override

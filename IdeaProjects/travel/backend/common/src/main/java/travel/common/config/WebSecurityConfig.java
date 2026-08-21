@@ -12,6 +12,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager;
 import travel.common.utils.CacheUtil;
@@ -30,6 +31,7 @@ import travel.common.utils.CacheUtil;
 public class WebSecurityConfig {
 
     private final CacheUtil cacheUtil;
+    private final HttpIdempotencyFilter httpIdempotencyFilter;
 
     /**
      * 仅供本机性能压测读取 Actuator/Druid 诊断数据，默认关闭，避免把运维端点暴露给外部请求。
@@ -65,6 +67,37 @@ public class WebSecurityConfig {
                         authorize.requestMatchers(HttpMethod.GET, "/routes", "/routes/city/**", "/routes/search", "/routes/{id}").permitAll();
                         authorize.requestMatchers(HttpMethod.GET, "/restaurants", "/restaurants/**").permitAll();
                         authorize.requestMatchers(HttpMethod.GET, "/travel-notes/**").permitAll();
+                        authorize.requestMatchers(HttpMethod.GET,
+                                "/route-share/validate",
+                                "/route-share/info/**",
+                                "/route-share/access/**",
+                                "/route-share/file/access/**").permitAll();
+                        authorize.requestMatchers(HttpMethod.POST, "/route-share/visit/**").permitAll();
+
+                        // ===== 管理员接口 =====
+                        authorize.requestMatchers(HttpMethod.POST, "/feedback/reply/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.PUT, "/feedback/process/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.GET, "/feedback/statistics", "/feedback/type/**")
+                                .hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.POST, "/resource-file/category/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.PUT, "/resource-file/category/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.DELETE, "/resource-file/category/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.POST, "/attractions/{id}/review").authenticated();
+                        authorize.requestMatchers(HttpMethod.POST, "/attractions/increment-views/**").authenticated();
+                        authorize.requestMatchers(HttpMethod.POST, "/attractions/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.PUT, "/attractions/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.DELETE, "/attractions/**").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.POST,
+                                "/realtime-status/update",
+                                "/realtime-status/batch-update",
+                                "/realtime-status/sync-time",
+                                "/realtime-status/traffic-update",
+                                "/realtime-status/traffic-batch").hasRole("ADMIN");
+                        authorize.requestMatchers(HttpMethod.GET, "/ai/advanced/recommendations").authenticated();
+                        authorize.requestMatchers(
+                                "/ai/smart-itinerary/optimize",
+                                "/ai/assistant/optimize/**",
+                                "/ai/assistant/optimize-route/**").authenticated();
 
                         // ===== AI 服务公开（前端核心交互入口） =====
                         authorize.requestMatchers("/ai/**").permitAll();
@@ -73,6 +106,7 @@ public class WebSecurityConfig {
                         authorize.anyRequest().authenticated();
                 });
         http.addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
+        http.addFilterAfter(httpIdempotencyFilter, AuthorizationFilter.class);
 
         return http.build();
     }

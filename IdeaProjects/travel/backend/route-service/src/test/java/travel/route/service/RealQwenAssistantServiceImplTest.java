@@ -7,18 +7,16 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.travel_recommendation.Attraction;
-import travel.common.utils.CacheUtil;
+import travel.common.exception.BusinessException;
 import travel.route.dto.ai.AIAskQuestionResponse;
 import travel.route.dto.ai.AIAttractionIntroResponse;
 import travel.route.dto.ai.AIOptimizeRouteResponse;
 import travel.route.service.impl.RealQwenAssistantServiceImpl;
 
-import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -31,56 +29,81 @@ class RealQwenAssistantServiceImplTest {
     private AttractionService attractionService;
 
     @Mock
-    private CacheUtil cacheUtil;
-
-    @Mock
     private QwenService qwenService;
 
     @InjectMocks
     private RealQwenAssistantServiceImpl realQwenAssistantService;
 
     @Test
-    void shouldFallbackForAskQuestionWhenQwenFails() {
-        when(cacheUtil.get(anyString(), eq(Map.class))).thenReturn(null);
-        when(qwenService.travelQA("\u95e8\u7968\u600e\u4e48\u9884\u8ba2")).thenThrow(new RuntimeException("boom"));
+    void shouldReturnProviderAnswerWithoutInventedConfidence() {
+        when(qwenService.travelQA("门票怎么预订")).thenReturn("请通过景区官方渠道预订。");
 
-        AIAskQuestionResponse response = realQwenAssistantService.askQuestion("\u95e8\u7968\u600e\u4e48\u9884\u8ba2", 1);
+        AIAskQuestionResponse response = realQwenAssistantService.askQuestion("门票怎么预订", 1);
 
-        assertEquals("fallback", response.getSource());
-        assertTrue(response.getAnswer().contains("\u5b98\u65b9\u6e20\u9053"));
+        assertEquals("qwen", response.getSource());
+        assertEquals("请通过景区官方渠道预订。", response.getAnswer());
+        assertNull(response.getConfidence());
     }
 
     @Test
-    void shouldFallbackForRouteOptimizationWhenQwenFails() {
+    void shouldExposeDependencyFailureWhenQuestionProviderFails() {
+        when(qwenService.travelQA("门票怎么预订")).thenThrow(new RuntimeException("boom"));
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> realQwenAssistantService.askQuestion("门票怎么预订", 1));
+
+        assertEquals(5006, exception.getCode());
+    }
+
+    @Test
+    void shouldReturnRouteSuggestionWithoutInventedScore() {
         Route route = new Route();
         route.setId(5);
         route.setTitle("route-5");
         when(routeService.getById(5)).thenReturn(route);
-        when(qwenService.chatCompletion(anyString(), anyString())).thenThrow(new RuntimeException("timeout"));
+        when(qwenService.chatCompletion(anyString(), anyString())).thenReturn("优先乘坐地铁。");
 
         AIOptimizeRouteResponse response = realQwenAssistantService.optimizeRouteByAI(5);
 
-        assertTrue(response.getSuccess());
-        assertEquals("fallback", response.getSource());
-        assertEquals(1, response.getSuggestions().size());
-        assertTrue(response.getMessage().contains("timeout"));
+        assertEquals("qwen", response.getSource());
+        assertEquals("优先乘坐地铁。", response.getSuggestions().get(0).getDescription());
+        assertNull(response.getOptimizedScore());
     }
 
     @Test
-    void shouldFallbackForAttractionIntroWhenQwenFails() {
+    void shouldRejectMissingRoute() {
+        when(routeService.getById(5)).thenReturn(null);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> realQwenAssistantService.optimizeRouteByAI(5));
+
+        assertEquals(2001, exception.getCode());
+    }
+
+    @Test
+    void shouldLeaveUnavailableAttractionFieldsEmpty() {
         Attraction attraction = new Attraction();
         attraction.setId(6);
         attraction.setName("museum");
-        attraction.setDescription("\u57fa\u7840\u4ecb\u7ecd");
         when(attractionService.getById(6)).thenReturn(attraction);
-        when(cacheUtil.get(anyString(), eq(Map.class))).thenReturn(null);
-        when(qwenService.generateAttractionIntro(anyString(), anyString())).thenThrow(new RuntimeException("provider down"));
+        when(qwenService.generateAttractionIntro(anyString(), anyString())).thenReturn("provider intro");
 
         AIAttractionIntroResponse response = realQwenAssistantService.getAttractionIntro(6);
 
-        assertTrue(response.getSuccess());
-        assertEquals("fallback", response.getSource());
-        assertEquals("\u57fa\u7840\u4ecb\u7ecd", response.getDetailedIntro());
-        assertTrue(response.getMessage().contains("provider down"));
+        assertEquals("provider intro", response.getDetailedIntro());
+        assertEquals("qwen", response.getSource());
+        assertNull(response.getFunFacts());
+        assertNull(response.getBestVisitTime());
+        assertNull(response.getEstimatedDuration());
+    }
+
+    @Test
+    void shouldRejectMissingAttraction() {
+        when(attractionService.getById(6)).thenReturn(null);
+
+        BusinessException exception = assertThrows(BusinessException.class,
+                () -> realQwenAssistantService.getAttractionIntro(6));
+
+        assertEquals(3002, exception.getCode());
     }
 }

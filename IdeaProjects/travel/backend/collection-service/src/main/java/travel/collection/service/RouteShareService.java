@@ -66,7 +66,7 @@ public interface RouteShareService extends IService<RouteShare> {
     /**
      * 获取分享统计信息
      */
-    Map<String, Object> getShareStatistics(Long shareId);
+    Map<String, Object> getShareStatistics(Long shareId, Integer userId);
 
     /**
      * 清理过期分享
@@ -94,19 +94,14 @@ public interface RouteShareService extends IService<RouteShare> {
     List<RouteShare> getUserShares(Integer userId, int page, int size);
 
     /**
-     * 取消分享
-     */
-    boolean cancelShare(Long id);
-
-    /**
      * 更新分享设置
      */
-    boolean updateShareSettings(Long id, Map<String, Object> settings);
+    boolean updateShareSettings(Long id, Integer userId, Map<String, Object> settings);
 
     /**
      * 批量取消分享
      */
-    int batchCancelShares(List<Long> ids);
+    int batchCancelShares(List<Long> ids, Integer userId);
 
     /**
      * 获取热门分享

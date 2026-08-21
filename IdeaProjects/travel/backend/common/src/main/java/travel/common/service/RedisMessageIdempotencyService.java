@@ -27,6 +27,12 @@ public class RedisMessageIdempotencyService {
                     + "return redis.call('del', KEYS[1]) "
                     + "else return 0 end",
             Long.class);
+    private static final DefaultRedisScript<Long> COMPLETE_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+                    + "redis.call('set', KEYS[1], ARGV[2], 'PX', ARGV[3]) "
+                    + "return 1 "
+                    + "else return 0 end",
+            Long.class);
 
     private final StringRedisTemplate redisTemplate;
     private final Duration processingTtl;
@@ -67,7 +73,12 @@ public class RedisMessageIdempotencyService {
 
     public void markCompleted(ClaimResult claim) {
         requireClaimed(claim);
-        redisTemplate.opsForValue().set(claim.key(), COMPLETED, completedTtl);
+        redisTemplate.execute(
+                COMPLETE_SCRIPT,
+                Collections.singletonList(claim.key()),
+                PROCESSING_PREFIX + claim.token(),
+                COMPLETED,
+                String.valueOf(completedTtl.toMillis()));
     }
 
     public void release(ClaimResult claim) {

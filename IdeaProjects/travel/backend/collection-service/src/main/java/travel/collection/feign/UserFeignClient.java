@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import travel.common.entity.user_community.User;
 import travel.common.utils.Result;
 
-@FeignClient(name = "user-service", path = "/users")
+@FeignClient(name = "user-service", path = "/api/users")
 public interface UserFeignClient {
 
     @GetMapping("/{id}")

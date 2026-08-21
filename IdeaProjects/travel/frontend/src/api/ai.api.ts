@@ -18,11 +18,6 @@ export interface AIImageAnalysis {
     analysisType?: string;
 }
 
-function buildVoiceFallbackPrompt(text: string) {
-    return `Please treat the following transcribed voice text as a real travel question and reply with concise, actionable travel advice in Chinese:
-${text}`;
-}
-
 export const aiApi = {
     chat(data: AIChatRequest) {
         return apiClient.post<AIChatResponse>(`${AI_BASE}/chat`, data);
@@ -55,15 +50,6 @@ export const aiApi = {
         return apiClient.post<any>(`${AI_BASE}/itinerary/generate`, data);
     },
 
-    multimodalQuery(data: {
-        text?: string;
-        image?: string;
-        audio?: string;
-        context?: Record<string, any>;
-    }) {
-        return apiClient.post<any>(`${AI_BASE}/multimodal/query`, data);
-    },
-
     smartAssistant(query: string, context?: Record<string, any>) {
         return apiClient.post<AIChatResponse>(`${AI_BASE}/assistant/chat`, {
             query,
@@ -71,28 +57,7 @@ export const aiApi = {
         });
     },
 
-    getBudgetEstimation(data: Record<string, any>) {
-        return apiClient.post<any>(`${AI_ADVANCED_BASE}/budget`, data);
-    },
-
     planSmartRoute(data: Record<string, any>) {
         return apiClient.post<any>(`${AI_ADVANCED_BASE}/plan`, data);
-    },
-
-    getSafetyAdvice(cityId: number) {
-        return apiClient.get<any>(`${AI_ADVANCED_BASE}/safety/${cityId}`);
-    },
-
-    async processVoice(data: { audioData: string | null; text: string }) {
-        try {
-            return await apiClient.post<any>(`${AI_ADVANCED_BASE}/voice`, data);
-        } catch (error) {
-            if (data.text?.trim()) {
-                return apiClient.post<any>(`${AI_BASE}/chat`, {
-                    message: buildVoiceFallbackPrompt(data.text.trim()),
-                });
-            }
-            throw error;
-        }
     },
 };

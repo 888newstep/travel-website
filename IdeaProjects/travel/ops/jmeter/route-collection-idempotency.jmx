@@ -1,0 +1,679 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Route collection idempotency" enabled="true">
+      <stringProp name="TestPlan.comments">同一用户、同一路线、同一 Idempotency-Key 的并发验收。HTTP 409 表示请求仍在处理中，是允许的业务竞争结果。</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Test variables" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="gateway_protocol" elementType="Argument">
+            <stringProp name="Argument.name">gateway_protocol</stringProp>
+            <stringProp name="Argument.value">${__P(gateway_protocol,http)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="gateway_host" elementType="Argument">
+            <stringProp name="Argument.name">gateway_host</stringProp>
+            <stringProp name="Argument.value">${__P(gateway_host,127.0.0.1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="gateway_port" elementType="Argument">
+            <stringProp name="Argument.name">gateway_port</stringProp>
+            <stringProp name="Argument.value">${__P(gateway_port,8090)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="username" elementType="Argument">
+            <stringProp name="Argument.name">username</stringProp>
+            <stringProp name="Argument.value">${__P(username,zhangsan)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="route_id" elementType="Argument">
+            <stringProp name="Argument.name">route_id</stringProp>
+            <stringProp name="Argument.value">${__P(route_id,1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="threads" elementType="Argument">
+            <stringProp name="Argument.name">threads</stringProp>
+            <stringProp name="Argument.value">${__P(threads,100)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="ramp_up_seconds" elementType="Argument">
+            <stringProp name="Argument.name">ramp_up_seconds</stringProp>
+            <stringProp name="Argument.value">${__P(ramp_up_seconds,0)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="idempotency_key" elementType="Argument">
+            <stringProp name="Argument.name">idempotency_key</stringProp>
+            <stringProp name="Argument.value">${__P(idempotency_key,)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="connect_timeout_ms" elementType="Argument">
+            <stringProp name="Argument.name">connect_timeout_ms</stringProp>
+            <stringProp name="Argument.value">${__P(connect_timeout_ms,5000)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="response_timeout_ms" elementType="Argument">
+            <stringProp name="Argument.name">response_timeout_ms</stringProp>
+            <stringProp name="Argument.value">${__P(response_timeout_ms,15000)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP defaults" enabled="true">
+        <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+          <collectionProp name="Arguments.arguments"/>
+        </elementProp>
+        <stringProp name="HTTPSampler.domain">${gateway_host}</stringProp>
+        <stringProp name="HTTPSampler.port">${gateway_port}</stringProp>
+        <stringProp name="HTTPSampler.protocol">${gateway_protocol}</stringProp>
+        <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+        <stringProp name="HTTPSampler.path"/>
+        <stringProp name="HTTPSampler.concurrentPool">6</stringProp>
+        <stringProp name="HTTPSampler.connect_timeout">${connect_timeout_ms}</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">${response_timeout_ms}</stringProp>
+      </ConfigTestElement>
+      <hashTree/>
+
+      <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="Setup" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.duration"/>
+        <stringProp name="ThreadGroup.delay"/>
+      </SetupThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="setup:init-context" enabled="true">
+          <stringProp name="cacheKey">route-collection-idempotency-init-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+import groovy.json.JsonOutput
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+
+def username = vars.get('username')?.trim()
+def password = System.getenv('TRAVEL_JMETER_PASSWORD')
+def routeId = vars.get('route_id')?.trim()
+def expectedThreadsText = vars.get('threads')?.trim()
+
+if (!username) {
+    throw new IllegalArgumentException('username must not be blank')
+}
+if (!password) {
+    throw new IllegalArgumentException('password must not be blank; run through run-idempotency-test.ps1')
+}
+if (!(routeId ==~ /[1-9]\d*/)) {
+    throw new IllegalArgumentException('route_id must be a positive integer')
+}
+if (!(expectedThreadsText ==~ /[1-9]\d*/)) {
+    throw new IllegalArgumentException('threads must be a positive integer')
+}
+
+def suppliedKey = vars.get('idempotency_key')?.trim()
+def sharedKey = suppliedKey ?: "jmeter-route-collection-${UUID.randomUUID()}"
+vars.put('login_body', JsonOutput.toJson([username: username, password: password]))
+props.setProperty('travel.idempotency.key', sharedKey)
+props.setProperty('travel.idempotency.expected_threads', expectedThreadsText)
+props.put('travel.idempotency.original_200', new AtomicInteger())
+props.put('travel.idempotency.replayed_200', new AtomicInteger())
+props.put('travel.idempotency.conflict_409', new AtomicInteger())
+props.put('travel.idempotency.unexpected', new AtomicInteger())
+props.put('travel.idempotency.success_body', new AtomicReference())
+props.put('travel.idempotency.failures', new ConcurrentLinkedQueue())
+
+SampleResult.setResponseCode('200')
+SampleResult.setResponseMessage("key=${sharedKey};threads=${expectedThreadsText};routeId=${routeId}")
+SampleResult.setResponseData(JsonOutput.toJson([
+        idempotencyKey: sharedKey,
+        threads: expectedThreadsText as int,
+        routeId: routeId as int
+]), 'UTF-8')
+SampleResult.setDataType('text')
+SampleResult.setSuccessful(true)
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup:login" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${login_body}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">/api/users/login</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <stringProp name="HTTPSampler.embedded_url_re"/>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Login headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+          <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="Extract token" enabled="true">
+            <stringProp name="JSONPostProcessor.referenceNames">auth_token</stringProp>
+            <stringProp name="JSONPostProcessor.jsonPathExprs">$.data.token</stringProp>
+            <stringProp name="JSONPostProcessor.match_numbers">1</stringProp>
+            <stringProp name="JSONPostProcessor.defaultValues">__TOKEN_NOT_FOUND__</stringProp>
+            <stringProp name="JSONPostProcessor.compute_concat">false</stringProp>
+          </JSONPostProcessor>
+          <hashTree/>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Assert login" enabled="true">
+            <stringProp name="cacheKey">route-collection-idempotency-login-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+import groovy.json.JsonSlurper
+
+def failures = []
+if (prev.getResponseCode() != '200') {
+    failures << "expected HTTP 200 but got ${prev.getResponseCode()}"
+}
+
+def payload
+try {
+    payload = new JsonSlurper().parseText(prev.getResponseDataAsString())
+} catch (Exception exception) {
+    failures << "response is not valid JSON: ${exception.message}"
+}
+
+if (payload != null && payload.success != true) {
+    failures << "login response success must be true"
+}
+def token = vars.get('auth_token')
+if (!token || token == '__TOKEN_NOT_FOUND__') {
+    failures << 'token was not found at $.data.token'
+} else {
+    props.setProperty('travel.idempotency.token', token)
+}
+
+if (!failures.isEmpty()) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(failures.join('; '))
+}
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223Assertion>
+          <hashTree/>
+        </hashTree>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="setup:remove-existing" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="routeId" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">true</boolProp>
+                <stringProp name="Argument.name">routeId</stringProp>
+                <stringProp name="Argument.value">${route_id}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+                <boolProp name="HTTPArgument.use_equals">true</boolProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">/api/v1/route-collections/remove</stringProp>
+          <stringProp name="HTTPSampler.method">DELETE</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+          <stringProp name="HTTPSampler.embedded_url_re"/>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Authenticated headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${auth_token}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Assert cleanup" enabled="true">
+            <stringProp name="cacheKey">route-collection-idempotency-cleanup-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+import groovy.json.JsonSlurper
+
+def failures = []
+if (prev.getResponseCode() != '200') {
+    failures << "expected HTTP 200 but got ${prev.getResponseCode()}"
+}
+try {
+    def payload = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (payload.success != true || (payload.code as int) != 200) {
+        failures << 'cleanup response must be a successful Result'
+    }
+} catch (Exception exception) {
+    failures << "response is not valid JSON: ${exception.message}"
+}
+if (!failures.isEmpty()) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(failures.join('; '))
+}
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223Assertion>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent requests" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${ramp_up_seconds}</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.duration"/>
+        <stringProp name="ThreadGroup.delay"/>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <SyncTimer guiclass="TestBeanGUI" testclass="SyncTimer" testname="Synchronize all concurrent threads" enabled="true">
+          <intProp name="groupSize">0</intProp>
+          <longProp name="timeoutInMs">30000</longProp>
+        </SyncTimer>
+        <hashTree/>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="main:toggle" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">{&quot;routeId&quot;:${route_id}}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">/api/v1/route-collections/toggle</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <stringProp name="HTTPSampler.embedded_url_re"/>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Load shared request context" enabled="true">
+            <stringProp name="cacheKey">route-collection-idempotency-main-context-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+def token = props.getProperty('travel.idempotency.token')
+def key = props.getProperty('travel.idempotency.key')
+if (!token || !key) {
+    throw new IllegalStateException('setup did not provide token and idempotency key')
+}
+vars.put('shared_token', token)
+vars.put('shared_key', key)
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223PreProcessor>
+          <hashTree/>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Idempotent request headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${shared_token}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Idempotency-Key</stringProp>
+                <stringProp name="Header.value">${shared_key}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Assert concurrent result" enabled="true">
+            <stringProp name="cacheKey">route-collection-idempotency-main-assert-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+import groovy.json.JsonSlurper
+import java.util.Locale
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+
+AtomicInteger original200 = props.get('travel.idempotency.original_200') as AtomicInteger
+AtomicInteger replayed200 = props.get('travel.idempotency.replayed_200') as AtomicInteger
+AtomicInteger conflict409 = props.get('travel.idempotency.conflict_409') as AtomicInteger
+AtomicInteger unexpected = props.get('travel.idempotency.unexpected') as AtomicInteger
+AtomicReference successBody = props.get('travel.idempotency.success_body') as AtomicReference
+ConcurrentLinkedQueue failures = props.get('travel.idempotency.failures') as ConcurrentLinkedQueue
+
+def localFailures = []
+def status = prev.getResponseCode()
+def body = prev.getResponseDataAsString()
+def payload
+try {
+    payload = new JsonSlurper().parseText(body)
+} catch (Exception exception) {
+    localFailures << "response is not valid JSON: ${exception.message}"
+}
+
+if (status == '200') {
+    def replayed = prev.getResponseHeaders()
+            .toLowerCase(Locale.ROOT)
+            .readLines()
+            .any { it.trim() == 'idempotency-replayed: true' }
+    if (replayed) {
+        replayed200.incrementAndGet()
+    } else {
+        original200.incrementAndGet()
+    }
+
+    if (payload != null && (payload.success != true
+            || (payload.code as int) != 200
+            || payload.data?.collected != true)) {
+        localFailures << 'HTTP 200 must contain success=true, code=200 and data.collected=true'
+    }
+
+    def recordedBody = successBody.get()
+    if (recordedBody == null) {
+        successBody.compareAndSet(null, body)
+        recordedBody = successBody.get()
+    }
+    if (recordedBody != body) {
+        localFailures << 'all successful and replayed responses must have an identical body'
+    }
+} else if (status == '409') {
+    conflict409.incrementAndGet()
+    if (payload != null && (payload.success != false
+            || (payload.code as int) != 409
+            || !payload.message?.toString()?.contains('still being processed'))) {
+        localFailures << 'HTTP 409 must describe the in-progress idempotent request'
+    }
+} else {
+    unexpected.incrementAndGet()
+    localFailures << "expected HTTP 200 or 409 but got ${status}"
+}
+
+if (localFailures.isEmpty()) {
+    // JMeter 默认把 409 标记为失败；这里仅把通过业务语义校验的 409 转为成功样本。
+    prev.setSuccessful(true)
+} else {
+    def message = "${ctx.getThread().getThreadName()}: ${localFailures.join('; ')}"
+    failures.add(message)
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(message)
+}
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223Assertion>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+
+      <PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="Teardown" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <stringProp name="ThreadGroup.duration"/>
+        <stringProp name="ThreadGroup.delay"/>
+      </PostThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="teardown:aggregate" enabled="true">
+          <stringProp name="cacheKey">route-collection-idempotency-aggregate-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+import groovy.json.JsonOutput
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.AtomicInteger
+
+def original = (props.get('travel.idempotency.original_200') as AtomicInteger).get()
+def replayed = (props.get('travel.idempotency.replayed_200') as AtomicInteger).get()
+def conflicts = (props.get('travel.idempotency.conflict_409') as AtomicInteger).get()
+def unexpected = (props.get('travel.idempotency.unexpected') as AtomicInteger).get()
+def failures = props.get('travel.idempotency.failures') as ConcurrentLinkedQueue
+def expected = props.getProperty('travel.idempotency.expected_threads') as int
+def actual = original + replayed + conflicts + unexpected
+
+def summary = [
+        expected: expected,
+        original200: original,
+        replayed200: replayed,
+        conflict409: conflicts,
+        unexpected: unexpected,
+        assertionFailures: failures.size()
+]
+def validationFailures = []
+if (original != 1) {
+    validationFailures << "exactly one original HTTP 200 is required, actual=${original}"
+}
+if (actual != expected) {
+    validationFailures << "expected ${expected} concurrent samples, actual=${actual}"
+}
+if (unexpected != 0) {
+    validationFailures << "unexpected HTTP responses=${unexpected}"
+}
+if (!failures.isEmpty()) {
+    validationFailures << "main assertion failures=${failures.size()}"
+}
+
+SampleResult.setResponseData(JsonOutput.toJson(summary), 'UTF-8')
+SampleResult.setDataType('text')
+SampleResult.setResponseMessage("original=${original},replayed=${replayed},conflict=${conflicts},unexpected=${unexpected}")
+if (validationFailures.isEmpty()) {
+    SampleResult.setResponseCode('200')
+    SampleResult.setSuccessful(true)
+} else {
+    SampleResult.setResponseCode('500')
+    SampleResult.setResponseMessage(validationFailures.join('; '))
+    SampleResult.setSuccessful(false)
+}
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="teardown:replay" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">{&quot;routeId&quot;:${route_id}}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">/api/v1/route-collections/toggle</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <stringProp name="HTTPSampler.embedded_url_re"/>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Load replay context" enabled="true">
+            <stringProp name="cacheKey">route-collection-idempotency-replay-context-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+vars.put('shared_token', props.getProperty('travel.idempotency.token'))
+vars.put('shared_key', props.getProperty('travel.idempotency.key'))
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223PreProcessor>
+          <hashTree/>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Replay headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${shared_token}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Content-Type</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Idempotency-Key</stringProp>
+                <stringProp name="Header.value">${shared_key}</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Assert replay" enabled="true">
+            <stringProp name="cacheKey">route-collection-idempotency-replay-assert-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+import groovy.json.JsonSlurper
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicReference
+
+def failures = []
+def body = prev.getResponseDataAsString()
+if (prev.getResponseCode() != '200') {
+    failures << "expected HTTP 200 but got ${prev.getResponseCode()}"
+}
+def replayed = prev.getResponseHeaders()
+        .toLowerCase(Locale.ROOT)
+        .readLines()
+        .any { it.trim() == 'idempotency-replayed: true' }
+if (!replayed) {
+    failures << 'Idempotency-Replayed response header must be true'
+}
+try {
+    def payload = new JsonSlurper().parseText(body)
+    if (payload.success != true || (payload.code as int) != 200 || payload.data?.collected != true) {
+        failures << 'replayed body must contain data.collected=true'
+    }
+} catch (Exception exception) {
+    failures << "response is not valid JSON: ${exception.message}"
+}
+def expectedBody = (props.get('travel.idempotency.success_body') as AtomicReference).get()
+if (!expectedBody || expectedBody != body) {
+    failures << 'replayed response body differs from the original successful response'
+}
+if (!failures.isEmpty()) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(failures.join('; '))
+}
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223Assertion>
+          <hashTree/>
+        </hashTree>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="teardown:check" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="routeId" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">true</boolProp>
+                <stringProp name="Argument.name">routeId</stringProp>
+                <stringProp name="Argument.value">${route_id}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+                <boolProp name="HTTPArgument.use_equals">true</boolProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">/api/v1/route-collections/check</stringProp>
+          <stringProp name="HTTPSampler.method">GET</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+          <stringProp name="HTTPSampler.embedded_url_re"/>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Check headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${shared_token}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="Assert final state" enabled="true">
+            <stringProp name="cacheKey">route-collection-idempotency-final-state-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+import groovy.json.JsonSlurper
+
+def failures = []
+if (prev.getResponseCode() != '200') {
+    failures << "expected HTTP 200 but got ${prev.getResponseCode()}"
+}
+try {
+    def payload = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (payload.success != true || (payload.code as int) != 200 || payload.data != true) {
+        failures << 'final collection state must be true'
+    }
+} catch (Exception exception) {
+    failures << "response is not valid JSON: ${exception.message}"
+}
+if (!failures.isEmpty()) {
+    AssertionResult.setFailure(true)
+    AssertionResult.setFailureMessage(failures.join('; '))
+}
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223Assertion>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

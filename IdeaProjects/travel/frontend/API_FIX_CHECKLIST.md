@@ -4,55 +4,55 @@
 >
 > 关联文档：`FRONTEND_DESIGN_PLAN.md`、`API_INTEGRATION_CHECKLIST.md`
 >
-> 状态：前端侧已修正（见 2 节 ✅ 标注）；剩余待办集中在后端补接口。
+> 状态：主展示链路已收敛；不存在的数据能力已下线，不再用模拟接口伪装。
 
-## ⚠️ 当前进度
-- ✅ 前端调用已统一到后端已有接口。
-- ✅ 后端已补 `GET /attractions/{id}/nearby`、`POST /attractions/{id}/review`。
+## 当前进度
+- 前端调用已统一到后端真实存在的接口，失效别名已删除。
+- 景点附近、景点评价、智能路线、路线优化和收藏主链路已对齐。
+- 实时页只展示景点当前状态；路线交通只使用项目配置的高德 API。
+- 游记评论和历史客流没有明细数据源，相关入口已移除或明确返回不可用。
+
 ## 1. 结论先行
 
-- 前后端主链路大多已对齐。
-- 真正需要在“当前代码”里立即修正的，是景点附近/评论、路线智能推荐、实时交通、路线优化建议这几处。
-- 其它不一致项多为“定义了但当前页面未使用”的预留接口，可以按需处理，不必一次改完。
+- 当前展示所需的前后端主链路已对齐。
+- 写操作身份统一从 JWT 获取，前端不再提交可伪造的 `userId`。
+- 收藏切换使用同一把分布式锁、数据库唯一约束和缓存失效；带 `Idempotency-Key` 的重试由服务端重放首次结果。
+- 不使用 Milvus，不提供短信计费、余额或账单功能。
 
 ## 2. 必须在当前代码修正的项
 
-### 2.1 景点附近与景点评论（✅ 前后端均已补齐）
-- 前端调用：`src/pages/AttractionsPage.tsx:261`、`src/pages/AttractionsPage.tsx:317` 调用 `attractionApi.getAttractionNearby`。
-- 前端定义：`src/api/attraction.api.ts:82` 请求 `GET /attractions/{id}/nearby`。
-- 后端现状：`AttractionController` 未提供 `/nearby` 与 `/review` 接口。
-- 建议：优先在后端补 `GET /attractions/{id}/nearby` 与 `POST /attractions/{id}/review`；若短期内无法补，则前端先降级为“隐藏附近景点/评论提交入口”，避免每次请求都报错。
+### 2.1 景点附近与景点评价（已完成）
+- `GET /attractions/{id}/nearby` 返回同城周边景点，并排除当前景点。
+- `POST /attractions/{id}/review` 将评价写入 `attraction_review`，用户身份取 JWT。
+- 前端提交后重新读取评价列表，不再传递 `userId`。
 
-### 2.2 路线智能推荐
-- 前端调用：`src/pages/RoutesPage.tsx:160` 调用 `intelligentRouteApi.getPopularRoutes`。
-- 前端定义：`src/api/route.api.ts:43` 请求 `GET /routes/smart/popular`。
-- 后端现状：`RouteController` 提供 `/smart/list`、`/smart/similar/{routeId}`，但未提供 `/smart/popular`。
-- 建议：优先改前端调用 `GET /routes/smart/list`，并传 `type=popular` 等参数；若后端语义不同，再补 `/smart/popular`。
+### 2.2 路线智能推荐（已完成）
+- 热门、季节和主题路线统一请求 `GET /routes/smart/list`。
+- `type=popular|seasonal|theme` 决定推荐类型，前端统一把 `routeId` 映射为 `id`。
+- 不再请求不存在的 `/routes/smart/popular`。
 
-### 2.3 实时交通信息（✅ 前端已复用实时状态接口）
-- 前端调用：`src/pages/RealtimeStatusPage.tsx:274` 调用 `realtimeApi.getTrafficInfo`。
-- 前端定义：`src/api/realtime.api.ts:62` 请求 `GET /realtime-status/traffic/{id}`。
-- 后端现状：`RealtimeStatusController` 提供 `POST /traffic-update`、`POST /traffic-batch`，但未提供 `GET /traffic/{id}`。
-- 建议：优先在后端补一个“查询单景点交通信息”的 GET 接口；或前端改用 `GET /realtime-status/attraction/{id}` 聚合展示。
+### 2.3 实时状态与交通（已完成）
+- 实时页只请求 `/realtime-status/*` 的景点状态，不把景点人流等级解释成道路交通。
+- 历史平均和近 7 天统计因没有历史明细表，后端返回 HTTP 503 与错误码 `20007`。
+- 路线分段交通由 `AMapRouteService` 调用项目配置的高德 API；没有 API 数据时明确降级，不生成虚假实时交通。
 
-### 2.4 路线优化建议
-- 前端调用：`src/pages/RouteOptimizationPage.tsx:64` 调用 `intelligentRouteApi.getOptimizationSuggestionsForRoute`。
-- 前端定义：`src/api/route.api.ts:91` 请求 `GET /route-optimization/suggestions/{routeId}`。
-- 后端现状：`RouteOptimizationController` 提供 `GET /suggestions/{routeId}`，路径已经是 `/route-optimization/suggestions/{routeId}`。
-- 建议：此项路径已对齐，无需修改；只需确认 `RouteOptimizationPage.tsx:64` 是否真的能拿到数据。
+### 2.4 路线优化建议（已完成）
+- 前后端统一使用 `GET /route-optimization/suggestions/{routeId}`。
+- 后端读取建议前校验当前用户是否为路线所有者。
+- 前端删除重复客户端方法，只保留一个强制走真实后端的调用入口。
 
-## 3. 定义但当前未使用的预留接口
+## 3. 已清理的重复接口
 
-这些接口在 `src/api/*` 中有定义，但当前页面没有调用。可以按业务优先级逐步清理，不建议一次性删除。
+以下旧定义已删除或统一，不再保留必然失败的兼容调用。
 
-| 前端接口 | 状态 | 建议 |
+| 接口范围 | 状态 | 当前入口 |
 |---|---|---|
-| `collectionApi.collectRoute` / `uncollectRoute` | 未使用 | 保留 `toggleCollection`，旧方法可删 |
-| `collectionApi.addCollection` / `removeCollection` / `updateCollectionNote` | 未使用 | 统一收敛到 toggle 与 notes 系列 |
-| `commentApi.likeComment` / `unlikeComment` | 未使用 | 保留 `toggleLikeComment` |
-| `noteApi.likeNote` / `unlikeNote` / `collectNote` / `uncollectNote` | 未使用 | 保留 `toggleLikeNote` / `toggleCollectNote` |
-| `intelligentRouteApi.getSeasonalRoutes` / `getThemeRoutes` | 未使用 | 确认是否走 `/smart/list` 参数 |
-| `intelligentRouteApi.getOptimizationSuggestions` | 未使用 | 与 `/route-optimization/suggestions/{routeId}` 重复 |
+| 收藏 `collect/uncollect/add/update-note` | 已删除 | `toggle`、`remove`、资源 ID 路径 |
+| 评论 `like/unlike` | 已删除 | `toggle-like` |
+| 游记 `like/unlike/collect/uncollect/comments` | 已删除 | `toggle-like`、`toggle-collect` |
+| 智能路线热门/季节/主题别名 | 已统一 | `/routes/smart/list` + `type` |
+| 路线优化建议重复方法 | 已删除 | `/route-optimization/suggestions/{routeId}` |
+| UI 字典 `/dictionary/*` | 已删除 | 版本控制的静态能力清单 |
 
 ## 4. 核心对象字段映射
 
@@ -105,10 +105,14 @@
 | `id` | number | 收藏记录 ID |
 | `userId` | number | 用户 ID |
 | `routeId` | number | 路线 ID |
-| `note` | string | 收藏备注 |
+| `notes` | string | 收藏备注 |
 | `category` | string | 分类 |
 | `isPublic` | boolean | 是否公开 |
-| `createTime` | string | 创建时间 |
+| `collectionTime` | string | 收藏时间 |
+| `routeTitle` | string | 路线标题 |
+| `routeCoverImage` | string | 路线封面 |
+| `routeDurationDays` | number | 路线天数 |
+| `routeDifficulty` | string | 路线难度 |
 
 ### 4.5 评论 `RouteComment`
 | 前端字段 | 类型 | 说明 |
@@ -132,7 +136,6 @@
 | `author` | string | 作者 |
 | `image` | string | 封面 |
 | `likes` | number | 点赞数 |
-| `comments` | number | 评论数 |
 | `excerpt` | string | 摘要 |
 | `content` | string | 正文 |
 | `isLiked` | boolean | 当前用户是否点赞 |
@@ -147,23 +150,20 @@
 
 ## 6. 修正顺序
 
-1. 先修 2.1～2.4 中“实际在用且后端缺失”的接口。
-2. 再清理“定义但未使用”的重复接口。
-3. 最后统一时间字段与 `id` 类型约定。
+1. 主链路接口对齐：已完成。
+2. 重复和虚假能力清理：已完成。
+3. JWT 身份边界、收藏幂等和缓存一致性：已完成。
+4. 真实 MySQL、Redis、RabbitMQ 与高德 API 联调：部署环境执行。
 
 ## 7. 结论
 
-- 当前真正要动手的接口不超过 4 组。
-- 大多数“不一致”其实是预留接口未清理，不影响当前主链路。
-- 建议按“先保主链路可用，再清理冗余定义”的顺序推进。
+- 当前代码只展示有真实数据来源或明确降级语义的能力。
+- MySQL 保存业务事实，Redis 承担缓存、分布式锁与 HTTP/MQ 幂等状态，RabbitMQ 只用于已接入的异步通知链路。
+- 当前项目边界不包含 Milvus、短信计费、余额和账单。
 
 ## 8. 完成情况
-- ✅ 前端：`route.api.ts` 统一智能接口并映射 `routeId→id`；`realtime.api.ts` 交通复用实时状态接口；`attraction.api.ts` 恢复 nearby/review 真实调用。
-- ✅ 后端：`AttractionController` 新增 `GET /attractions/{id}/nearby` 与 `POST /attractions/{id}/review`。
-- ✅ nearby 语义升级：`GET /attractions/{id}/nearby` 现返回同城周边景点（按距离排序、排除自身），前端卡片展示距离；原“周边服务”模拟数据已弃用。
-- ✅ 验证：前端 `npm run lint` 通过；后端 `mvn -pl attraction-service -am compile` 通过。
-- ✅ 单测：新增 `AttractionDetailServiceImplTest`（点评落库、点评读取、周边景点排序），`mvn -pl attraction-service -am test` 通过（common 1 + attraction 3）。
-- ⚠️ 联调提示：完整 curl 联调需拉起整套微服务栈（gateway 8090 / attraction 8092 / Nacos 8848），当前环境未启动，故以单测覆盖后端子逻辑。
-- ✅ 后端评论已接入真实存储：新增 `attraction_review` 表 + `AttractionReview` 实体 + `AttractionReviewMapper`，`submitReview` 落库、`getAttractionReviews` 读库返回。
-- ✅ 前端 `submitReview` 已通过 `userApi.getCurrentUser()` 获取当前用户并带上 `userId`，提交后重新拉取评论列表即时回显。
-- ⚠️ 注意：数据库需执行 `common/src/main/resources/db/init_complete.sql` 中的 `attraction_review` 建表语句。
+- 前端：智能路线、实时状态、收藏、游记和 AI 展示接口已收敛；已登录写请求自动附带 `Idempotency-Key`。
+- 后端：景点评价使用真实表；收藏切换在同一分布式锁内判断和写入，并由 `uk_user_item_action` 唯一索引兜底。
+- 数据：游记无评论明细时评论数归零；历史客流明确不可用；路线交通只使用高德 API。
+- 部署：现有数据库需按需执行 `backend/docs/infrastructure` 下的迁移脚本。
+- 联调：完整 HTTP 验证需要启动 Nacos、网关、对应微服务以及本地 MySQL/Redis；云 RabbitMQ 按环境变量连接。

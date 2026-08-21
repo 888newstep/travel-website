@@ -15,8 +15,14 @@ import travel.route.service.RouteService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -49,47 +55,63 @@ public class RouteAttractionServiceImpl extends ServiceImpl<RouteAttractionMappe
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean batchSortRouteAttractions(RouteAttractionBatchSortRequest request) {
-        // 1. 参数校验
-        if (request == null || request.getRouteId() == null || request.getSortItems() == null || request.getSortItems().isEmpty()) {
+        if (request == null || request.getRouteId() == null || request.getRouteId() <= 0
+                || request.getRouteId() > Integer.MAX_VALUE
+                || request.getSortItems() == null || request.getSortItems().isEmpty()) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
 
-        // 2. 验证路线存在
         if (routeService.getById(request.getRouteId()) == null) {
             throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
         }
 
-        // 3. 验证同天数内顺序不重复
-        Map<Integer, List<Integer>> dayOrderMap = request.getSortItems().stream()
-                .collect(Collectors.groupingBy(
-                        RouteAttractionBatchSortRequest.SortItem::getDayNumber,
-                        Collectors.mapping(RouteAttractionBatchSortRequest.SortItem::getVisitOrder, Collectors.toList())
-                ));
-        for (List<Integer> orders : dayOrderMap.values()) {
-            if (orders.size() != orders.stream().distinct().count()) {
-                throw new BusinessException(ErrorCodeEnum.ROUTE_ATTR_ORDER_DUPLICATE);
-            }
+        Integer routeId = request.getRouteId().intValue();
+        List<RouteAttraction> currentSchedule =
+                getByRouteIdOrderByDayAndVisitForUpdate(request.getRouteId());
+        if (currentSchedule.isEmpty()) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_ATTR_RELATION_NOT_EXIST);
         }
 
-        // 4. 构建更新列表
-        List<RouteAttraction> updateList = request.getSortItems().stream().map(item -> {
-            RouteAttraction relation = getById(item.getRelationId());
+        Map<Long, RouteAttraction> relationsById = new HashMap<>();
+        for (RouteAttraction relation : currentSchedule) {
+            relationsById.put(relation.getId().longValue(), relation);
+        }
+
+        Set<Long> requestedRelationIds = new HashSet<>();
+        boolean changed = false;
+        for (RouteAttractionBatchSortRequest.SortItem item : request.getSortItems()) {
+            if (item == null || item.getRelationId() == null || item.getRelationId() <= 0
+                    || item.getDayNumber() == null || item.getDayNumber() <= 0
+                    || item.getVisitOrder() == null || item.getVisitOrder() <= 0) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+            }
+            if (!requestedRelationIds.add(item.getRelationId())) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_DUPLICATE_ERROR);
+            }
+            RouteAttraction relation = relationsById.get(item.getRelationId());
             if (relation == null) {
                 throw new BusinessException(ErrorCodeEnum.ROUTE_ATTR_RELATION_NOT_EXIST);
             }
-            // 更新天数、顺序、备注
+
+            changed |= !Objects.equals(relation.getDayNumber(), item.getDayNumber())
+                    || !Objects.equals(relation.getVisitOrder(), item.getVisitOrder())
+                    || item.getNotes() != null && !Objects.equals(relation.getNotes(), item.getNotes());
             relation.setDayNumber(item.getDayNumber());
             relation.setVisitOrder(item.getVisitOrder());
             if (item.getNotes() != null) {
                 relation.setNotes(item.getNotes());
             }
-            return relation;
-        }).collect(Collectors.toList());
+        }
 
-        // 5. 批量更新
-        boolean success = updateBatchById(updateList);
-        log.info("路线{}的景点排序完成，共更新{}个关联关系", request.getRouteId(), updateList.size());
-        return success;
+        validateCompleteSchedule(routeId, currentSchedule);
+        if (!changed) {
+            log.info("路线景点排序无需更新: routeId={}", routeId);
+            return true;
+        }
+
+        replaceRouteSchedule(routeId, currentSchedule);
+        log.info("路线景点排序完成: routeId={}, relations={}", routeId, currentSchedule.size());
+        return true;
     }
 
     @Override
@@ -103,6 +125,72 @@ public class RouteAttractionServiceImpl extends ServiceImpl<RouteAttractionMappe
                 .orderByAsc(RouteAttraction::getDayNumber, RouteAttraction::getVisitOrder); // 按天数+访问顺序排序
 
         return list(queryWrapper);
+    }
+
+    @Override
+    public List<RouteAttraction> getByRouteIdOrderByDayAndVisitForUpdate(Long routeId) {
+        if (routeId == null || routeId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        LambdaQueryWrapper<RouteAttraction> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteAttraction::getRouteId, routeId)
+                .orderByAsc(RouteAttraction::getDayNumber, RouteAttraction::getVisitOrder)
+                .last("FOR UPDATE");
+        return list(queryWrapper);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean replaceRouteSchedule(Integer routeId, List<RouteAttraction> routeAttractions) {
+        validateCompleteSchedule(routeId, routeAttractions);
+
+        int reservedRows = routeAttractionMapper.reserveVisitOrders(routeId);
+        if (reservedRows != routeAttractions.size()) {
+            log.error("路线日程预留顺序失败: routeId={}, expectedRows={}, actualRows={}",
+                    routeId, routeAttractions.size(), reservedRows);
+            throw new BusinessException(ErrorCodeEnum.ROUTE_UPDATE_FAILED);
+        }
+        if (!updateBatchById(routeAttractions)) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_UPDATE_FAILED);
+        }
+        return true;
+    }
+
+    private void validateCompleteSchedule(Integer routeId, List<RouteAttraction> routeAttractions) {
+        if (routeId == null || routeId <= 0 || routeAttractions == null || routeAttractions.isEmpty()) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        Set<Integer> relationIds = new HashSet<>();
+        Set<Integer> attractionIds = new HashSet<>();
+        Map<Integer, Set<Integer>> ordersByDay = new HashMap<>();
+        for (RouteAttraction relation : routeAttractions) {
+            if (relation == null || relation.getId() == null || relation.getId() <= 0
+                    || !routeId.equals(relation.getRouteId())
+                    || relation.getAttractionId() == null || relation.getAttractionId() <= 0
+                    || relation.getDayNumber() == null || relation.getDayNumber() <= 0
+                    || relation.getVisitOrder() == null || relation.getVisitOrder() <= 0) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+            }
+            if (!relationIds.add(relation.getId()) || !attractionIds.add(relation.getAttractionId())) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_DUPLICATE_ERROR);
+            }
+            Set<Integer> dayOrders = ordersByDay.computeIfAbsent(
+                    relation.getDayNumber(), ignored -> new TreeSet<>());
+            if (!dayOrders.add(relation.getVisitOrder())) {
+                throw new BusinessException(ErrorCodeEnum.ROUTE_ATTR_ORDER_DUPLICATE);
+            }
+        }
+
+        for (Set<Integer> dayOrders : ordersByDay.values()) {
+            List<Integer> sortedOrders = new ArrayList<>(dayOrders);
+            for (int index = 0; index < sortedOrders.size(); index++) {
+                if (sortedOrders.get(index) != index + 1) {
+                    throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+                }
+            }
+        }
     }
 
     /**

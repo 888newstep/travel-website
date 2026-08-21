@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { useNavigate } from 'react-router-dom'
 
@@ -31,30 +31,6 @@ function truncateText(value?: string) {
 
 
   return value.length > EXCERPT_MAX_LENGTH ? `${value.slice(0, EXCERPT_MAX_LENGTH)}...` : value
-
-}
-
-
-
-function SectionHeader({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
-
-  return (
-
-    <div className="mb-4 flex items-start justify-between gap-3">
-
-      <div>
-
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-
-        <p className="mt-1 text-sm text-slate-500">{description}</p>
-
-      </div>
-
-      {action ? <div className="shrink-0">{action}</div> : null}
-
-    </div>
-
-  )
 
 }
 
@@ -206,7 +182,7 @@ export function UserProfilePage() {
 
     try {
 
-      await collectionApi.removeCollection(user.id, item.routeId)
+      await collectionApi.removeCollection(item.routeId)
 
       setCollections((current) => current.filter((entry) => entry.id !== item.id))
 
@@ -390,7 +366,17 @@ export function UserProfilePage() {
 
                       <div className="text-sm font-medium text-slate-900">{item.routeTitle || '未命名路线'}</div>
 
-                      <div className="mt-2 text-sm leading-6 text-slate-500">{truncateText(item.routeDescription)}</div>
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+
+                        {item.routeDurationDays ? <span>{item.routeDurationDays} 天</span> : null}
+
+                        {item.routeDifficulty ? <span>{item.routeDifficulty}</span> : null}
+
+                        {item.collectionTime ? <span>{item.collectionTime.slice(0, 10)}</span> : null}
+
+                      </div>
+
+                      {item.notes ? <div className="mt-2 text-sm leading-6 text-slate-500">{truncateText(item.notes)}</div> : null}
 
                     </div>
 
@@ -522,7 +508,6 @@ export function UserProfilePage() {
 
                   <span>点赞 {item.likes || 0}</span>
 
-                  <span>评论 {item.comments || 0}</span>
 
                 </div>
 

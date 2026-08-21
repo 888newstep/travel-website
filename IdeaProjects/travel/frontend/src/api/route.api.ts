@@ -16,6 +16,21 @@ export interface RouteOptimization {
     optimizationType: string;
 }
 
+export interface RouteOptimizationSuggestion {
+    id: number;
+    title: string;
+    description: string;
+    type: 'distance';
+    message?: string;
+}
+
+export interface RouteOptimizationHistory {
+    routeId: number;
+    optimizationType: 'distance';
+    description: string;
+    appliedAt: string;
+}
+
 export interface RouteEvaluation {
     [key: string]: any;
 }
@@ -71,12 +86,6 @@ export const intelligentRouteApi = {
         }).then((list) => (Array.isArray(list) ? list.map(normalizeSmartRoute) : list));
     },
 
-    getOptimizationSuggestions(routeId: number, optimizationType: string = 'comprehensive') {
-        return apiClient.get<Record<string, any>>(`/route-optimization/suggestions/${routeId}`, {
-            params: { optimizationType },
-        });
-    },
-
     getSmartRouteList(params: { type: string; cityId: number; days: number; limit?: number; season?: string; theme?: string }) {
         return apiClient.get<RoutePlan[]>('/routes/smart/list', { params }).then((list) =>
             Array.isArray(list) ? list.map(normalizeSmartRoute) : list,
@@ -97,15 +106,15 @@ export const intelligentRouteApi = {
         return apiClient.post<Record<string, any>>(`/routes/smart/optimize`, null, { params: { routeId } });
     },
 
-    getOptimizationSuggestionsForRoute(routeId: number) {
-        return apiClient.get<any[]>(`/route-optimization/suggestions/${routeId}`);
+    getOptimizationSuggestions(routeId: number) {
+        return apiClient.get<RouteOptimizationSuggestion[]>(`/route-optimization/suggestions/${routeId}`);
     },
 
     getOptimizationHistory(routeId: number) {
-        return apiClient.get<any[]>(`/route-optimization/history/${routeId}`);
+        return apiClient.get<RouteOptimizationHistory[]>(`/route-optimization/history/${routeId}`);
     },
 
-    applyOptimizationSuggestion(routeId: number, suggestionId: number, suggestion: Record<string, any>) {
+    applyOptimizationSuggestion(routeId: number, suggestionId: number, suggestion: RouteOptimizationSuggestion) {
         return apiClient.post('/route-optimization/apply', { routeId, suggestionId, suggestion });
     },
 

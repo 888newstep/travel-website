@@ -86,7 +86,8 @@ public class JwtHelper {
                     .build()
                     .parseSignedClaims(token);
             Claims claims = jwt.getPayload();
-            return (Integer) claims.get("userType");
+            Object userType = claims.get("userType");
+            return userType instanceof Number number ? number.intValue() : null;
         } catch (Exception e) {
             // 澶勭悊token瑙ｆ瀽寮傚父
             return null;
@@ -159,7 +160,8 @@ public class JwtHelper {
             } else if (userIdObj instanceof Long) {
                 userId = (Long) userIdObj;
             }
-            Integer userType = (Integer) claims.get("userType");
+            Object userTypeClaim = claims.get("userType");
+            Integer userType = userTypeClaim instanceof Number number ? number.intValue() : null;
             if (userId != null && userType != null) {
                 return createToken(userId, userType);
             }

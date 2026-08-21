@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import travel.route.service.*;
 import travel.route.dto.ai.*;
 import travel.common.utils.Result;
+import travel.common.security.AuthenticatedUserSupport;
 
 import java.util.List;
 import java.util.Map;
@@ -30,30 +31,17 @@ public class AIController {
     @PostMapping("/chat")
     @Operation(summary = "\u667a\u80fd\u5bf9\u8bdd", description = "\u4f7f\u7528\u901a\u7528\u5343\u95ee\u8fdb\u884c\u667a\u80fd\u5bf9\u8bdd")
     public Result<AIChatResponse> chat(@Valid @RequestBody AIChatRequest request) {
-        try {
-            String response = qwenService.chatCompletion(
-                    request.getMessage(),
-                    request.getSystemPrompt()
-            );
-            AIChatResponse result = new AIChatResponse(response, "qwen", null, null);
-            return Result.success("\u5bf9\u8bdd\u6210\u529f", result);
-        } catch (Exception e) {
-            log.error("\u667a\u80fd\u5bf9\u8bdd\u5931\u8d25: {}", e.getMessage(), e);
-            return Result.error("\u5bf9\u8bdd\u5931\u8d25: " + e.getMessage());
-        }
+        String response = qwenService.chatCompletion(request.getMessage(), request.getSystemPrompt());
+        AIChatResponse result = new AIChatResponse(response, "qwen", null, null);
+        return Result.success("\u5bf9\u8bdd\u6210\u529f", result);
     }
 
     @PostMapping("/qa")
     @Operation(summary = "\u65c5\u884c\u95ee\u7b54", description = "\u4f7f\u7528\u901a\u7528\u5343\u95ee\u56de\u7b54\u65c5\u884c\u76f8\u5173\u95ee\u9898")
     public Result<AIChatResponse> travelQA(@Valid @RequestBody AIQARequest request) {
-        try {
-            String response = qwenService.travelQA(request.getQuestion());
-            AIChatResponse chatResponse = new AIChatResponse(response, "qwen", null, null);
-            return Result.success("\u95ee\u7b54\u6210\u529f", chatResponse);
-        } catch (Exception e) {
-            log.error("\u65c5\u884c\u95ee\u7b54\u5931\u8d25: {}", e.getMessage(), e);
-            return Result.error("\u95ee\u7b54\u5931\u8d25: " + e.getMessage());
-        }
+        String response = qwenService.travelQA(request.getQuestion());
+        AIChatResponse chatResponse = new AIChatResponse(response, "qwen", null, null);
+        return Result.success("\u95ee\u7b54\u6210\u529f", chatResponse);
     }
 
     // ==================== \u63a8\u8350\u670d\u52a1 ====================
@@ -61,20 +49,13 @@ public class AIController {
     @PostMapping("/recommend")
     @Operation(summary = "AI\u667a\u80fd\u63a8\u8350", description = "\u6839\u636e\u7528\u6237\u504f\u597d\u63a8\u8350\u65c5\u6e38\u8def\u7ebf")
     public Result<List<AIRecommendationItem>> recommend(@Valid @RequestBody AIRecommendRequest request) {
-        try {
-            log.info("AI\u667a\u80fd\u63a8\u8350\u8bf7\u6c42: userId={}, location={}", request.getUserId(), request.getLocation());
-
-            String userInput = buildUserInput(request);
-            Integer cityId = request.getCityId();
-            Integer days = request.getDuration() != null ? request.getDuration() : 3;
-            Integer userId = request.getUserId();
-
-            List<AIRecommendationItem> recommendations = qwenRecommendByAI(userInput, cityId, days, userId);
-            return Result.success("\u63a8\u8350\u6210\u529f", recommendations);
-        } catch (Exception e) {
-            log.error("AI\u667a\u80fd\u63a8\u8350\u5931\u8d25: {}", e.getMessage(), e);
-            return Result.error("\u63a8\u8350\u5931\u8d25: " + e.getMessage());
-        }
+        log.info("AI\u667a\u80fd\u63a8\u8350\u8bf7\u6c42: userId={}, location={}", request.getUserId(), request.getLocation());
+        String userInput = buildUserInput(request);
+        Integer cityId = request.getCityId();
+        Integer days = request.getDuration() != null ? request.getDuration() : 3;
+        Integer userId = AuthenticatedUserSupport.getIntegerUserIdOrNull();
+        List<AIRecommendationItem> recommendations = qwenRecommendByAI(userInput, cityId, days, userId);
+        return Result.success("\u63a8\u8350\u6210\u529f", recommendations);
     }
 
     // ==================== \u884c\u7a0b\u751f\u6210 ====================
@@ -82,27 +63,18 @@ public class AIController {
     @PostMapping("/itinerary/generate")
     @Operation(summary = "\u751f\u6210\u884c\u7a0b", description = "\u4f7f\u7528\u901a\u7528\u5343\u95ee\u751f\u6210\u65c5\u884c\u884c\u7a0b")
     public Result<AIItineraryResponseV2> generateItinerary(@Valid @RequestBody AIItineraryGenerateRequest request) {
-        try {
-            log.info("\u751f\u6210\u884c\u7a0b\u8bf7\u6c42: destination={}, days={}", request.getDestination(), request.getDays());
-
-            String preferences = buildPreferencesString(request.getPreferences());
-
-            String itineraryJson = qwenService.recommendItinerary(
-                    preferences,
-                    request.getDays(),
-                    buildBudgetDescription(request.getBudget()));
-            AIItineraryResponseV2 result = AIItineraryResponseV2.builder()
-                    .destination(request.getDestination())
-                    .days(request.getDays())
-                    .itinerary(itineraryJson)
-                    .source("qwen")
-                    .build();
-
-            return Result.success("\u751f\u6210\u884c\u7a0b\u6210\u529f", result);
-        } catch (Exception e) {
-            log.error("\u751f\u6210\u884c\u7a0b\u5931\u8d25: {}", e.getMessage(), e);
-            return Result.error("\u751f\u6210\u884c\u7a0b\u5931\u8d25: " + e.getMessage());
-        }
+        log.info("\u751f\u6210\u884c\u7a0b\u8bf7\u6c42: destination={}, days={}", request.getDestination(), request.getDays());
+        String preferences = buildPreferencesString(request.getPreferences());
+        String itineraryJson = qwenService.recommendItinerary(
+                request.getDestination(), preferences, request.getDays(),
+                buildBudgetDescription(request.getBudget()));
+        AIItineraryResponseV2 result = AIItineraryResponseV2.builder()
+                .destination(request.getDestination())
+                .days(request.getDays())
+                .itinerary(itineraryJson)
+                .source("qwen")
+                .build();
+        return Result.success("\u751f\u6210\u884c\u7a0b\u6210\u529f", result);
     }
 
     // ==================== \u8f85\u52a9\u65b9\u6cd5 ====================
@@ -125,31 +97,14 @@ public class AIController {
     }
 
     private List<AIRecommendationItem> qwenRecommendByAI(String userInput, Integer cityId, int days, Integer userId) {
-        try {
-            String prompt = "\u6839\u636e\u4ee5\u4e0b\u7528\u6237\u9700\u6c42\uff0c\u63a8\u83505\u4e2a\u5408\u9002\u7684\u65c5\u6e38\u8def\u7ebf\u6216\u666f\u70b9\uff0c\u4ee5JSON\u6570\u7ec4\u683c\u5f0f\u8fd4\u56de\uff0c\u6bcf\u4e2a\u5305\u542bid\u3001name\u3001description\u3001matchScore\u5b57\u6bb5\uff1a\n" + userInput;
-            String aiResponse = qwenService.chatCompletion(prompt, "\u4f60\u662f\u4e00\u4e2a\u4e13\u4e1a\u7684\u65c5\u6e38\u63a8\u8350\u52a9\u624b");
-
-            AIRecommendationItem recommendation = AIRecommendationItem.builder()
-                    .id(1)
-                    .name("AI\u667a\u80fd\u63a8\u8350\u8def\u7ebf")
-                    .description(aiResponse)
-                    .matchScore(95)
-                    .source("qwen")
-                    .build();
-            return List.of(recommendation);
-        } catch (Exception e) {
-            log.error("Qwen\u63a8\u8350\u5931\u8d25\uff0c\u4f7f\u7528\u964d\u7ea7\u65b9\u6848: error={}", e.getMessage());
-            return fallbackRecommend(userInput);
-        }
-    }
-
-    private List<AIRecommendationItem> fallbackRecommend(String userInput) {
+        String prompt = "\u6839\u636e\u4ee5\u4e0b\u7528\u6237\u9700\u6c42\uff0c\u63a8\u83505\u4e2a\u5408\u9002\u7684\u65c5\u6e38\u8def\u7ebf\u6216\u666f\u70b9\uff0c\u4ee5JSON\u6570\u7ec4\u683c\u5f0f\u8fd4\u56de\uff0c\u6bcf\u4e2a\u5305\u542bid\u3001name\u3001description\u3001matchScore\u5b57\u6bb5\uff1a\n" + userInput;
+        String aiResponse = qwenService.chatCompletion(prompt, "\u4f60\u662f\u4e00\u4e2a\u4e13\u4e1a\u7684\u65c5\u6e38\u63a8\u8350\u52a9\u624b");
         AIRecommendationItem route = AIRecommendationItem.builder()
                 .id(1)
-                .name("\u63a8\u8350\u8def\u7ebf")
-                .description("\u57fa\u4e8e\u60a8\u7684\u9700\u6c42: " + userInput)
-                .matchScore(80)
-                .source("fallback")
+                .name("AI\u667a\u80fd\u63a8\u8350\u8def\u7ebf")
+                .description(aiResponse)
+                .matchScore(null)
+                .source("qwen")
                 .build();
         return List.of(route);
     }

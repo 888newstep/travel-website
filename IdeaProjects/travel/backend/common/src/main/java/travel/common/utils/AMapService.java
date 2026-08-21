@@ -121,9 +121,14 @@ public class AMapService {
     public Map<String, Object> drivingRoute(double originLng, double originLat,
                                             double destLng, double destLat) {
         return (Map<String, Object>) cacheManager.getOrSetRouteCache(
-                originLng, originLat, destLng, destLat, "driving", () -> {
+                originLng, originLat, destLng, destLat, "driving_v2", () -> {
                     try {
-                        String url = String.format("%s/direction/driving?origin=%f,%f&destination=%f,%f&key=%s",
+                        if (apiKey == null || apiKey.isBlank()) {
+                            log.error("高德 API Key 未配置，无法获取驾车路线");
+                            return null;
+                        }
+                        String url = String.format(
+                                "%s/direction/driving?origin=%f,%f&destination=%f,%f&extensions=all&strategy=0&key=%s",
                                 apiUrl, originLng, originLat, destLng, destLat, apiKey);
 
                         Request request = new Request.Builder()
@@ -137,15 +142,22 @@ public class AMapService {
                                 String responseBody = BoundedHttpBodyReader.readUtf8(response.body(), maxResponseBytes);
                                 JsonNode jsonNode = objectMapper.readTree(responseBody);
 
-                                if ("1".equals(jsonNode.get("status").asText())) {
-                                    JsonNode route = jsonNode.get("route").get("paths").get(0);
+                                JsonNode paths = jsonNode.path("route").path("paths");
+                                if ("1".equals(jsonNode.path("status").asText())
+                                        && paths.isArray() && !paths.isEmpty()) {
+                                    JsonNode route = paths.get(0);
                                     Map<String, Object> result = new HashMap<>();
-                                    result.put("distance", route.get("distance").asInt());
-                                    result.put("duration", route.get("duration").asInt());
-                                    result.put("steps", route.get("steps"));
+                                    result.put("dataAvailable", true);
+                                    result.put("source", "amap");
+                                    result.put("distance", route.path("distance").asInt());
+                                    result.put("duration", route.path("duration").asInt());
+                                    result.put("trafficLights", route.path("traffic_lights").asInt());
+                                    result.put("steps", route.path("steps"));
                                     log.info("从高德API获取驾车路线成功");
                                     return result;
                                 }
+                                log.warn("高德驾车路线响应无有效路径: info={}",
+                                        jsonNode.path("info").asText("unknown"));
                             }
                         }
                     } catch (IOException e) {

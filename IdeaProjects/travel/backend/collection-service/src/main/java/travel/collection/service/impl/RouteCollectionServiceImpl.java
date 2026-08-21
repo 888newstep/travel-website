@@ -36,6 +36,8 @@ import java.util.stream.Collectors;
 public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMapper, RouteCollection> implements RouteCollectionService {
 
     private static final Logger log = LoggerFactory.getLogger(RouteCollectionServiceImpl.class);
+    private static final String ROUTE_ITEM_TYPE = "route";
+    private static final String COLLECT_ACTION = "collect";
 
     private final RouteService routeService;
     private final DistributedLockService distributedLockService;
@@ -44,33 +46,42 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     private final CacheUtil cacheUtil;
 
     @Override
-    public boolean collectRoute(Integer routeId, Integer userId) {
-        String lockKey = "collect:" + userId + ":" + routeId;
-
-        return distributedLockService.executeWithLock(lockKey, () -> {
-            try {
-                RouteCollection collection = createCollection(routeId, userId, false, null);
-                return collection != null;
-            } catch (Exception e) {
-                log.error("收藏路线失败: {}", e.getMessage());
+    public boolean toggleCollection(Integer routeId, Integer userId) {
+        validateCollectionTarget(routeId, userId);
+        return distributedLockService.executeWithLock(collectionLockKey(routeId, userId), () -> {
+            RouteCollection existing = findRouteCollection(routeId, userId);
+            if (existing != null) {
+                removeCollection(existing);
                 return false;
             }
+            createCollectionRecord(routeId, userId, false, null);
+            return true;
+        });
+    }
+
+    @Override
+    public boolean collectRoute(Integer routeId, Integer userId) {
+        validateCollectionTarget(routeId, userId);
+        return distributedLockService.executeWithLock(collectionLockKey(routeId, userId), () -> {
+            if (findRouteCollection(routeId, userId) == null) {
+                createCollectionRecord(routeId, userId, false, null);
+            }
+            return true;
         });
     }
 
     @Override
     public boolean uncollectRoute(Integer routeId, Integer userId) {
-        String lockKey = "uncollect:" + userId + ":" + routeId;
-
-        return distributedLockService.executeWithLock(lockKey, () -> {
-            try {
-                return cancelCollect(routeId, userId);
-            } catch (Exception e) {
-                log.error("取消收藏失败: {}", e.getMessage());
-                return false;
+        validateCollectionTarget(routeId, userId);
+        return distributedLockService.executeWithLock(collectionLockKey(routeId, userId), () -> {
+            RouteCollection existing = findRouteCollection(routeId, userId);
+            if (existing != null) {
+                removeCollection(existing);
             }
+            return true;
         });
     }
+
     private void invalidateCollectedCache(Integer routeId, Integer userId) {
         String collectedCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "collected", routeId, userId);
         cacheUtil.delete(collectedCacheKey);
@@ -86,7 +97,8 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RouteCollection::getUserId, userId)
-                .eq(RouteCollection::getItemType, "route")
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION)
                 .select(RouteCollection::getCategory)
                 .groupBy(RouteCollection::getCategory);
 
@@ -106,15 +118,18 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     }
 
     @Override
-    public int batchRemoveCollections(List<Integer> ids) {
-        if (ids == null || ids.isEmpty()) {
+    public int batchRemoveCollections(List<Integer> ids, Integer userId) {
+        if (ids == null || ids.isEmpty() || userId == null || userId <= 0) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
 
         log.info("批量删除收藏: count={}", ids.size());
 
         LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.in(RouteCollection::getId, ids);
+        queryWrapper.in(RouteCollection::getId, ids)
+                .eq(RouteCollection::getUserId, userId)
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION);
 
         List<RouteCollection> collections = list(queryWrapper);
 
@@ -124,11 +139,15 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
             for (RouteCollection collection : collections) {
                 invalidateUserCache(collection.getUserId());
                 invalidateRouteCountCache(collection.getRouteId());
+                invalidateCollectedCache(collection.getRouteId(), collection.getUserId());
+            }
+            if (collections.stream().anyMatch(collection -> Boolean.TRUE.equals(collection.getIsPublic()))) {
+                invalidatePublicCache();
             }
             log.info("批量删除收藏成功: count={}", ids.size());
         }
 
-        return collections.size();
+        return result ? collections.size() : 0;
     }
 
 
@@ -148,7 +167,8 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
         LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RouteCollection::getRouteId, routeId)
                 .eq(RouteCollection::getUserId, userId)
-                .eq(RouteCollection::getItemType, "route");
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION);
 
         boolean result = count(queryWrapper) > 0;
 
@@ -174,7 +194,8 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RouteCollection::getUserId, userId)
-                .eq(RouteCollection::getItemType, "route")
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION)
                 .orderByDesc(RouteCollection::getCollectionTime);
 
         // 收藏列表只返回当前页，不需要执行额外的 COUNT(*)。
@@ -189,6 +210,24 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     }
 
     @Override
+    public List<RouteCollectionVO> getUserCollectionsByCategory(Integer userId, String category, int page, int size) {
+        if (userId == null || userId <= 0 || category == null || category.isBlank() || size <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        page = Math.max(page, 1);
+
+        LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteCollection::getUserId, userId)
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION)
+                .eq(RouteCollection::getCategory, category.trim())
+                .orderByDesc(RouteCollection::getCollectionTime);
+
+        IPage<RouteCollection> pageResult = page(new Page<>(page, size, false), queryWrapper);
+        return convertToVOList(pageResult.getRecords());
+    }
+
+    @Override
     public long countByUserId(Integer userId) {
         if (userId == null || userId <= 0) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
@@ -196,71 +235,25 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RouteCollection::getUserId, userId)
-                .eq(RouteCollection::getItemType, "route");
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION);
         return count(queryWrapper);
     }
 
     @Override
     public RouteCollection createCollection(Integer routeId, Integer userId, Boolean isPublic, String notes) {
-        if (routeId == null || userId == null) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
-        }
-
-        Route route = routeService.getById(routeId.longValue());
-        if (route == null) {
-            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
-        }
-
-        User user = userService.getById(userId.longValue());
-        if (user == null) {
-            throw new BusinessException(ErrorCodeEnum.USER_NOT_EXIST);
-        }
-
-        if (isCollected(routeId, userId)) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "已经收藏过该路线");
-        }
-
-        RouteCollection routeCollection = new RouteCollection();
-        routeCollection.setRouteId(routeId);
-        routeCollection.setUserId(userId);
-        routeCollection.setCollectionTime(LocalDateTime.now());
-        routeCollection.setIsPublic(isPublic != null && isPublic);
-        routeCollection.setNotes(notes);
-
-        save(routeCollection);
-
-        invalidateUserCache(userId);
-        invalidateRouteCountCache(routeId);
-
-        log.info("收藏路线成功: routeId={}, userId={}", routeId, userId);
-        return routeCollection;
+        validateCollectionTarget(routeId, userId);
+        return distributedLockService.executeWithLock(collectionLockKey(routeId, userId), () -> {
+            RouteCollection existing = findRouteCollection(routeId, userId);
+            return existing != null
+                    ? existing
+                    : createCollectionRecord(routeId, userId, isPublic, notes);
+        });
     }
 
     @Override
     public boolean cancelCollect(Integer routeId, Integer userId) {
-        if (routeId == null || userId == null) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
-        }
-
-        LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(RouteCollection::getRouteId, routeId)
-                .eq(RouteCollection::getUserId, userId)
-                .eq(RouteCollection::getItemType, "route");
-
-        if (count(queryWrapper) == 0) {
-            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "还未收藏该路线");
-        }
-
-        boolean result = remove(queryWrapper);
-
-        if (result) {
-            invalidateUserCache(userId);
-            invalidateRouteCountCache(routeId);
-            invalidateCollectedCache(routeId, userId);
-            log.info("取消收藏路线成功: routeId={}, userId={}", routeId, userId);
-        }
-
-        return result;
+        return uncollectRoute(routeId, userId);
     }
 
     @Override
@@ -277,7 +270,8 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RouteCollection::getRouteId, routeId)
-                .eq(RouteCollection::getItemType, "route");
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION);
 
         int count = Math.toIntExact(count(queryWrapper));
 
@@ -306,6 +300,9 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         if (result) {
             invalidateUserCache(userId);
+            if (Boolean.TRUE.equals(routeCollection.getIsPublic())) {
+                invalidatePublicCache();
+            }
             log.info("更新收藏备注成功: collectionId={}, userId={}", collectionId, userId);
         }
 
@@ -332,6 +329,7 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         if (result) {
             invalidateUserCache(userId);
+            invalidatePublicCache();
             log.info("更新收藏公开状态成功: collectionId={}, userId={}, isPublic={}", collectionId, userId, isPublic);
         }
 
@@ -355,7 +353,8 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
 
         LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(RouteCollection::getIsPublic, true)
-                .eq(RouteCollection::getItemType, "route")
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION)
                 .orderByDesc(RouteCollection::getCollectionTime);
 
         IPage<RouteCollection> pageResult = page(new Page<>(page, size, false), queryWrapper);
@@ -431,6 +430,81 @@ public class RouteCollectionServiceImpl extends ServiceImpl<RouteCollectionMappe
     private void invalidateRouteCountCache(Integer routeId) {
         String routeCollectionCountCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "count", routeId);
         cacheUtil.delete(routeCollectionCountCacheKey);
+    }
+
+    private void invalidatePublicCache() {
+        String publicCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_COLLECTION_KEY_PREFIX, "public");
+        cacheUtil.deleteByPattern(publicCacheKey + ":page:*:size:*");
+    }
+
+    private String collectionLockKey(Integer routeId, Integer userId) {
+        return "collection:" + userId + ":" + routeId;
+    }
+
+    private void validateCollectionTarget(Integer routeId, Integer userId) {
+        if (routeId == null || routeId <= 0 || userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private RouteCollection findRouteCollection(Integer routeId, Integer userId) {
+        LambdaQueryWrapper<RouteCollection> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteCollection::getRouteId, routeId)
+                .eq(RouteCollection::getUserId, userId)
+                .eq(RouteCollection::getItemType, ROUTE_ITEM_TYPE)
+                .eq(RouteCollection::getCollectionType, COLLECT_ACTION);
+        return getOne(queryWrapper, false);
+    }
+
+    private RouteCollection createCollectionRecord(
+            Integer routeId,
+            Integer userId,
+            Boolean isPublic,
+            String notes) {
+        Route route = routeService.getById(routeId.longValue());
+        if (route == null) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+        }
+
+        User user = userService.getById(userId.longValue());
+        if (user == null) {
+            throw new BusinessException(ErrorCodeEnum.USER_NOT_EXIST);
+        }
+
+        RouteCollection routeCollection = new RouteCollection();
+        routeCollection.setRouteId(routeId);
+        routeCollection.setUserId(userId);
+        routeCollection.setItemType(ROUTE_ITEM_TYPE);
+        routeCollection.setCollectionType(COLLECT_ACTION);
+        routeCollection.setCollectionTime(LocalDateTime.now());
+        routeCollection.setIsPublic(Boolean.TRUE.equals(isPublic));
+        routeCollection.setNotes(notes);
+
+        if (!save(routeCollection)) {
+            throw new BusinessException(ErrorCodeEnum.COLLECTION_CREATE_FAILED);
+        }
+
+        invalidateUserCache(userId);
+        invalidateRouteCountCache(routeId);
+        invalidateCollectedCache(routeId, userId);
+        if (Boolean.TRUE.equals(routeCollection.getIsPublic())) {
+            invalidatePublicCache();
+        }
+        log.info("收藏路线成功: routeId={}, userId={}", routeId, userId);
+        return routeCollection;
+    }
+
+    private void removeCollection(RouteCollection collection) {
+        if (!removeById(collection.getId())) {
+            throw new BusinessException(ErrorCodeEnum.COLLECTION_DELETE_FAILED);
+        }
+        invalidateUserCache(collection.getUserId());
+        invalidateRouteCountCache(collection.getRouteId());
+        invalidateCollectedCache(collection.getRouteId(), collection.getUserId());
+        if (Boolean.TRUE.equals(collection.getIsPublic())) {
+            invalidatePublicCache();
+        }
+        log.info("取消收藏路线成功: routeId={}, userId={}", collection.getRouteId(), collection.getUserId());
     }
 
 }

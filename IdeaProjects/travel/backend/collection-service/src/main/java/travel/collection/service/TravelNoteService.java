@@ -11,7 +11,7 @@ public interface TravelNoteService extends IService<TravelNote> {
     /**
      * 创建游记
      */
-    TravelNote createTravelNote(TravelNote travelNote, List<String> tags);
+    TravelNote createTravelNote(Integer userId, TravelNote travelNote, List<String> tags);
 
     /**
      * 收藏游记
@@ -31,7 +31,7 @@ public interface TravelNoteService extends IService<TravelNote> {
     /**
      * 更新游记
      */
-    TravelNote updateTravelNote(Integer id, TravelNote travelNote, List<String> tags);
+    TravelNote updateTravelNote(Integer id, Integer userId, TravelNote travelNote, List<String> tags);
 
     /**
      * 删除游记
@@ -41,7 +41,7 @@ public interface TravelNoteService extends IService<TravelNote> {
     /**
      * 获取游记详情
      */
-    Map<String, Object> getTravelNoteDetail(Integer id);
+    Map<String, Object> getTravelNoteDetail(Integer id, Integer currentUserId);
 
     /**
      * 分页获取游记列表
@@ -51,7 +51,7 @@ public interface TravelNoteService extends IService<TravelNote> {
     /**
      * 获取用户的游记列表
      */
-    List<Map<String, Object>> getUserTravelNotes(Integer userId, int page, int size);
+    List<Map<String, Object>> getUserTravelNotes(Integer userId, Integer currentUserId, int page, int size);
 
     /**
      * 点赞游记

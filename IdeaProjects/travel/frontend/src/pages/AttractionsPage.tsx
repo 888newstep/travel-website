@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { attractionApi, type Attraction } from '../api/attraction.api'
-import { userApi } from '../api/user.api'
 
 import { CommentComposer, CommentFeed } from '../components/common/CommentBlocks'
 
@@ -9,13 +8,9 @@ import { DetailDrawer } from '../components/common/DetailDrawer'
 
 import { DetailMetricsGrid, DetailTextCard } from '../components/common/DetailInfoBlocks'
 
-import { RelatedCard, RelatedSection } from '../components/common/RelatedBlocks'
-
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 
-import { SearchEmptyState, SearchSyncNotice } from '../components/common/SearchFeedback'
-
-import { SearchPanel, StatCard, StatsGrid } from '../components/common/PageBlocks'
+import { SearchEmptyState } from '../components/common/SearchFeedback'
 
 import { type StatusNoticeTone, StatusNotice } from '../components/common/StatusNotice'
 
@@ -104,21 +99,6 @@ export function AttractionsPage() {
 
 
   const hasToken = Boolean(getStoredToken())
-  const [currentUserId, setCurrentUserId] = useState<number | null>(null)
-
-
-
-
-  useEffect(() => {
-    if (hasToken) {
-      userApi.getCurrentUser().then((user) => {
-        if (user && typeof (user as any).id === 'number') {
-          setCurrentUserId((user as any).id)
-        }
-      }).catch(() => {})
-    }
-  }, [hasToken])
-
   const fetchAttractions = useCallback(async (searchText: string) => {
 
     const normalized = searchText.trim()
@@ -377,7 +357,7 @@ export function AttractionsPage() {
 
     try {
 
-      await attractionApi.submitReview(selectedItem.id!, Number(reviewForm.rating), reviewForm.content.trim(), currentUserId ?? undefined)
+      await attractionApi.submitReview(selectedItem.id!, Number(reviewForm.rating), reviewForm.content.trim())
 
       setReviewForm({ rating: '5', content: '' })
 

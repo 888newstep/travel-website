@@ -7,7 +7,9 @@ import travel.common.entity.travel_recommendation.Attraction;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.route_planning.RouteAttraction;
 
-import travel.common.repository.RoutePlanRepository;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
+import travel.common.service.DistributedLockService;
 import travel.route.algorithm.GeneticAlgorithmTSP;
 import travel.route.algorithm.RoutePlanAlgorithm;
 import travel.route.dto.optimization.ApplyOptimizationRequest;
@@ -16,12 +18,14 @@ import travel.route.dto.optimization.*;
 import travel.route.service.*;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import travel.common.utils.AMapRouteService;
 import travel.common.utils.CommonUtil;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -31,15 +35,18 @@ import java.util.stream.Collectors;
 public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
     private static final Logger log = LoggerFactory.getLogger(RouteOptimizationServiceImpl.class);
+    private static final String OPTIMIZATION_HISTORY_PREFIX = "route:optimization:history:v2:";
+    private static final int MAX_OPTIMIZATION_HISTORY = 20;
+    private static final int MAX_OPTIMIZABLE_ATTRACTIONS = 100;
 
-    private final RoutePlanAlgorithm routePlanAlgorithm;
     private final RouteService routeService;
     private final AttractionService attractionService;
     private final RouteAttractionService routeAttractionService;
-    private final RoutePlanRepository routePlanRepository;
     private final RedisTemplate<String, Object> redisTemplate;
     private final AMapRouteService aMapRouteService;
     private final GeneticAlgorithmTSP geneticAlgorithmTSP;
+    private final DistributedLockService distributedLockService;
+    private final TransactionTemplate transactionTemplate;
 
     // 兴趣标签与景点类型映射
     private final Map<String, List<String>> interestAttractionMap = createInterestMap();
@@ -56,6 +63,10 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
     @Override
     public RoutePlanAlgorithm.OptimalRoute planOptimalRoute(List<Integer> attractionIds, int maxDays, BigDecimal budget, String preference) {
+        if (attractionIds == null || attractionIds.isEmpty() || maxDays <= 0
+                || budget == null || budget.signum() <= 0 || preference == null || preference.isBlank()) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+        }
         log.info("开始智能规划路线: 景点数={}, 天数={}, 预算={}, 偏好={}",
                 attractionIds.size(), maxDays, budget, preference);
 
@@ -68,7 +79,7 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                     .toList();
 
             if (attractions.isEmpty()) {
-                throw new RuntimeException("没有有效的景点数据");
+                throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_NO_DATA);
             }
 
             Map<String, Double> weights = calculateWeights(preference);
@@ -100,9 +111,11 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
             log.info("智能路线规划完成: days={}, 总距离={}km, 总成本={}元, 总时间={}分钟, 适应度={}",
                     maxDays, totalDistance, totalCost, totalTime, fitness);
 
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("智能路线规划失败: {}", e.getMessage(), e);
-            throw new RuntimeException("路线规划失败: " + e.getMessage());
+            throw new RuntimeException("路线规划失败", e);
         }
 
         return optimalRoute;
@@ -113,45 +126,30 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
         List<Integer> attractionIds = new ArrayList<>();
         List<RoutePlanAlgorithm.RoutePoint> points = new ArrayList<>();
-        double totalDistance = 0.0;
-        double totalTime = 0.0;
         double totalCost = 0.0;
 
+        boolean coordinatesComplete = attractions.stream()
+                .allMatch(attraction -> attraction.getLatitude() != null && attraction.getLongitude() != null);
+        if (!coordinatesComplete) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_NO_DATA);
+        }
         List<double[]> coordinates = attractions.stream()
-                .filter(a -> a.getLatitude() != null && a.getLongitude() != null)
                 .map(a -> new double[]{a.getLongitude().doubleValue(), a.getLatitude().doubleValue()})
                 .toList();
 
         AMapRouteService.RouteInfo routeInfo = coordinates.size() >= 2
                 ? aMapRouteService.calculateMultiPointRoute(coordinates)
                 : null;
+        if (coordinates.size() >= 2 && routeInfo == null) {
+            throw new BusinessException(ErrorCodeEnum.REALTIME_DATA_FETCH_FAILED);
+        }
 
-        for (int i = 0; i < attractions.size(); i++) {
-            Attraction attraction = attractions.get(i);
+        for (Attraction attraction : attractions) {
             attractionIds.add(attraction.getId());
 
             RoutePlanAlgorithm.RoutePoint point = new RoutePlanAlgorithm.RoutePoint();
             point.setAttractionId(attraction.getId());
-
-            if (i > 0 && routeInfo != null && !routeInfo.getSteps().isEmpty()) {
-                AMapRouteService.RouteStep step = routeInfo.getSteps().get(Math.min(i - 1, routeInfo.getSteps().size() - 1));
-                point.setDistance(step.getDistance());
-                point.setTime(step.getDuration());
-                totalDistance += step.getDistance();
-                totalTime += step.getDuration();
-            } else if (i > 0) {
-                Attraction prevAttraction = attractions.get(i - 1);
-                double distance = CommonUtil.calculateDistance(
-                        prevAttraction.getLatitude().doubleValue(), prevAttraction.getLongitude().doubleValue(),
-                        attraction.getLatitude().doubleValue(), attraction.getLongitude().doubleValue());
-                double time = estimateTravelTime(distance);
-                point.setDistance(distance);
-                point.setTime(time);
-                totalDistance += distance;
-                totalTime += time;
-            }
-
-            totalCost += attraction.getTicketPrice().doubleValue();
+            totalCost += attraction.getTicketPrice() == null ? 0.0 : attraction.getTicketPrice().doubleValue();
             points.add(point);
         }
 
@@ -161,8 +159,8 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
         dayPlan.setAttractionIds(attractionIds);
         dayPlan.setPoints(points);
-        dayPlan.setDistance(totalDistance);
-        dayPlan.setTime(totalTime);
+        dayPlan.setDistance(routeInfo == null ? 0.0 : routeInfo.getDistance());
+        dayPlan.setTime(routeInfo == null ? 0.0 : routeInfo.getDuration());
         dayPlan.setCost(totalCost);
 
         return dayPlan;
@@ -203,205 +201,16 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                 timeScore * weights.getOrDefault("time", 0.34);
     }
 
-    private double estimateTravelTime(double distanceKm) {
-        return distanceKm / 30.0 * 60;
-    }
-    
-    @Override
-    public AdjustRouteResult adjustRoute(Integer routeId, String adjustmentType, Map<String, Object> adjustmentParams) {
-        try {
-            Route route = routeService.getById(routeId);
-            if (route == null) {
-                throw new RuntimeException("路线不存在");
-            }
-
-            AdjustRouteResult.Builder resultBuilder = AdjustRouteResult.builder()
-                    .originalRoute(route);
-
-            switch (adjustmentType) {
-                case "addAttraction":
-                    // 添加景点
-                    Integer attractionId = (Integer) adjustmentParams.get("attractionId");
-                    Integer dayNumber = (Integer) adjustmentParams.get("dayNumber");
-                    if (attractionId != null && dayNumber != null) {
-                        // 实现添加景点逻辑
-                        log.info("添加景点: attractionId={}, dayNumber={}", attractionId, dayNumber);
-                        // 1. 验证景点是否存在
-                        Attraction attraction = attractionService.getById(attractionId);
-                        if (attraction != null) {
-                            // 2. 创建新的RouteAttraction记录
-                            RouteAttraction routeAttraction = new RouteAttraction();
-                            // 设置关联对象
-                            Route newRoute = new Route();
-                            newRoute.setId(routeId);
-                            routeAttraction.setRoute(newRoute);
-                            routeAttraction.setAttraction(attraction);
-                            routeAttraction.setDayNumber(dayNumber);
-                            routeAttraction.setVisitOrder(1); // 默认顺序
-                            // 3. 保存到数据库
-                            routeAttractionService.save(routeAttraction);
-                            resultBuilder.addedAttraction(attraction);
-                        }
-                    }
-                    break;
-                case "removeAttraction":
-                    // 移除景点
-                    Integer removeAttractionId = (Integer) adjustmentParams.get("attractionId");
-                    if (removeAttractionId != null) {
-                        // 实现移除景点逻辑
-                        log.info("移除景点: attractionId={}", removeAttractionId);
-                        // 1. 查找并删除RouteAttraction记录
-                        List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-                        for (RouteAttraction ra : routeAttractions) {
-                            if (ra.getAttractionId().equals(removeAttractionId)) {
-                                routeAttractionService.removeById(ra.getId());
-                                resultBuilder.removedAttractionId(removeAttractionId);
-                                break;
-                            }
-                        }
-                    }
-                    break;
-                case "reorderAttractions":
-                    // 重新排序景点
-                    Object attractionOrderObj = adjustmentParams.get("attractionOrder");
-                    if (attractionOrderObj instanceof List) {
-                        List<Integer> attractionOrder = ((List<?>) attractionOrderObj).stream()
-                                .filter(item -> item instanceof Integer)
-                                .map(item -> (Integer) item)
-                                .collect(Collectors.toList());
-                        if (!attractionOrder.isEmpty()) {
-                            // 实现重新排序逻辑
-                            log.info("重新排序景点: attractionOrder={}", attractionOrder);
-                            // 1. 获取当前路线的景点
-                            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-                            // 2. 更新顺序
-                            int order = 1;
-                            for (Integer attractionIdToReorder : attractionOrder) {
-                                for (RouteAttraction ra : routeAttractions) {
-                                    if (ra.getAttractionId().equals(attractionIdToReorder)) {
-                                        ra.setVisitOrder(order++);
-                                        routeAttractionService.updateById(ra);
-                                        break;
-                                    }
-                                }
-                            }
-                            resultBuilder.newOrder(attractionOrder);
-                        }
-                    }
-                    break;
-                case "adjustDayDistribution":
-                    // 调整天数分配
-                    Integer newDays = (Integer) adjustmentParams.get("newDays");
-                    if (newDays != null && newDays > 0) {
-                        // 实现调整天数逻辑
-                        log.info("调整天数分配: newDays={}", newDays);
-                        // 1. 更新路线的天数
-                        route.setDurationDays(newDays);
-                        routeService.updateById(route);
-                        // 2. 重新分配景点到每天
-                        List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-                        int totalAttractions = routeAttractions.size();
-                        int attractionsPerDay = totalAttractions / newDays;
-                        int remainder = totalAttractions % newDays;
-                        
-                        int currentDay = 1;
-                        int count = 0;
-                        for (RouteAttraction ra : routeAttractions) {
-                            ra.setDayNumber(currentDay);
-                            routeAttractionService.updateById(ra);
-                            count++;
-                            
-                            if (count >= attractionsPerDay + (currentDay <= remainder ? 1 : 0)) {
-                                currentDay++;
-                                count = 0;
-                            }
-                        }
-                        resultBuilder.newDays(newDays);
-                    }
-                    break;
-                default:
-                    throw new RuntimeException("不支持的调整类型");
-            }
-
-            log.info("调整路线成功: routeId={}, adjustmentType={}", routeId, adjustmentType);
-            return resultBuilder.success(true).build();
-        } catch (Exception e) {
-            log.error("调整路线失败: routeId={}, error={}", routeId, e.getMessage());
-            throw new RuntimeException("调整路线失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public List<RouteRecommendationItem> getRouteRecommendations(Integer cityId, int days, List<String> interests, BigDecimal budget) {
-        try {
-            List<Attraction> attractions = attractionService.getByCityId(cityId);
-            List<Attraction> filteredAttractions = filterAttractionsByInterests(attractions, interests);
-
-            if (filteredAttractions.isEmpty()) {
-                filteredAttractions = attractions;
-            }
-
-            List<Integer> attractionIds = filteredAttractions.stream()
-                    .map(Attraction::getId)
-                    .toList();
-
-            List<RouteRecommendationItem> recommendations = new ArrayList<>();
-
-            List<String> preferences = Arrays.asList("balanced", "lowCost", "fast", "lowCarbon");
-            for (String preference : preferences) {
-                try {
-                    RoutePlanAlgorithm.OptimalRoute optimalRoute = routePlanAlgorithm.planOptimalRoute(attractionIds, days, budget, preference);
-                    RouteRecommendationItem recommendation = convertToRecommendation(optimalRoute, filteredAttractions, preference);
-                    recommendations.add(recommendation);
-                } catch (Exception e) {
-                    log.warn("生成推荐路线失败: preference={}, error={}", preference, e.getMessage());
-                }
-            }
-
-            recommendations.sort((a, b) -> Double.compare(
-                    b.getFitness() != null ? b.getFitness() : 0.0,
-                    a.getFitness() != null ? a.getFitness() : 0.0));
-
-            log.info("获取路线推荐成功: cityId={}, days={}, interests={}, count={}", cityId, days, interests, recommendations.size());
-            return recommendations;
-        } catch (Exception e) {
-            log.error("获取路线推荐失败: cityId={}, error={}", cityId, e.getMessage());
-            throw new RuntimeException("获取路线推荐失败: " + e.getMessage());
-        }
-    }
-    @Override
-    public double calculateRouteSimilarity(Integer routeId1, Integer routeId2) {
-        try {
-            // 获取两条路线的景点
-            List<RouteAttraction> attractions1 = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId1.longValue());
-            List<RouteAttraction> attractions2 = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId2.longValue());
-
-            Set<Integer> attractionSet1 = attractions1.stream().map(RouteAttraction::getAttractionId).collect(Collectors.toSet());
-            Set<Integer> attractionSet2 = attractions2.stream().map(RouteAttraction::getAttractionId).collect(Collectors.toSet());
-
-            // 计算Jaccard相似度
-            Set<Integer> intersection = new HashSet<>(attractionSet1);
-            intersection.retainAll(attractionSet2);
-
-            Set<Integer> union = new HashSet<>(attractionSet1);
-            union.addAll(attractionSet2);
-
-            double similarity = union.isEmpty() ? 0.0 : (double) intersection.size() / union.size();
-
-            log.info("计算路线相似度成功: routeId1={}, routeId2={}, similarity={}", routeId1, routeId2, similarity);
-            return similarity;
-        } catch (Exception e) {
-            log.error("计算路线相似度失败: routeId1={}, routeId2={}, error={}", routeId1, routeId2, e.getMessage());
-            throw new RuntimeException("计算路线相似度失败: " + e.getMessage());
-        }
-    }
-
     @Override
     public RouteQualityEvaluationResult evaluateRouteQuality(Integer routeId) {
         try {
             Route route = routeService.getById(routeId);
             if (route == null) {
-                throw new RuntimeException("路线不存在");
+                throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+            }
+            Integer durationDays = route.getDurationDays();
+            if (durationDays == null || durationDays <= 0) {
+                throw new BusinessException(ErrorCodeEnum.ROUTE_DURATION_ERROR);
             }
 
             List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
@@ -411,10 +220,14 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                     .collect(Collectors.toList());
 
             // 计算各项指标
-            double averageRating = attractions.stream().mapToDouble(a -> a.getRating().doubleValue()).average().orElse(0.0);
+            double averageRating = attractions.stream()
+                    .map(Attraction::getRating)
+                    .filter(Objects::nonNull)
+                    .mapToDouble(BigDecimal::doubleValue)
+                    .average()
+                    .orElse(0.0);
             int totalAttractions = attractions.size();
-            int days = route.getDurationDays();
-            double attractionsPerDay = (double) totalAttractions / days;
+            double attractionsPerDay = (double) totalAttractions / durationDays;
 
             // 计算路线多样性
             Set<String> attractionTypes = new HashSet<>();
@@ -430,8 +243,9 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
             });
             double diversityScore = (double) attractionTypes.size() / interestAttractionMap.size();
 
-            // 综合评分
-            double qualityScore = (averageRating * 0.4) + (attractionsPerDay * 0.3) + (diversityScore * 0.3);
+            double ratingScore = Math.max(0.0, Math.min(1.0, averageRating / 5.0));
+            double scheduleScore = Math.max(0.0, 1.0 - Math.abs(attractionsPerDay - 4.0) / 4.0);
+            double qualityScore = ratingScore * 0.4 + scheduleScore * 0.3 + diversityScore * 0.3;
 
             log.info("评估路线质量成功: routeId={}, qualityScore={}", routeId, qualityScore);
             return RouteQualityEvaluationResult.builder()
@@ -444,122 +258,12 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                     .qualityScore(qualityScore)
                     .recommendationLevel(getRecommendationLevel(qualityScore))
                     .build();
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("评估路线质量失败: routeId={}, error={}", routeId, e.getMessage());
-            throw new RuntimeException("评估路线质量失败: " + e.getMessage());
+            throw new RuntimeException("评估路线质量失败", e);
         }
-    }
-
-    @Override
-    public List<RouteAlternative> generateRouteAlternatives(Integer routeId, int alternativeCount) {
-        try {
-            Route route = routeService.getById(routeId);
-            if (route == null) {
-                throw new RuntimeException("路线不存在");
-            }
-
-            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-            List<Integer> attractionIds = routeAttractions.stream()
-                    .map(RouteAttraction::getAttractionId)
-                    .collect(Collectors.toList());
-
-            List<RouteAlternative> alternatives = new ArrayList<>();
-
-            // 生成不同偏好的备选方案
-            List<String> preferences = Arrays.asList("balanced", "lowCost", "fast", "lowCarbon");
-            for (int i = 0; i < alternativeCount && i < preferences.size(); i++) {
-                try {
-                    RoutePlanAlgorithm.OptimalRoute optimalRoute = routePlanAlgorithm.planOptimalRoute(attractionIds, route.getDurationDays(), new BigDecimal(1000), preferences.get(i));
-                    RouteRecommendationItem recItem = convertToRecommendation(optimalRoute, new ArrayList<>(), preferences.get(i));
-                    RouteAlternativeData routeData = RouteAlternativeData.builder()
-                            .preference(preferences.get(i))
-                            .fitness(recItem.getFitness() != null ? recItem.getFitness() : 0.0)
-                            .totalDistance(recItem.getTotalDistance() != null ? recItem.getTotalDistance() : 0.0)
-                            .totalCost(recItem.getTotalCost() != null ? recItem.getTotalCost() : 0.0)
-                            .totalTime(recItem.getTotalTime() != null ? recItem.getTotalTime() : 0.0)
-                            .build();
-                    RouteAlternative alternative = RouteAlternative.builder()
-                            .originalRouteId(routeId)
-                            .routeData(routeData)
-                            .build();
-                    alternatives.add(alternative);
-                } catch (Exception e) {
-                    log.warn("生成备选路线失败: index={}, error={}", i, e.getMessage());
-                }
-            }
-
-            log.info("生成路线备选方案成功: routeId={}, count={}", routeId, alternatives.size());
-            return alternatives;
-        } catch (Exception e) {
-            log.error("生成路线备选方案失败: routeId={}, error={}", routeId, e.getMessage());
-            throw new RuntimeException("生成路线备选方案失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public RouteAnalysisResult getRouteAnalysis(Integer routeId) {
-        try {
-            Route route = routeService.getById(routeId);
-            if (route == null) {
-                throw new RuntimeException("路线不存在");
-            }
-
-            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-            List<Attraction> attractions = routeAttractions.stream()
-                    .map(ra -> attractionService.getById(ra.getAttractionId()))
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toList());
-
-            // 计算各项分析指标
-            double totalDistance = calculateTotalDistance(attractions);
-            double estimatedCost = calculateEstimatedCost(attractions);
-            double estimatedTime = calculateEstimatedTime(attractions);
-            double averageRating = attractions.stream().mapToDouble(a -> a.getRating().doubleValue()).average().orElse(0.0);
-
-            // 分析景点类型分布
-            Map<String, Integer> attractionTypeDistribution = analyzeAttractionTypes(attractions);
-
-            log.info("获取路线详细分析成功: routeId={}", routeId);
-            return RouteAnalysisResult.builder()
-                    .routeId(routeId)
-                    .routeName(route.getTitle())
-                    .totalAttractions(attractions.size())
-                    .totalDistance(totalDistance)
-                    .estimatedCost(estimatedCost)
-                    .estimatedTime(estimatedTime)
-                    .averageRating(averageRating)
-                    .attractionTypeDistribution(attractionTypeDistribution)
-                    .recommendations(generateRouteRecommendations(attractions))
-                    .build();
-        } catch (Exception e) {
-            log.error("获取路线详细分析失败: routeId={}, error={}", routeId, e.getMessage());
-            throw new RuntimeException("获取路线详细分析失败: " + e.getMessage());
-        }
-    }
-    
-    private RouteRecommendationItem convertToRecommendation(RoutePlanAlgorithm.OptimalRoute optimalRoute, List<Attraction> attractions, String preference) {
-        List<RouteRecommendationDayPlan> dayPlans = new ArrayList<>();
-        if (optimalRoute.getDayPlans() != null) {
-            for (RoutePlanAlgorithm.RouteDayPlan dayPlan : optimalRoute.getDayPlans()) {
-                dayPlans.add(RouteRecommendationDayPlan.builder()
-                        .dayNumber(dayPlan.getDayNumber())
-                        .attractionIds(dayPlan.getAttractionIds())
-                        .distance(dayPlan.getDistance())
-                        .cost(dayPlan.getCost())
-                        .time(dayPlan.getTime())
-                        .build());
-            }
-        }
-
-        return RouteRecommendationItem.builder()
-                .preference(preference)
-                .fitness(optimalRoute.getTotalFitness())
-                .totalDistance(optimalRoute.getTotalDistance())
-                .totalCost(optimalRoute.getTotalCost())
-                .totalTime(optimalRoute.getTotalTime())
-                .route(optimalRoute)
-                .dayPlans(dayPlans)
-                .build();
     }
 
     private String getRecommendationLevel(double qualityScore) {
@@ -576,383 +280,271 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
 
     
 
-    private boolean isHoliday(LocalDate date) {
-        // 简单实现节假日判断逻辑
-        // 这里可以根据实际的节假日列表进行判断
-        int month = date.getMonthValue();
-        int day = date.getDayOfMonth();
-        
-        // 元旦
-        if (month == 1 && day == 1) {
-            return true;
-        }
-        // 春节（这里简单假设为正月初一到初七）
-        // 实际项目中应该根据农历计算
-        if (month == 2 && day <= 7) {
-            return true;
-        }
-        // 清明节
-        if (month == 4 && day >= 4 && day <= 6) {
-            return true;
-        }
-        // 劳动节
-        if (month == 5 && day <= 3) {
-            return true;
-        }
-        // 端午节
-        if (month == 6 && day >= 12 && day <= 14) {
-            return true;
-        }
-        // 中秋节
-        if (month == 9 && day >= 19 && day <= 21) {
-            return true;
-        }
-        // 国庆节
-        if (month == 10 && day <= 7) {
-            return true;
-        }
-        
-        return false;
-    }
-
-    private String getCrowdLevel(int crowd) {
-        if (crowd > 1000) {
-            return "拥挤";
-        } else if (crowd > 500) {
-            return "较多";
-        } else if (crowd > 200) {
-            return "适中";
-        } else {
-            return "较少";
-        }
-    }
-
-    private String getSuggestedTime(int crowd, boolean isWeekend) {
-        if (crowd > 1000) {
-            return isWeekend ? "9:00前或16:00后" : "10:00前或15:00后";
-        } else {
-            return "正常时间";
-        }
-    }
-
-    private double calculateTotalDistance(List<Attraction> attractions) {
-        if (attractions == null || attractions.size() < 2) {
-            return 0.0;
-        }
-
-        double totalDistance = 0.0;
-        for (int i = 0; i < attractions.size() - 1; i++) {
-            Attraction current = attractions.get(i);
-            Attraction next = attractions.get(i + 1);
-            // 使用Haversine公式计算两个经纬度点之间的距离
-            totalDistance += calculateDistance(current.getLatitude().doubleValue(), current.getLongitude().doubleValue(),
-                    next.getLatitude().doubleValue(), next.getLongitude().doubleValue());
-        }
-
-        return totalDistance;
-    }
-
-    /**
-     * 使用Haversine公式计算两个经纬度点之间的距离（公里）
-     */
-    private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
-        final double R = 6371.0; // 地球半径（公里）
-        double dLat = Math.toRadians(lat2 - lat1);
-        double dLon = Math.toRadians(lon2 - lon1);
-        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
-                        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
-    }
-
-    
-
-    @Override
-    public RouteCrowdPrediction predictRouteCrowd(Integer routeId, String date) {
-        try {
-            Route route = routeService.getById(routeId);
-            if (route == null) {
-                throw new RuntimeException("路线不存在");
-            }
-
-            LocalDate predictDate = LocalDate.parse(date, DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-            boolean isWeekend = predictDate.getDayOfWeek().getValue() >= 6;
-            boolean isHoliday = isHoliday(predictDate);
-
-            List<RouteAttraction> routeAttractions = routeAttractionService.getByRouteIdOrderByDayAndVisit(routeId.longValue());
-            List<Attraction> attractions = routeAttractions.stream()
-                    .map(ra -> attractionService.getById(ra.getAttractionId()))
-                    .filter(Objects::nonNull)
-                    .toList();
-
-            List<RouteCrowdPredictionItem> crowdPredictions = attractions.stream()
-                    .map(attraction -> {
-                        int baseCrowd = attraction.getViewCount() == null ? 0 : attraction.getViewCount() / 1000;
-                        int multiplier = isHoliday ? 3 : (isWeekend ? 2 : 1);
-                        int predictedCrowd = baseCrowd * multiplier;
-
-                        return RouteCrowdPredictionItem.builder()
-                                .attractionId(attraction.getId())
-                                .attractionName(attraction.getName())
-                                .predictedCrowd(predictedCrowd)
-                                .crowdLevel(getCrowdLevel(predictedCrowd))
-                                .suggestedTime(getSuggestedTime(predictedCrowd, isWeekend))
-                                .build();
-                    })
-                    .toList();
-
-            log.info("预测路线人流量成功: routeId={}, date={}", routeId, date);
-            return RouteCrowdPrediction.builder()
-                    .routeId(routeId)
-                    .routeName(route.getTitle())
-                    .predictDate(date)
-                    .isWeekend(isWeekend)
-                    .isHoliday(isHoliday)
-                    .crowdPredictions(crowdPredictions)
-                    .build();
-        } catch (Exception e) {
-            log.error("预测路线人流量失败: routeId={}, error={}", routeId, e.getMessage());
-            throw new RuntimeException("预测路线人流量失败: " + e.getMessage());
-        }
-    }
-    
-    private double calculateEstimatedCost(List<Attraction> attractions) {
-        if (attractions == null || attractions.isEmpty()) {
-            return 0.0;
-        }
-
-        // 计算门票总成本
-        double ticketCost = attractions.stream()
-                .mapToDouble(a -> a.getTicketPrice().doubleValue())
-                .sum();
-
-        // 计算交通成本（假设每天50元）
-        double transportCost = 50.0;
-
-        // 计算餐饮成本（假设每天100元）
-        double foodCost = 100.0;
-
-        // 计算总成本
-        double totalCost = ticketCost + transportCost + foodCost;
-
-        return totalCost;
-    }
-
-    private double calculateEstimatedTime(List<Attraction> attractions) {
-        if (attractions == null || attractions.isEmpty()) {
-            return 0.0;
-        }
-
-        // 每个景点的平均游览时间（小时）
-        double avgVisitTimePerAttraction = 2.0;
-        // 景点间的平均交通时间（小时）
-        double avgTransportTimeBetweenAttractions = 0.5;
-
-        // 计算游览时间
-        double visitTime = attractions.size() * avgVisitTimePerAttraction;
-        // 计算交通时间
-        double transportTime = (attractions.size() - 1) * avgTransportTimeBetweenAttractions;
-
-        // 计算总时间
-        double totalTime = visitTime + transportTime;
-
-        return totalTime;
-    }
-
-    private Map<String, Integer> analyzeAttractionTypes(List<Attraction> attractions) {
-        Map<String, Integer> typeDistribution = new HashMap<>();
-        for (Attraction attraction : attractions) {
-            String description = attraction.getDescription();
-            if (description != null) {
-                for (String type : interestAttractionMap.keySet()) {
-                    if (interestAttractionMap.get(type).stream().anyMatch(description::contains)) {
-                        typeDistribution.put(type, typeDistribution.getOrDefault(type, 0) + 1);
-                    }
-                }
-            }
-        }
-        return typeDistribution;
-    }
-
-    private List<String> generateRouteRecommendations(List<Attraction> attractions) {
-        List<String> recommendations = new ArrayList<>();
-        if (attractions.size() > 10) {
-            recommendations.add("建议适当减少景点数量，提高游览体验");
-        }
-        if (attractions.stream().filter(a -> a.getTicketPrice().compareTo(BigDecimal.valueOf(50)) > 0).count() > attractions.size() / 2) {
-            recommendations.add("建议增加一些免费景点，降低游览成本");
-        }
-        return recommendations;
-    }
-
-    @Override
-    public boolean saveUserRoutePreferences(Integer userId, Map<String, Object> preferences) {
-        if (userId == null || userId <= 0) {
-            throw new IllegalArgumentException("userId无效");
-        }
-        if (preferences == null) {
-            throw new IllegalArgumentException("preferences为null");
-        }
-
-        try {
-            String redisKey = "user:route:preferences:" + userId;
-            redisTemplate.opsForValue().set(redisKey, preferences);
-            redisTemplate.expire(redisKey, 30, TimeUnit.DAYS);
-
-            log.info("保存用户路线偏好成功: userId={}", userId);
-            return true;
-        } catch (Exception e) {
-            log.error("保存用户路线偏好失败: userId={}, error={}", userId, e.getMessage());
-            throw new RuntimeException("保存用户路线偏好失败: " + e.getMessage());
-        }
-    }
-
     @Override
     public List<OptimizationSuggestion> getOptimizationSuggestions(Integer routeId) {
+        if (routeId == null || routeId <= 0 || routeService.getById(routeId) == null) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+        }
         log.info("获取优化建议: routeId={}", routeId);
         return List.of(OptimizationSuggestion.builder()
-                .type("general")
-                .message("建议合理安排景点游览顺序")
+                .id(1)
+                .title("游览顺序优化")
+                .description("保留每日景点安排，按地理距离优化当天游览顺序")
+                .type("distance")
+                .message("按景点经纬度执行最近邻顺序调整")
                 .build());
     }
 
     @Override
     public boolean applyOptimization(ApplyOptimizationRequest request) {
-        log.info("应用优化: routeId={}, type={}", request.getRouteId(), request.getOptimizationType());
-        return true;
+        if (request == null || request.getRouteId() == null || request.getRouteId() <= 0) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+        }
+        Integer routeId = request.getRouteId();
+        String optimizationType = resolveOptimizationType(request);
+        return distributedLockService.executeWithLock("route-optimization:" + routeId,
+                () -> {
+                    Boolean applied = transactionTemplate.execute(
+                            status -> applyOptimizationLocked(routeId, optimizationType, request));
+                    if (!Boolean.TRUE.equals(applied)) {
+                        throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_FAILED);
+                    }
+                    return true;
+                });
     }
 
     @Override
     public List<OptimizationHistoryItem> getOptimizationHistory(Integer routeId) {
+        if (routeId == null || routeId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+        }
         log.info("获取优化历史: routeId={}", routeId);
-        return Collections.emptyList();
-    }
-    
-    @Override
-    public List<RouteRecommendationItem> getPersonalizedRouteRecommendations(Integer userId, Integer cityId, int days) {
-        if (userId == null || userId <= 0) {
-            throw new IllegalArgumentException("userId无效");
+        List<Object> records = redisTemplate.opsForList().range(
+                OPTIMIZATION_HISTORY_PREFIX + routeId, 0, MAX_OPTIMIZATION_HISTORY - 1);
+        if (records == null || records.isEmpty()) {
+            return Collections.emptyList();
         }
-        if (cityId == null || cityId <= 0) {
-            throw new IllegalArgumentException("cityId无效");
-        }
-        if (days <= 0 || days > 30) {
-            throw new IllegalArgumentException("days无效，应为1-30天");
-        }
-
-        try {
-            String redisKey = "user:route:preferences:" + userId;
-            Map<String, Object> preferences = null;
-
-            Object preferencesObj = redisTemplate.opsForValue().get(redisKey);
-            if (preferencesObj instanceof Map<?, ?> map) {
-                preferences = new HashMap<>();
-                for (Map.Entry<?, ?> entry : map.entrySet()) {
-                    if (entry.getKey() instanceof String key) {
-                        preferences.put(key, entry.getValue());
-                    }
-                }
-            }
-
-            List<Attraction> attractions = attractionService.getByCityId(cityId);
-
-            if (attractions == null || attractions.isEmpty()) {
-                log.warn("获取用户个性化路线推荐: 城市无景点数据: cityId={}", cityId);
-                return Collections.emptyList();
-            }
-
-            List<String> interests = Optional.ofNullable(preferences)
-                    .map(p -> p.get("interests"))
-                    .filter(obj -> obj instanceof List<?>)
-                    .map(obj -> ((List<?>) obj).stream()
-                            .filter(item -> item instanceof String)
-                            .map(item -> (String) item)
-                            .toList())
-                    .orElse(Collections.emptyList());
-
-            List<Attraction> filteredAttractions = interests.isEmpty()
-                    ? attractions
-                    : filterAttractionsByInterests(attractions, interests);
-
-            if (filteredAttractions.isEmpty()) {
-                filteredAttractions = attractions;
-            }
-
-            List<Route> recommendedRoutes = routePlanRepository.recommendRoutesByPreferences(cityId.longValue(), interests);
-
-            List<Integer> attractionIds = filteredAttractions.stream()
-                    .map(Attraction::getId)
-                    .toList();
-
-            List<RouteRecommendationItem> recommendations = recommendedRoutes.stream()
-                    .map(route -> RouteRecommendationItem.builder()
-                            .routeId(route.getId())
-                            .routeName(route.getTitle())
-                            .preference("user_preferred")
-                            .days(route.getDurationDays())
-                            .userId(userId)
-                            .build())
-                    .collect(Collectors.toCollection(ArrayList::new));
-
-            List<String> preferenceList = Arrays.asList("balanced", "lowCost", "fast", "lowCarbon");
-            for (String pref : preferenceList) {
-                try {
-                    RoutePlanAlgorithm.OptimalRoute optimalRoute = routePlanAlgorithm.planOptimalRoute(
-                            attractionIds, days, new BigDecimal(1000), pref);
-                    RouteRecommendationItem recommendation = convertToRecommendation(optimalRoute, filteredAttractions, pref);
-                    // userId already set via builder in convertToRecommendation, set it here
-                    RouteRecommendationItem withUser = RouteRecommendationItem.builder()
-                            .routeId(recommendation.getRouteId())
-                            .routeName(recommendation.getRouteName())
-                            .preference(recommendation.getPreference())
-                            .days(recommendation.getDays())
-                            .userId(userId)
-                            .fitness(recommendation.getFitness())
-                            .totalDistance(recommendation.getTotalDistance())
-                            .totalCost(recommendation.getTotalCost())
-                            .totalTime(recommendation.getTotalTime())
-                            .route(recommendation.getRoute())
-                            .dayPlans(recommendation.getDayPlans())
-                            .build();
-                    recommendations.add(withUser);
-                } catch (Exception e) {
-                    log.warn("生成个性化路线推荐失败: userId={}, preference={}, error={}", userId, pref, e.getMessage());
-                }
-            }
-
-            recommendations.sort((a, b) -> Double.compare(
-                    b.getFitness() != null ? b.getFitness() : 0.0,
-                    a.getFitness() != null ? a.getFitness() : 0.0));
-
-            log.info("获取用户个性化路线推荐成功: userId={}, cityId={}, days={}, count={}", userId, cityId, days, recommendations.size());
-            return recommendations;
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("获取用户个性化路线推荐失败: userId={}, error={}", userId, e.getMessage());
-            throw new RuntimeException("获取用户个性化路线推荐失败: " + e.getMessage());
-        }
-    }
-
-    
-
-    private List<Attraction> filterAttractionsByInterests(List<Attraction> attractions, List<String> interests) {
-        if (interests == null || interests.isEmpty()) {
-            return attractions;
-        }
-
-        return attractions.stream()
-                .filter(attraction -> {
-                    String description = attraction.getDescription();
-                    if (description == null) {
-                        return false;
-                    }
-                    return interests.stream().anyMatch(interest -> {
-                        List<String> keywords = interestAttractionMap.getOrDefault(interest, Collections.emptyList());
-                        return keywords.stream().anyMatch(description::contains);
-                    });
-                })
+        return records.stream()
+                .map(this::toOptimizationHistoryItem)
+                .filter(Objects::nonNull)
                 .toList();
     }
+
+    private boolean applyOptimizationLocked(
+            Integer routeId, String optimizationType, ApplyOptimizationRequest request) {
+        if (routeService.getById(routeId) == null) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+        }
+        List<RouteAttraction> relations =
+                routeAttractionService.getByRouteIdOrderByDayAndVisitForUpdate(routeId.longValue());
+        if (relations.isEmpty()) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_NO_DATA);
+        }
+        if (relations.size() > MAX_OPTIMIZABLE_ATTRACTIONS) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+        }
+
+        List<Integer> explicitOrder = readExplicitOrder(request);
+        Map<Integer, Integer> explicitRanks = validateAndBuildRanks(explicitOrder, relations);
+        Map<Integer, List<RouteAttraction>> relationsByDay = relations.stream()
+                .collect(Collectors.groupingBy(
+                        relation -> Optional.ofNullable(relation.getDayNumber()).orElse(1),
+                        TreeMap::new,
+                        Collectors.toList()));
+
+        boolean changed = false;
+        for (List<RouteAttraction> dailyRelations : relationsByDay.values()) {
+            List<RouteAttraction> optimized = explicitRanks == null
+                    ? optimizeDailyRelations(dailyRelations)
+                    : dailyRelations.stream()
+                            .sorted(Comparator.comparingInt(relation -> explicitRanks.get(relation.getAttractionId())))
+                            .toList();
+            for (int index = 0; index < optimized.size(); index++) {
+                RouteAttraction relation = optimized.get(index);
+                int expectedOrder = index + 1;
+                if (!Objects.equals(relation.getVisitOrder(), expectedOrder)) {
+                    relation.setVisitOrder(expectedOrder);
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            routeAttractionService.replaceRouteSchedule(routeId, relations);
+            saveOptimizationHistoryAfterCommit(routeId, optimizationType);
+        }
+        log.info("应用路线优化完成: routeId={}, type={}, changed={}",
+                routeId, optimizationType, changed);
+        return true;
+    }
+
+    private List<RouteAttraction> optimizeDailyRelations(List<RouteAttraction> dailyRelations) {
+        if (dailyRelations.size() <= 2) {
+            return dailyRelations;
+        }
+        List<RouteAttraction> optimized = new ArrayList<>();
+        List<RouteAttraction> remaining = new ArrayList<>(dailyRelations);
+        Map<Integer, Attraction> attractionsById = new HashMap<>();
+        for (RouteAttraction relation : dailyRelations) {
+            Attraction attraction = attractionService.getById(relation.getAttractionId());
+            if (attraction == null || attraction.getLatitude() == null || attraction.getLongitude() == null) {
+                throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_NO_DATA);
+            }
+            attractionsById.put(relation.getAttractionId(), attraction);
+        }
+        RouteAttraction current = remaining.remove(0);
+        optimized.add(current);
+        while (!remaining.isEmpty()) {
+            Attraction currentAttraction = attractionsById.get(current.getAttractionId());
+            RouteAttraction nearest = remaining.stream()
+                    .min(Comparator.<RouteAttraction>comparingDouble(candidate -> distance(
+                                    currentAttraction, attractionsById.get(candidate.getAttractionId())))
+                            .thenComparing(RouteAttraction::getId))
+                    .orElseThrow(() -> new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_NO_DATA));
+            optimized.add(nearest);
+            remaining.remove(nearest);
+            current = nearest;
+        }
+        return optimized;
+    }
+
+    private double distance(Attraction from, Attraction to) {
+        double latitudeDifference = Math.toRadians(
+                to.getLatitude().doubleValue() - from.getLatitude().doubleValue());
+        double longitudeDifference = Math.toRadians(
+                to.getLongitude().doubleValue() - from.getLongitude().doubleValue());
+        double value = Math.sin(latitudeDifference / 2) * Math.sin(latitudeDifference / 2)
+                + Math.cos(Math.toRadians(from.getLatitude().doubleValue()))
+                * Math.cos(Math.toRadians(to.getLatitude().doubleValue()))
+                * Math.sin(longitudeDifference / 2) * Math.sin(longitudeDifference / 2);
+        return 6371.0 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
+    }
+
+    private String resolveOptimizationType(ApplyOptimizationRequest request) {
+        String type = request.getOptimizationType();
+        if ((type == null || type.isBlank()) && request.getSuggestion() != null) {
+            type = getText(request.getSuggestion().get("optimizationType"));
+            if (type == null) {
+                type = getText(request.getSuggestion().get("type"));
+            }
+        }
+        if (type == null || type.isBlank()) {
+            type = "distance";
+        }
+        return switch (type.trim().toLowerCase(Locale.ROOT)) {
+            case "distance", "shortest" -> "distance";
+            default -> throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+        };
+    }
+
+    private String getText(com.fasterxml.jackson.databind.JsonNode node) {
+        return node != null && node.isTextual() ? node.textValue() : null;
+    }
+
+    private List<Integer> readExplicitOrder(ApplyOptimizationRequest request) {
+        com.fasterxml.jackson.databind.JsonNode orderNode = null;
+        if (request.getSuggestion() != null) {
+            orderNode = request.getSuggestion().get("attractionOrder");
+        }
+        if (orderNode == null && request.getParameters() != null) {
+            orderNode = request.getParameters().get("attractionOrder");
+        }
+        if (orderNode == null) {
+            return null;
+        }
+        if (!orderNode.isArray() || orderNode.isEmpty()) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+        }
+        List<Integer> order = new ArrayList<>();
+        for (com.fasterxml.jackson.databind.JsonNode item : orderNode) {
+            if (!item.canConvertToInt() || item.intValue() <= 0) {
+                throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+            }
+            order.add(item.intValue());
+        }
+        return order;
+    }
+
+    private Map<Integer, Integer> validateAndBuildRanks(
+            List<Integer> explicitOrder, List<RouteAttraction> relations) {
+        if (explicitOrder == null) {
+            return null;
+        }
+        Set<Integer> routeAttractionIds = relations.stream()
+                .map(RouteAttraction::getAttractionId)
+                .collect(Collectors.toSet());
+        if (explicitOrder.size() != routeAttractionIds.size()
+                || new HashSet<>(explicitOrder).size() != explicitOrder.size()
+                || !routeAttractionIds.equals(new HashSet<>(explicitOrder))) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_OPTIMIZATION_PARAM_ERROR);
+        }
+        Map<Integer, Integer> ranks = new HashMap<>();
+        for (int index = 0; index < explicitOrder.size(); index++) {
+            ranks.put(explicitOrder.get(index), index);
+        }
+        return ranks;
+    }
+
+    private void saveOptimizationHistoryAfterCommit(Integer routeId, String optimizationType) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            saveOptimizationHistorySafely(routeId, optimizationType);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                saveOptimizationHistorySafely(routeId, optimizationType);
+            }
+        });
+    }
+
+    private void saveOptimizationHistorySafely(Integer routeId, String optimizationType) {
+        try {
+            saveOptimizationHistory(routeId, optimizationType);
+        } catch (RuntimeException exception) {
+            log.warn("路线优化已提交，但历史缓存写入失败: routeId={}, type={}, errorType={}",
+                    routeId, optimizationType, exception.getClass().getSimpleName());
+        }
+    }
+
+    private void saveOptimizationHistory(Integer routeId, String optimizationType) {
+        String historyKey = OPTIMIZATION_HISTORY_PREFIX + routeId;
+        OptimizationHistoryItem item = OptimizationHistoryItem.builder()
+                .routeId(routeId)
+                .optimizationType(optimizationType)
+                .description("已优化每日景点游览顺序")
+                .appliedAt(LocalDateTime.now())
+                .build();
+        redisTemplate.opsForList().leftPush(historyKey, item);
+        redisTemplate.opsForList().trim(historyKey, 0, MAX_OPTIMIZATION_HISTORY - 1);
+        redisTemplate.expire(historyKey, 30, TimeUnit.DAYS);
+    }
+
+    private OptimizationHistoryItem toOptimizationHistoryItem(Object value) {
+        if (value instanceof OptimizationHistoryItem item) {
+            return item;
+        }
+        if (!(value instanceof Map<?, ?> map)) {
+            return null;
+        }
+        Object routeId = map.get("routeId");
+        Object appliedAt = map.get("appliedAt");
+        if (!(routeId instanceof Number number)) {
+            return null;
+        }
+        LocalDateTime timestamp;
+        try {
+            timestamp = appliedAt instanceof LocalDateTime localDateTime
+                    ? localDateTime
+                    : LocalDateTime.parse(String.valueOf(appliedAt));
+        } catch (Exception ignored) {
+            return null;
+        }
+        return new OptimizationHistoryItem(
+                number.intValue(),
+                Objects.toString(map.get("optimizationType"), "distance"),
+                Objects.toString(map.get("description"), ""),
+                timestamp);
+    }
+    
 }

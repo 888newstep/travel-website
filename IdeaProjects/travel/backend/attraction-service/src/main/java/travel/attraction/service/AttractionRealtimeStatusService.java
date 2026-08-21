@@ -3,6 +3,7 @@ package travel.attraction.service;
 import com.baomidou.mybatisplus.extension.service.IService;
 import travel.common.entity.travel_realtime.AttractionRealtimeStatus;
 import travel.common.exception.BusinessException;
+import travel.attraction.dto.AttractionWarning;
 
 import java.util.List;
 
@@ -26,13 +27,6 @@ public interface AttractionRealtimeStatusService extends IService<AttractionReal
      * @return 是否更新成功
      */
     boolean batchUpdateStatus(List<AttractionRealtimeStatus> statusList);
-
-    /**
-     * 查询景点历史人流均值（降级备用）
-     * @param attractionId 景点ID
-     * @return 历史人流均值
-     */
-    Integer selectAvgCrowdCount(Long attractionId);
 
     /**
      * 查询需要同步的景点状态（1小时内未更新/数据异常）
@@ -59,7 +53,7 @@ public interface AttractionRealtimeStatusService extends IService<AttractionReal
      * 获取活跃的预警信息
      * @return 预警信息列表
      */
-    List<Object> getActiveWarns();
+    List<AttractionWarning> getActiveWarns();
 
     /**
      * 批量更新同步时间
@@ -68,10 +62,4 @@ public interface AttractionRealtimeStatusService extends IService<AttractionReal
      */
     int batchUpdateSyncTime(Long[] attractionIds);
 
-    /**
-     * 查询景点近7天人流均值（使用attractionRealtimeStatusMapper）
-     * @param attractionId 景点ID
-     * @return 人流均值
-     */
-    Integer selectAvgCrowdCountUsingMapper(Long attractionId);
 }

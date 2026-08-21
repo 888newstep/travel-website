@@ -1,40 +1,49 @@
 package travel.route.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.TextNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.route_planning.RouteAttraction;
-import travel.common.repository.RoutePlanRepository;
+import travel.common.entity.travel_recommendation.Attraction;
 import travel.common.utils.AMapRouteService;
+import travel.common.service.DistributedLockService;
 import travel.route.algorithm.GeneticAlgorithmTSP;
 import travel.route.algorithm.RoutePlanAlgorithm;
-import travel.route.dto.optimization.RouteAlternative;
-import travel.route.dto.optimization.RouteAlternativeData;
-import travel.route.dto.optimization.RouteCrowdPredictionItem;
-import travel.route.dto.optimization.RouteRecommendationDayPlan;
-import travel.route.dto.optimization.RouteRecommendationItem;
+import travel.route.dto.optimization.ApplyOptimizationRequest;
 import travel.route.service.impl.RouteOptimizationServiceImpl;
 
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ListOperations;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Supplier;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class RouteOptimizationServiceImplTest {
-
-    @Mock
-    private RoutePlanAlgorithm routePlanAlgorithm;
 
     @Mock
     private RouteService routeService;
@@ -46,9 +55,6 @@ class RouteOptimizationServiceImplTest {
     private RouteAttractionService routeAttractionService;
 
     @Mock
-    private RoutePlanRepository routePlanRepository;
-
-    @Mock
     private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
@@ -57,138 +63,293 @@ class RouteOptimizationServiceImplTest {
     @Mock
     private GeneticAlgorithmTSP geneticAlgorithmTSP;
 
+    @Mock
+    private DistributedLockService distributedLockService;
+
+    @Mock
+    private TransactionTemplate transactionTemplate;
+
     @InjectMocks
     private RouteOptimizationServiceImpl routeOptimizationService;
 
     @Test
-    void shouldReturnTypedAlternativeDataWithStableMetrics() {
+    void shouldApplyExplicitOrderOnlyOnceWhenRequestIsRepeated() {
         Route route = new Route();
-        route.setId(17);
-        route.setDurationDays(3);
+        route.setId(31);
+        RouteAttraction first = relation(1, 1);
+        RouteAttraction second = relation(2, 2);
+        RouteAttraction third = relation(3, 3);
+        List<RouteAttraction> relations = List.of(first, second, third);
+        ListOperations<String, Object> listOperations = mock(ListOperations.class);
 
-        RouteAttraction relation = new RouteAttraction();
-        relation.setAttractionId(101);
+        when(routeService.getById(31)).thenReturn(route);
+        when(routeAttractionService.getByRouteIdOrderByDayAndVisitForUpdate(31L)).thenReturn(relations);
+        when(routeAttractionService.replaceRouteSchedule(eq(31), anyList())).thenReturn(true);
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        executeLockAndTransactionCallbacks();
 
-        RoutePlanAlgorithm.OptimalRoute optimalRoute = new RoutePlanAlgorithm.OptimalRoute();
-        optimalRoute.setTotalFitness(0.91);
-        optimalRoute.setTotalDistance(12.5);
-        optimalRoute.setTotalCost(88.0);
-        optimalRoute.setTotalTime(240.0);
+        ApplyOptimizationRequest request = optimizationRequest(31, List.of(1, 3, 2));
 
-        when(routeService.getById(17)).thenReturn(route);
-        when(routeAttractionService.getByRouteIdOrderByDayAndVisit(17L)).thenReturn(List.of(relation));
-        when(routePlanAlgorithm.planOptimalRoute(
-                eq(List.of(101)), eq(3), eq(new BigDecimal("1000")), eq("balanced")))
-                .thenReturn(optimalRoute);
-
-        List<RouteAlternative> alternatives = routeOptimizationService.generateRouteAlternatives(17, 1);
-
-        assertEquals(1, alternatives.size());
-        RouteAlternative alternative = alternatives.get(0);
-        assertEquals(17, alternative.getOriginalRouteId());
-
-        RouteAlternativeData data = alternative.getRouteData();
-        assertNotNull(data);
-        assertEquals("balanced", data.getPreference());
-        assertEquals(0.91, data.getFitness());
-        assertEquals(12.5, data.getTotalDistance());
-        assertEquals(88.0, data.getTotalCost());
-        assertEquals(240.0, data.getTotalTime());
-        verify(routePlanAlgorithm).planOptimalRoute(
-                eq(List.of(101)), eq(3), eq(new BigDecimal("1000")), eq("balanced"));
+        assertTrue(routeOptimizationService.applyOptimization(request));
+        assertTrue(routeOptimizationService.applyOptimization(request));
+        assertEquals(1, first.getVisitOrder());
+        assertEquals(3, second.getVisitOrder());
+        assertEquals(2, third.getVisitOrder());
+        ArgumentCaptor<List<RouteAttraction>> scheduleCaptor = ArgumentCaptor.forClass(List.class);
+        verify(routeAttractionService, times(1)).replaceRouteSchedule(eq(31), scheduleCaptor.capture());
+        assertEquals(3, scheduleCaptor.getValue().size());
+        verify(listOperations, times(1)).leftPush(anyString(), any());
     }
 
     @Test
-    void shouldReturnTypedRecommendationDayPlans() {
-        RoutePlanAlgorithm.RouteDayPlan sourceDayPlan = new RoutePlanAlgorithm.RouteDayPlan();
-        sourceDayPlan.setDayNumber(2);
-        sourceDayPlan.setAttractionIds(List.of(201, 202));
-        sourceDayPlan.setDistance(6.5);
-        sourceDayPlan.setCost(35.0);
-        sourceDayPlan.setTime(180.0);
+    void shouldRejectOrderThatDoesNotMatchRouteAttractions() {
+        Route route = new Route();
+        route.setId(32);
+        when(routeService.getById(32)).thenReturn(route);
+        when(routeAttractionService.getByRouteIdOrderByDayAndVisitForUpdate(32L))
+                .thenReturn(List.of(relation(1, 1), relation(2, 2)));
+        executeLockAndTransactionCallbacks();
 
-        RoutePlanAlgorithm.OptimalRoute optimalRoute = new RoutePlanAlgorithm.OptimalRoute();
-        optimalRoute.setTotalFitness(0.8);
-        optimalRoute.getDayPlans().add(sourceDayPlan);
+        travel.common.exception.BusinessException exception = assertThrows(
+                travel.common.exception.BusinessException.class,
+                () -> routeOptimizationService.applyOptimization(
+                        optimizationRequest(32, List.of(1, 99))));
 
-        when(attractionService.getByCityId(8)).thenReturn(List.of());
-        when(routePlanAlgorithm.planOptimalRoute(
-                eq(List.of()), eq(2), eq(new BigDecimal("500")), anyString()))
-                .thenReturn(optimalRoute);
+        assertEquals(17003, exception.getCode());
+        verifyNoInteractions(redisTemplate);
+    }
 
-        List<RouteRecommendationItem> recommendations = routeOptimizationService.getRouteRecommendations(
-                8, 2, List.of(), new BigDecimal("500"));
+    @Test
+    void shouldRejectOversizedRouteBeforeOptimizationWork() {
+        Route route = new Route();
+        route.setId(33);
+        List<RouteAttraction> relations = IntStream.rangeClosed(1, 101)
+                .mapToObj(index -> relation(index, index))
+                .toList();
+        when(routeService.getById(33)).thenReturn(route);
+        when(routeAttractionService.getByRouteIdOrderByDayAndVisitForUpdate(33L)).thenReturn(relations);
+        executeLockAndTransactionCallbacks();
 
-        assertEquals(4, recommendations.size());
-        for (RouteRecommendationItem recommendation : recommendations) {
-            assertEquals(1, recommendation.getDayPlans().size());
-            RouteRecommendationDayPlan plan = recommendation.getDayPlans().get(0);
-            assertEquals(2, plan.getDayNumber());
-            assertEquals(List.of(201, 202), plan.getAttractionIds());
-            assertEquals(6.5, plan.getDistance());
-            assertEquals(35.0, plan.getCost());
-            assertEquals(180.0, plan.getTime());
+        travel.common.exception.BusinessException exception = assertThrows(
+                travel.common.exception.BusinessException.class,
+                () -> routeOptimizationService.applyOptimization(
+                        optimizationRequest(33, IntStream.rangeClosed(1, 101).boxed().toList())));
+
+        assertEquals(17003, exception.getCode());
+        verifyNoInteractions(attractionService, redisTemplate);
+    }
+
+    @Test
+    void shouldKeepCommittedOptimizationWhenHistoryCacheFails() {
+        Route route = new Route();
+        route.setId(34);
+        List<RouteAttraction> relations = List.of(relation(1, 1), relation(2, 2));
+        ListOperations<String, Object> listOperations = mock(ListOperations.class);
+
+        when(routeService.getById(34)).thenReturn(route);
+        when(routeAttractionService.getByRouteIdOrderByDayAndVisitForUpdate(34L)).thenReturn(relations);
+        when(routeAttractionService.replaceRouteSchedule(eq(34), anyList())).thenReturn(true);
+        when(redisTemplate.opsForList()).thenReturn(listOperations);
+        when(listOperations.leftPush(anyString(), any())).thenThrow(new RuntimeException("redis unavailable"));
+        executeLockAndTransactionCallbacks();
+
+        assertTrue(routeOptimizationService.applyOptimization(optimizationRequest(34, List.of(2, 1))));
+        verify(routeAttractionService).replaceRouteSchedule(eq(34), anyList());
+    }
+
+    @Test
+    void shouldRejectAutomaticOptimizationWhenCoordinatesAreMissing() {
+        Route route = new Route();
+        route.setId(35);
+        List<RouteAttraction> relations = List.of(relation(1, 1), relation(2, 2), relation(3, 3));
+        Attraction incompleteAttraction = new Attraction();
+        incompleteAttraction.setId(1);
+
+        when(routeService.getById(35)).thenReturn(route);
+        when(routeAttractionService.getByRouteIdOrderByDayAndVisitForUpdate(35L)).thenReturn(relations);
+        when(attractionService.getById(1)).thenReturn(incompleteAttraction);
+        executeLockAndTransactionCallbacks();
+
+        ApplyOptimizationRequest request = new ApplyOptimizationRequest();
+        request.setRouteId(35);
+        request.setOptimizationType("distance");
+
+        travel.common.exception.BusinessException exception = assertThrows(
+                travel.common.exception.BusinessException.class,
+                () -> routeOptimizationService.applyOptimization(request));
+
+        assertEquals(17002, exception.getCode());
+        verify(routeAttractionService, times(0)).replaceRouteSchedule(any(), anyList());
+        verifyNoInteractions(redisTemplate);
+    }
+
+    @Test
+    void shouldFailWhenTransactionReturnsNoResult() {
+        when(distributedLockService.executeWithLock(
+                anyString(), org.mockito.ArgumentMatchers.<Supplier<Boolean>>any()))
+                .thenAnswer(invocation -> invocation.<Supplier<Boolean>>getArgument(1).get());
+        when(transactionTemplate.execute(
+                org.mockito.ArgumentMatchers.<TransactionCallback<Boolean>>any()))
+                .thenReturn(null);
+
+        travel.common.exception.BusinessException exception = assertThrows(
+                travel.common.exception.BusinessException.class,
+                () -> routeOptimizationService.applyOptimization(
+                        optimizationRequest(36, List.of(1, 2))));
+
+        assertEquals(17001, exception.getCode());
+        verifyNoInteractions(routeService, routeAttractionService, redisTemplate);
+    }
+
+    @Test
+    void shouldRejectUnsupportedOptimizationTypeBeforeLocking() {
+        ApplyOptimizationRequest request = new ApplyOptimizationRequest();
+        request.setRouteId(37);
+        request.setOptimizationType("time");
+
+        travel.common.exception.BusinessException exception = assertThrows(
+                travel.common.exception.BusinessException.class,
+                () -> routeOptimizationService.applyOptimization(request));
+
+        assertEquals(17003, exception.getCode());
+        verifyNoInteractions(distributedLockService, transactionTemplate, routeService);
+    }
+
+    @Test
+    void shouldAdvertiseOnlyDistanceOptimization() {
+        Route route = new Route();
+        route.setId(38);
+        when(routeService.getById(38)).thenReturn(route);
+
+        List<travel.route.dto.optimization.OptimizationSuggestion> suggestions =
+                routeOptimizationService.getOptimizationSuggestions(38);
+
+        assertEquals(1, suggestions.size());
+        assertEquals("distance", suggestions.get(0).getType());
+    }
+
+    @Test
+    void shouldUseAmapTotalsOnceForFinalOptimizedOrder() {
+        Attraction first = attraction(501, 120.0, 30.0, 20);
+        Attraction second = attraction(502, 121.0, 31.0, null);
+        AMapRouteService.RouteInfo routeInfo = new AMapRouteService.RouteInfo();
+        routeInfo.setDistance(18.5);
+        routeInfo.setDuration(42.0);
+        routeInfo.setCost(6.0);
+
+        when(attractionService.getById(501)).thenReturn(first);
+        when(attractionService.getById(502)).thenReturn(second);
+        when(geneticAlgorithmTSP.optimizeRoute(anyList(), eq("balanced")))
+                .thenReturn(List.of(first, second));
+        when(aMapRouteService.calculateMultiPointRoute(anyList())).thenReturn(routeInfo);
+
+        RoutePlanAlgorithm.OptimalRoute result = routeOptimizationService.planOptimalRoute(
+                List.of(501, 502), 1, BigDecimal.valueOf(500), "balanced");
+
+        assertEquals(18.5, result.getTotalDistance());
+        assertEquals(42.0, result.getTotalTime());
+        assertEquals(26.0, result.getTotalCost());
+        assertEquals(null, result.getDayPlans().get(0).getPoints().get(1).getDistance());
+        verify(aMapRouteService, times(1)).calculateMultiPointRoute(anyList());
+    }
+
+    @Test
+    void shouldFailPlanningWhenAmapTrafficIsUnavailable() {
+        Attraction first = attraction(511, 120.0, 30.0, 10);
+        Attraction second = attraction(512, 121.0, 31.0, 10);
+        when(attractionService.getById(511)).thenReturn(first);
+        when(attractionService.getById(512)).thenReturn(second);
+        when(geneticAlgorithmTSP.optimizeRoute(anyList(), eq("fast")))
+                .thenReturn(List.of(first, second));
+        when(aMapRouteService.calculateMultiPointRoute(anyList())).thenReturn(null);
+
+        travel.common.exception.BusinessException exception = assertThrows(
+                travel.common.exception.BusinessException.class,
+                () -> routeOptimizationService.planOptimalRoute(
+                        List.of(511, 512), 1, BigDecimal.valueOf(500), "fast"));
+
+        assertEquals(20001, exception.getCode());
+    }
+
+    @Test
+    void shouldNormalizeQualityScoreAndIgnoreMissingRatings() {
+        Route route = new Route();
+        route.setId(40);
+        route.setTitle("quality-route");
+        route.setDurationDays(1);
+        List<RouteAttraction> relations = IntStream.rangeClosed(1, 4)
+                .mapToObj(index -> relation(400 + index, index))
+                .toList();
+
+        when(routeService.getById(40)).thenReturn(route);
+        when(routeAttractionService.getByRouteIdOrderByDayAndVisit(40L)).thenReturn(relations);
+        for (int index = 1; index <= 4; index++) {
+            Attraction attraction = new Attraction();
+            attraction.setId(400 + index);
+            attraction.setDescription("历史文化");
+            attraction.setRating(index == 4 ? null : BigDecimal.valueOf(5));
+            when(attractionService.getById(400 + index)).thenReturn(attraction);
         }
+
+        travel.route.dto.optimization.RouteQualityEvaluationResult result =
+                routeOptimizationService.evaluateRouteQuality(40);
+
+        assertEquals(5.0, result.getAverageRating());
+        assertEquals(4.0, result.getAttractionsPerDay());
+        assertEquals(0.76, result.getQualityScore(), 0.0001);
+        assertEquals("推荐", result.getRecommendationLevel());
     }
 
     @Test
-    void shouldReturnTypedWeekendCrowdPredictions() {
+    void shouldRejectQualityEvaluationForInvalidDuration() {
         Route route = new Route();
-        route.setId(21);
-        route.setTitle("weekend-route");
+        route.setId(41);
+        route.setDurationDays(0);
+        when(routeService.getById(41)).thenReturn(route);
 
-        RouteAttraction relation = new RouteAttraction();
-        relation.setAttractionId(301);
+        travel.common.exception.BusinessException exception = assertThrows(
+                travel.common.exception.BusinessException.class,
+                () -> routeOptimizationService.evaluateRouteQuality(41));
 
-        travel.common.entity.travel_recommendation.Attraction attraction =
-                new travel.common.entity.travel_recommendation.Attraction();
-        attraction.setId(301);
-        attraction.setName("景点 A");
-        attraction.setViewCount(600000);
-
-        when(routeService.getById(21)).thenReturn(route);
-        when(routeAttractionService.getByRouteIdOrderByDayAndVisit(21L)).thenReturn(List.of(relation));
-        when(attractionService.getById(301)).thenReturn(attraction);
-
-        travel.route.dto.optimization.RouteCrowdPrediction result =
-                routeOptimizationService.predictRouteCrowd(21, "2026-08-15");
-
-        assertEquals(21, result.getRouteId());
-        assertEquals("weekend-route", result.getRouteName());
-        assertEquals("2026-08-15", result.getPredictDate());
-        assertEquals(true, result.getIsWeekend());
-        assertEquals(false, result.getIsHoliday());
-        assertEquals(1, result.getCrowdPredictions().size());
-
-        RouteCrowdPredictionItem item = result.getCrowdPredictions().get(0);
-        assertEquals(301, item.getAttractionId());
-        assertEquals("景点 A", item.getAttractionName());
-        assertEquals(1200, item.getPredictedCrowd());
-        assertEquals("\u62e5\u6324", item.getCrowdLevel());
-        org.junit.jupiter.api.Assertions.assertTrue(item.getSuggestedTime().contains("9:00"));
+        assertEquals(2016, exception.getCode());
+        verifyNoInteractions(routeAttractionService);
     }
 
-    @Test
-    void shouldTreatMissingViewCountAsZeroInCrowdPrediction() {
-        Route route = new Route();
-        route.setId(22);
+    private void executeLockAndTransactionCallbacks() {
+        when(distributedLockService.executeWithLock(
+                anyString(), org.mockito.ArgumentMatchers.<Supplier<Boolean>>any()))
+                .thenAnswer(invocation -> invocation.<Supplier<Boolean>>getArgument(1).get());
+        when(transactionTemplate.execute(
+                org.mockito.ArgumentMatchers.<TransactionCallback<Boolean>>any()))
+                .thenAnswer(invocation -> invocation.<TransactionCallback<Boolean>>getArgument(0)
+                        .doInTransaction(null));
+    }
+
+    private ApplyOptimizationRequest optimizationRequest(Integer routeId, List<Integer> attractionOrder) {
+        ApplyOptimizationRequest request = new ApplyOptimizationRequest();
+        request.setRouteId(routeId);
+        request.setSuggestion(Map.of(
+                "type", TextNode.valueOf("distance"),
+                "attractionOrder", new ObjectMapper().valueToTree(attractionOrder)));
+        return request;
+    }
+
+    private RouteAttraction relation(Integer attractionId, Integer visitOrder) {
         RouteAttraction relation = new RouteAttraction();
-        relation.setAttractionId(302);
+        relation.setId(attractionId);
+        relation.setRouteId(31);
+        relation.setAttractionId(attractionId);
+        relation.setDayNumber(1);
+        relation.setVisitOrder(visitOrder);
+        return relation;
+    }
 
-        travel.common.entity.travel_recommendation.Attraction attraction =
-                new travel.common.entity.travel_recommendation.Attraction();
-        attraction.setId(302);
-        attraction.setName("景点 B");
-        attraction.setViewCount(null);
-
-        when(routeService.getById(22)).thenReturn(route);
-        when(routeAttractionService.getByRouteIdOrderByDayAndVisit(22L)).thenReturn(List.of(relation));
-        when(attractionService.getById(302)).thenReturn(attraction);
-
-        travel.route.dto.optimization.RouteCrowdPrediction result =
-                routeOptimizationService.predictRouteCrowd(22, "2026-08-11");
-
-        assertEquals(0, result.getCrowdPredictions().get(0).getPredictedCrowd());
-        assertEquals("\u8f83\u5c11", result.getCrowdPredictions().get(0).getCrowdLevel());
+    private Attraction attraction(Integer id, Double longitude, Double latitude, Integer ticketPrice) {
+        Attraction attraction = new Attraction();
+        attraction.setId(id);
+        attraction.setLongitude(BigDecimal.valueOf(longitude));
+        attraction.setLatitude(BigDecimal.valueOf(latitude));
+        attraction.setTicketPrice(ticketPrice == null ? null : BigDecimal.valueOf(ticketPrice));
+        return attraction;
     }
 }

@@ -358,7 +358,7 @@ export function RoutesPage() {
       const userId = await ensureCurrentUser()
       if (userId) {
         try {
-          const value = await collectionApi.checkCollected(userId, route.id)
+          const value = await collectionApi.checkCollected(route.id)
           setCollected(Boolean(value))
         } catch {
           setCollected(false)
@@ -419,7 +419,7 @@ export function RoutesPage() {
     setCollectionSubmitting(true)
     setDrawerNotice(null)
     try {
-      const result = await withRequestTimeout(collectionApi.toggleCollection(activeRouteId, userId))
+      const result = await withRequestTimeout(collectionApi.toggleCollection(activeRouteId))
       setCollected(Boolean(result?.collected))
       setDrawerNotice({
         tone: 'success',

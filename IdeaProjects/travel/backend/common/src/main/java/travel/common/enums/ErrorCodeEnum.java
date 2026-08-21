@@ -19,6 +19,7 @@ public enum ErrorCodeEnum {
     USER_INFO_UPDATE_FAILED(1012, "用户信息更新失败"),
     USER_PASSWORD_UPDATE_FAILED(1013, "用户密码更新失败"),
     USER_AVATAR_UPLOAD_FAILED(1014, "用户头像上传失败"),
+    CAPTCHA_CHANNEL_UNAVAILABLE(1015, "验证码通道未启用"),
 
     // 20xx 路线模块错误
     ROUTE_NOT_EXIST(2001, "路线不存在"),
@@ -149,7 +150,6 @@ public enum ErrorCodeEnum {
     THIRD_PARTY_AUTH_ERROR(13003, "第三方认证错误"),
     THIRD_PARTY_TIMEOUT_ERROR(13004, "第三方服务超时"),
     THIRD_PARTY_RATE_LIMIT_ERROR(13005, "第三方服务速率限制"),
-    THIRD_PARTY_BILLING_ERROR(13006, "第三方服务计费错误"),
 
     // 140xx 安全模块错误
     SECURITY_ERROR(14001, "安全错误"),
@@ -212,6 +212,7 @@ public enum ErrorCodeEnum {
     REALTIME_DATA_VALIDATION_ERROR(20004, "实时数据验证错误"),
     REALTIME_DATA_TIMEOUT(20005, "实时数据获取超时"),
     REALTIME_DATA_SERVICE_ERROR(20006, "实时数据服务错误"),
+    REALTIME_HISTORY_UNAVAILABLE(20007, "历史人流数据尚未接入"),
 
     // 210xx 交通模块错误
     TRANSPORT_NOT_EXIST(21001, "交通方式不存在"),
@@ -237,6 +238,8 @@ public enum ErrorCodeEnum {
     ATTRACTION_IMAGE_ERROR(22011, "景点图片错误"),
     ATTRACTION_VIDEO_ERROR(22012, "景点视频错误"),
     ATTRACTION_REVIEW_ERROR(22013, "景点评价错误"),
+    RESTAURANT_NOT_EXIST(22014, "餐厅不存在"),
+    CITY_NOT_EXIST(22015, "城市不存在"),
 
     // 230xx 季节和天气模块错误
     SEASON_DATA_ERROR(23001, "季节数据错误"),

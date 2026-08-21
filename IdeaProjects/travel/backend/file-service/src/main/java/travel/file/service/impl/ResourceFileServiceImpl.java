@@ -1,15 +1,19 @@
 package travel.file.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.common.entity.user_community.FileComment;
 import travel.common.entity.travel_recommendation.FileTag;
 import travel.common.entity.travel_recommendation.ResourceFile;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.common.mapper.user_community_mapper.FileCommentMapper;
 import travel.common.mapper.user_community_mapper.FileTagMapper;
 import travel.common.mapper.travel_recommendation_mapper.ResourceFileMapper;
+import travel.common.security.AuthenticatedUserSupport;
 import travel.file.service.ResourceFileService;
 import travel.file.storage.FileStoragePolicy;
 import org.springframework.stereotype.Service;
@@ -36,6 +40,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public Map<String, Object> uploadFile(MultipartFile file, Integer userId, String description) {
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
         Map<String, Object> result = new HashMap<>();
         Path storedPath = null;
         boolean saved = false;
@@ -50,7 +55,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
             resourceFile.setFileSize(storedFile.size());
             resourceFile.setFileType(storedFile.fileType());
             resourceFile.setUploadTime(LocalDateTime.now());
-            resourceFile.setUploadUserId(userId);
+            resourceFile.setUploadUserId(currentUserId);
             resourceFile.setDescription(description);
             resourceFile.setStatus(1);
             resourceFile.setDownloadCount(0);
@@ -87,43 +92,44 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<Map<String, Object>> batchUploadFiles(List<MultipartFile> files, Integer userId, String description) {
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
         fileStoragePolicy.validateBatchSize(files == null ? 0 : files.size());
         files.forEach(fileStoragePolicy::validate);
         List<Map<String, Object>> results = new ArrayList<>();
         for (MultipartFile file : files) {
-            results.add(uploadFile(file, userId, description));
+            results.add(uploadFile(file, currentUserId, description));
         }
         return results;
     }
 
     @Override
     public List<ResourceFile> getByUserId(Integer userId) {
-        return resourceFileMapper.selectByUserId(userId);
+        return resourceFileMapper.selectByUserId(AuthenticatedUserSupport.requireIntegerUserId());
     }
 
     @Override
     public List<ResourceFile> getByFileType(String fileType) {
-        return resourceFileMapper.selectByFileType(fileType);
+        return list(ownedFilesQuery().eq(ResourceFile::getFileType, fileType));
     }
 
     @Override
     public List<ResourceFile> getByStatus(Integer status) {
-        return resourceFileMapper.selectByStatus(status);
+        return list(ownedFilesQuery().eq(ResourceFile::getStatus, status));
     }
 
     @Override
     public List<ResourceFile> getByRouteId(Integer routeId) {
-        return resourceFileMapper.selectByRouteId(routeId);
+        return list(ownedFilesQuery().eq(ResourceFile::getRouteId, routeId));
     }
 
     @Override
     public List<ResourceFile> getByTags(String tags) {
-        return resourceFileMapper.selectByTags(tags);
+        return list(ownedFilesQuery().like(ResourceFile::getTags, tags));
     }
 
     @Override
     public List<ResourceFile> searchByFileName(String fileName) {
-        LambdaQueryWrapper<ResourceFile> queryWrapper = new LambdaQueryWrapper<>();
+        LambdaQueryWrapper<ResourceFile> queryWrapper = ownedFilesQuery();
         queryWrapper.like(fileName != null && !fileName.isBlank(), ResourceFile::getFileName, fileName)
                 .orderByDesc(ResourceFile::getUpdatedAt)
                 .orderByDesc(ResourceFile::getId);
@@ -132,41 +138,44 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<ResourceFile> searchByMultipleConditions(String fileName, String fileType, String tags, Integer userId, Integer routeId) {
-        Map<String, Object> conditions = new HashMap<>();
-        if (fileName != null) conditions.put("fileName", fileName);
-        if (fileType != null) conditions.put("fileType", fileType);
-        if (tags != null) conditions.put("tags", tags);
-        if (userId != null) conditions.put("userId", userId);
-        if (routeId != null) conditions.put("routeId", routeId);
-        return resourceFileMapper.selectByMultipleConditions(conditions);
+        LambdaQueryWrapper<ResourceFile> queryWrapper = ownedFilesQuery()
+                .like(fileName != null && !fileName.isBlank(), ResourceFile::getFileName, fileName)
+                .eq(fileType != null && !fileType.isBlank(), ResourceFile::getFileType, fileType)
+                .like(tags != null && !tags.isBlank(), ResourceFile::getTags, tags)
+                .eq(routeId != null, ResourceFile::getRouteId, routeId)
+                .orderByDesc(ResourceFile::getUpdatedAt)
+                .orderByDesc(ResourceFile::getId);
+        return list(queryWrapper);
     }
 
     @Override
     public List<ResourceFile> getHotFiles(Integer limit) {
-        return resourceFileMapper.selectHotFiles(limit);
+        int safeLimit = normalizeLimit(limit);
+        return list(ownedFilesQuery()
+                .orderByDesc(ResourceFile::getDownloadCount)
+                .orderByDesc(ResourceFile::getViewCount)
+                .last("LIMIT " + safeLimit));
     }
 
     @Override
     public List<ResourceFile> getNewFiles(Integer limit) {
-        return resourceFileMapper.selectNewFiles(limit);
+        int safeLimit = normalizeLimit(limit);
+        return list(ownedFilesQuery()
+                .orderByDesc(ResourceFile::getCreatedAt)
+                .last("LIMIT " + safeLimit));
     }
 
     @Override
     public boolean deleteFile(Integer fileId) {
+        ResourceFile resourceFile = requireOwnedFile(fileId);
         try {
-            if (fileId == null || fileId <= 0) {
-                return false;
-            }
-            ResourceFile resourceFile = getById(fileId);
-            if (resourceFile == null) {
-                return false;
-            }
-
             Path storedPath = fileStoragePolicy.resolveStoredPath(
                     resourceFile.getFilePath(), resourceFile.getFileName());
-            fileStoragePolicy.deleteQuietly(storedPath);
-
-            return removeById(fileId);
+            boolean removed = removeById(fileId);
+            if (removed) {
+                fileStoragePolicy.deleteQuietly(storedPath);
+            }
+            return removed;
         } catch (Exception e) {
             log.error("文件删除失败", e);
             return false;
@@ -175,11 +184,16 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean batchDeleteFiles(List<Integer> fileIds) {
+        if (fileIds == null || fileIds.isEmpty()) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        fileIds.forEach(this::requireOwnedFile);
         try {
+            boolean allDeleted = true;
             for (Integer fileId : fileIds) {
-                deleteFile(fileId);
+                allDeleted &= deleteFile(fileId);
             }
-            return true;
+            return allDeleted;
         } catch (Exception e) {
             log.error("批量删除文件失败", e);
             return false;
@@ -188,16 +202,13 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public ResourceFile getFileById(Integer fileId) {
-        return getById(fileId);
+        return requireOwnedFile(fileId);
     }
 
     @Override
     public boolean associateWithRoute(Integer fileId, Integer routeId) {
+        ResourceFile resourceFile = requireOwnedFile(fileId);
         try {
-            ResourceFile resourceFile = getById(fileId);
-            if (resourceFile == null) {
-                return false;
-            }
             resourceFile.setRouteId(routeId);
             return updateById(resourceFile);
         } catch (Exception e) {
@@ -208,11 +219,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean dissociateFromRoute(Integer fileId) {
+        ResourceFile resourceFile = requireOwnedFile(fileId);
         try {
-            ResourceFile resourceFile = getById(fileId);
-            if (resourceFile == null) {
-                return false;
-            }
             resourceFile.setRouteId(null);
             return updateById(resourceFile);
         } catch (Exception e) {
@@ -223,6 +231,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<Map<String, Object>> getFileTags(Integer fileId) {
+        requireOwnedFile(fileId);
         List<Map<String, Object>> tags = new ArrayList<>();
         try {
             List<FileTag> fileTags = findTagsByFileId(fileId);
@@ -244,12 +253,14 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean addFileTag(Integer fileId, String tagName, Integer userId) {
+        requireOwnedFile(fileId);
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
         try {
             FileTag fileTag = new FileTag();
             fileTag.setTagName(tagName);
             fileTag.setTagType("general");
             fileTag.setFileId(fileId);
-            fileTag.setUserId(userId);
+            fileTag.setUserId(currentUserId);
             fileTag.setUsageCount(1);
             fileTag.setCreateTime(LocalDateTime.now());
             fileTag.setUpdateTime(LocalDateTime.now());
@@ -262,6 +273,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean removeFileTag(Integer fileId, String tagName) {
+        requireOwnedFile(fileId);
         try {
             List<FileTag> tags = findTagsByFileId(fileId);
             for (FileTag tag : tags) {
@@ -278,6 +290,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<Map<String, Object>> getFileComments(Integer fileId) {
+        requireOwnedFile(fileId);
         List<Map<String, Object>> comments = new ArrayList<>();
         try {
             List<FileComment> fileComments = fileCommentMapper.selectByFileId(fileId);
@@ -300,10 +313,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean addFileComment(Integer fileId, Integer userId, String userName, String content, Integer rating, Integer parentId) {
+        requireOwnedFile(fileId);
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
         try {
             FileComment comment = new FileComment();
             comment.setFileId(fileId);
-            comment.setUserId(userId);
+            comment.setUserId(currentUserId);
             comment.setUserName(userName);
             comment.setContent(content);
             comment.setRating(rating);
@@ -331,6 +346,14 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean likeComment(Integer commentId) {
+        if (commentId == null || commentId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        FileComment comment = fileCommentMapper.selectById(commentId);
+        if (comment == null) {
+            throw new BusinessException(ErrorCodeEnum.FILE_NOT_EXIST);
+        }
+        requireOwnedFile(comment.getFileId());
         try {
             return fileCommentMapper.incrementLikes(commentId) > 0;
         } catch (Exception e) {
@@ -341,6 +364,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public Double getFileAverageRating(Integer fileId) {
+        requireOwnedFile(fileId);
         try {
             return fileCommentMapper.selectAverageRatingByFileId(fileId);
         } catch (Exception e) {
@@ -351,12 +375,9 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public Map<String, Object> getFileStatistics(Integer fileId) {
+        ResourceFile resourceFile = requireOwnedFile(fileId);
         Map<String, Object> statistics = new HashMap<>();
         try {
-            ResourceFile resourceFile = getById(fileId);
-            if (resourceFile == null) {
-                return statistics;
-            }
             statistics.put("downloadCount", resourceFile.getDownloadCount());
             statistics.put("commentCount", resourceFile.getCommentCount());
             statistics.put("rating", resourceFile.getRating());
@@ -371,11 +392,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean updateFileMetadata(Integer fileId, String fileName, String description, String tags) {
+        ResourceFile resourceFile = requireOwnedFile(fileId);
         try {
-            ResourceFile resourceFile = getById(fileId);
-            if (resourceFile == null) {
-                return false;
-            }
             if (fileName != null) {
                 resourceFile.setFileName(fileName);
             }
@@ -394,6 +412,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean incrementDownloadCount(Integer fileId) {
+        requireOwnedFile(fileId);
         try {
             return resourceFileMapper.incrementDownloadCount(fileId) > 0;
         } catch (Exception e) {
@@ -404,6 +423,11 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public Map<String, Object> generateFileShareUrl(Integer fileId, Integer expireHours) {
+        requireOwnedFile(fileId);
+        int effectiveExpireHours = expireHours == null ? 24 : expireHours;
+        if (effectiveExpireHours <= 0 || effectiveExpireHours > 720) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
         Map<String, Object> result = new HashMap<>();
         try {
             ResourceFile resourceFile = getById(fileId);
@@ -415,7 +439,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
             String shareToken = UUID.randomUUID().toString().replace("-", "");
             String shareUrl = "/api/resources/share/" + shareToken;
-            LocalDateTime expireTime = LocalDateTime.now().plusHours(expireHours != null ? expireHours : 24);
+            LocalDateTime expireTime = LocalDateTime.now().plusHours(effectiveExpireHours);
 
             resourceFile.setShareUrl(shareUrl);
             resourceFile.setShareExpireTime(expireTime);
@@ -456,6 +480,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean cancelFileShare(Integer fileId) {
+        requireOwnedFile(fileId);
         try {
             ResourceFile resourceFile = getById(fileId);
             if (resourceFile == null) {
@@ -472,6 +497,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public Map<String, Object> getFilePreviewUrl(Integer fileId) {
+        requireOwnedFile(fileId);
         Map<String, Object> result = new HashMap<>();
         try {
             ResourceFile resourceFile = getById(fileId);
@@ -502,14 +528,14 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<ResourceFile> getFileVersions(Integer fileId) {
+        ResourceFile ownedFile = requireOwnedFile(fileId);
         try {
-            ResourceFile resourceFile = getById(fileId);
-            if (resourceFile == null) {
-                return new ArrayList<>();
-            }
-
-            Integer parentId = resourceFile.getParentFileId() != null ? resourceFile.getParentFileId() : fileId;
-            return resourceFileMapper.selectByParentFileId(parentId);
+            Integer parentId = ownedFile.getParentFileId() != null ? ownedFile.getParentFileId() : fileId;
+            return list(ownedFilesQuery()
+                    .and(query -> query.eq(ResourceFile::getId, parentId)
+                            .or()
+                            .eq(ResourceFile::getParentFileId, parentId))
+                    .orderByDesc(ResourceFile::getVersion));
         } catch (Exception e) {
             log.error("获取文件版本失败", e);
             return new ArrayList<>();
@@ -518,20 +544,19 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean revertToVersion(Integer fileId, Integer version) {
+        ResourceFile currentFile = requireOwnedFile(fileId);
         try {
             List<ResourceFile> versions = getFileVersions(fileId);
             for (ResourceFile versionFile : versions) {
                 if (versionFile.getVersion().equals(version)) {
-                    ResourceFile currentFile = getById(fileId);
-                    if (currentFile != null) {
-                        currentFile.setFileName(versionFile.getFileName());
-                        currentFile.setFilePath(versionFile.getFilePath());
-                        currentFile.setFileSize(versionFile.getFileSize());
-                        currentFile.setFileType(versionFile.getFileType());
-                        currentFile.setDescription(versionFile.getDescription());
-                        currentFile.setVersion(currentFile.getVersion() + 1);
-                        return updateById(currentFile);
-                    }
+                    currentFile.setFileName(versionFile.getFileName());
+                    currentFile.setFilePath(versionFile.getFilePath());
+                    currentFile.setFileSize(versionFile.getFileSize());
+                    currentFile.setFileType(versionFile.getFileType());
+                    currentFile.setDescription(versionFile.getDescription());
+                    currentFile.setVersion((currentFile.getVersion() == null ? 0 : currentFile.getVersion()) + 1);
+                    currentFile.setUpdatedAt(LocalDateTime.now());
+                    return updateById(currentFile);
                 }
             }
             return false;
@@ -543,11 +568,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean incrementViewCount(Integer fileId) {
+        ResourceFile resourceFile = requireOwnedFile(fileId);
         try {
-            ResourceFile resourceFile = getById(fileId);
-            if (resourceFile == null) {
-                return false;
-            }
             resourceFile.setViewCount((resourceFile.getViewCount() != null ? resourceFile.getViewCount() : 0) + 1);
             return updateById(resourceFile);
         } catch (Exception e) {
@@ -559,7 +581,9 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     public List<ResourceFile> getByCategory(String category) {
         try {
-            return resourceFileMapper.selectByCategory(category);
+            return list(ownedFilesQuery()
+                    .eq(category != null && !category.isBlank(), ResourceFile::getFileCategory, category)
+                    .orderByDesc(ResourceFile::getUpdatedAt));
         } catch (Exception e) {
             log.error("按分类获取文件失败", e);
             return new ArrayList<>();
@@ -568,8 +592,9 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<ResourceFile> getByParentFileId(Integer parentFileId) {
+        requireOwnedFile(parentFileId);
         try {
-            return resourceFileMapper.selectByParentFileId(parentFileId);
+            return list(ownedFilesQuery().eq(ResourceFile::getParentFileId, parentFileId));
         } catch (Exception e) {
             log.error("按父文件ID获取文件失败", e);
             return new ArrayList<>();
@@ -578,8 +603,17 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public ResourceFile createResourceFile(ResourceFile version) {
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
+        if (version == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        if (version.getParentFileId() != null) {
+            requireOwnedFile(version.getParentFileId());
+        }
         try {
+            version.setId(null);
             version.setFileId(UUID.randomUUID().toString());
+            version.setUploadUserId(currentUserId);
             version.setVersion(1);
             version.setCreatedAt(LocalDateTime.now());
             version.setUpdatedAt(LocalDateTime.now());
@@ -593,7 +627,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public ResourceFile getResourceFile(Long id) {
-        return getById(id.intValue());
+        return requireOwnedFile(id);
     }
 
     @Override
@@ -603,6 +637,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public ResourceFile getLatestVersion(Long fileId) {
+        requireOwnedFile(fileId);
         try {
             List<ResourceFile> versions = getFileVersions(fileId.intValue());
             if (versions.isEmpty()) {
@@ -623,20 +658,33 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean deleteResourceFile(Long id) {
-        return deleteFile(id.intValue());
+        return deleteFile(requireOwnedFile(id).getId());
     }
 
     @Override
     public boolean restoreToVersion(Long fileId, Long versionId) {
-        return revertToVersion(fileId.intValue(), versionId.intValue());
+        ResourceFile currentFile = requireOwnedFile(fileId);
+        ResourceFile versionFile = requireOwnedFile(versionId);
+        requireSameFileFamily(currentFile, versionFile);
+        currentFile.setFileName(versionFile.getFileName());
+        currentFile.setFilePath(versionFile.getFilePath());
+        currentFile.setFileSize(versionFile.getFileSize());
+        currentFile.setFileType(versionFile.getFileType());
+        currentFile.setDescription(versionFile.getDescription());
+        currentFile.setVersion((currentFile.getVersion() == null ? 0 : currentFile.getVersion()) + 1);
+        currentFile.setUpdatedAt(LocalDateTime.now());
+        return updateById(currentFile);
     }
 
     @Override
     public Map<String, Object> compareVersions(Long version1Id, Long version2Id) {
+        ResourceFile ownedVersion1 = requireOwnedFile(version1Id);
+        ResourceFile ownedVersion2 = requireOwnedFile(version2Id);
+        requireSameFileFamily(ownedVersion1, ownedVersion2);
         Map<String, Object> result = new HashMap<>();
         try {
-            ResourceFile v1 = getById(version1Id.intValue());
-            ResourceFile v2 = getById(version2Id.intValue());
+            ResourceFile v1 = ownedVersion1;
+            ResourceFile v2 = ownedVersion2;
             if (v1 == null || v2 == null) {
                 result.put("success", false);
                 result.put("msg", "版本不存在");
@@ -658,10 +706,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public List<Map<String, Object>> getVersionHistory(Long fileId, int page, int size) {
+        requireOwnedFile(fileId);
+        validatePageBounds(page, size);
         List<Map<String, Object>> history = new ArrayList<>();
         try {
             List<ResourceFile> versions = getFileVersions(fileId.intValue());
-            int start = page * size;
+            int start = Math.min(Math.multiplyExact(page, size), versions.size());
             int end = Math.min(start + size, versions.size());
             for (int i = start; i < end; i++) {
                 ResourceFile v = versions.get(i);
@@ -681,6 +731,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public Map<String, Object> getVersionStatistics(Long fileId) {
+        requireOwnedFile(fileId);
         Map<String, Object> statistics = new HashMap<>();
         try {
             List<ResourceFile> versions = getFileVersions(fileId.intValue());
@@ -699,11 +750,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public boolean updateVersionNote(Long id, String note) {
+        ResourceFile ownedFile = requireOwnedFile(id);
+        if (note != null && note.length() > 5000) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
         try {
-            ResourceFile file = getById(id.intValue());
-            if (file == null) {
-                return false;
-            }
+            ResourceFile file = ownedFile;
             file.setDescription(note);
             file.setUpdatedAt(LocalDateTime.now());
             return updateById(file);
@@ -715,6 +767,8 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public int batchDeleteVersions(List<Long> ids) {
+        validateIds(ids);
+        ids.forEach(this::requireOwnedFile);
         int count = 0;
         try {
             for (Long id : ids) {
@@ -732,6 +786,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public ResourceFile uploadResourceFile(MultipartFile file, String category, String description) {
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
         log.info("上传资源文件: category={}, description={}", category, description);
         Path storedPath = null;
         boolean saved = false;
@@ -746,6 +801,7 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
             resourceFile.setFileSize(storedFile.size());
             resourceFile.setFileType(storedFile.fileType());
             resourceFile.setUploadTime(LocalDateTime.now());
+            resourceFile.setUploadUserId(currentUserId);
             resourceFile.setCategory(category);
             resourceFile.setDescription(description);
             resourceFile.setStatus(1);
@@ -793,11 +849,12 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public String downloadResourceFile(Long id) {
+        ResourceFile ownedFile = requireOwnedFile(id);
         log.info("下载资源文件: id={}", id);
         if (id == null || id <= 0) {
             return null;
         }
-        ResourceFile file = getById(id.intValue());
+        ResourceFile file = ownedFile;
         if (file == null) {
             return null;
         }
@@ -816,8 +873,11 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public ResourceFile updateResourceFile(Long id, ResourceFile file) {
+        if (file == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
         log.info("更新资源文件: id={}", id);
-        ResourceFile existingFile = getById(id.intValue());
+        ResourceFile existingFile = requireOwnedFile(id);
         if (existingFile == null) {
             return null;
         }
@@ -831,18 +891,23 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     @Override
     public List<ResourceFile> getResourceFileList(String category, int page, int size) {
         log.info("获取资源文件列表: category={}, page={}, size={}", category, page, size);
-        return getByCategory(category);
+        Page<ResourceFile> pageRequest = createPage(page, size);
+        LambdaQueryWrapper<ResourceFile> queryWrapper = ownedFilesQuery()
+                .eq(category != null && !category.isBlank(), ResourceFile::getFileCategory, category)
+                .orderByDesc(ResourceFile::getUpdatedAt)
+                .orderByDesc(ResourceFile::getId);
+        return page(pageRequest, queryWrapper).getRecords();
     }
 
     @Override
     public List<ResourceFile> searchResourceFiles(String keyword, int page, int size) {
         log.info("搜索资源文件: keyword={}, page={}, size={}", keyword, page, size);
-        List<ResourceFile> matches = searchByFileName(keyword);
-        int safePage = Math.max(page, 0);
-        int safeSize = Math.max(size, 1);
-        int start = Math.min(safePage * safeSize, matches.size());
-        int end = Math.min(start + safeSize, matches.size());
-        return matches.subList(start, end);
+        Page<ResourceFile> pageRequest = createPage(page, size);
+        LambdaQueryWrapper<ResourceFile> queryWrapper = ownedFilesQuery()
+                .like(keyword != null && !keyword.isBlank(), ResourceFile::getFileName, keyword)
+                .orderByDesc(ResourceFile::getUpdatedAt)
+                .orderByDesc(ResourceFile::getId);
+        return page(pageRequest, queryWrapper).getRecords();
     }
 
     private List<FileTag> findTagsByFileId(Integer fileId) {
@@ -855,22 +920,34 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
 
     @Override
     public String getPreviewUrl(Long id) {
+        requireOwnedFile(id);
         log.info("获取预览URL: id={}", id);
         return "/preview/" + id;
     }
 
     @Override
     public Map<String, Object> getFileStatistics() {
+        List<ResourceFile> ownedFiles = list(ownedFilesQuery());
+        Map<String, Long> byType = new HashMap<>();
+        long totalSize = 0L;
+        for (ResourceFile file : ownedFiles) {
+            totalSize += file.getFileSize() == null ? 0L : file.getFileSize();
+            String fileType = file.getFileType() == null || file.getFileType().isBlank()
+                    ? "unknown" : file.getFileType();
+            byType.merge(fileType, 1L, Long::sum);
+        }
         log.info("获取文件统计");
         Map<String, Object> statistics = new HashMap<>();
-        statistics.put("totalFiles", count());
-        statistics.put("totalSize", 0L);
-        statistics.put("byType", Map.of());
+        statistics.put("totalFiles", ownedFiles.size());
+        statistics.put("totalSize", totalSize);
+        statistics.put("byType", byType);
         return statistics;
     }
 
     @Override
     public int batchDeleteResourceFiles(List<Long> ids) {
+        validateIds(ids);
+        ids.forEach(this::requireOwnedFile);
         log.info("批量删除资源文件: count={}", ids.size());
         int count = 0;
         for (Long id : ids) {
@@ -885,21 +962,87 @@ public class ResourceFileServiceImpl extends ServiceImpl<ResourceFileMapper, Res
     public Map<String, Object> getFileTypeStatistics() {
         log.info("获取文件类型统计");
         Map<String, Object> statistics = new HashMap<>();
-        statistics.put("image", 0);
-        statistics.put("video", 0);
-        statistics.put("document", 0);
+        statistics.put("image", countOwnedFilesByExtensions(List.of("jpg", "jpeg", "png", "gif", "webp")));
+        statistics.put("video", countOwnedFilesByExtensions(List.of("mp4", "avi", "mov", "mkv", "webm")));
+        statistics.put("document", countOwnedFilesByExtensions(
+                List.of("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md")));
         return statistics;
     }
 
     @Override
     public boolean moveFileToCategory(Long fileId, String newCategory) {
         log.info("移动文件到分类: fileId={}, category={}", fileId, newCategory);
-        ResourceFile file = getById(fileId.intValue());
-        if (file == null) {
-            return false;
+        if (newCategory == null || newCategory.isBlank()) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
+        ResourceFile file = requireOwnedFile(fileId);
         file.setCategory(newCategory);
         file.setUpdatedAt(LocalDateTime.now());
         return updateById(file);
+    }
+
+    private LambdaQueryWrapper<ResourceFile> ownedFilesQuery() {
+        return new LambdaQueryWrapper<ResourceFile>()
+                .eq(ResourceFile::getUploadUserId, AuthenticatedUserSupport.requireIntegerUserId());
+    }
+
+    private ResourceFile requireOwnedFile(Integer fileId) {
+        if (fileId == null || fileId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        ResourceFile file = getById(fileId);
+        if (file == null) {
+            throw new BusinessException(ErrorCodeEnum.FILE_NOT_EXIST);
+        }
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
+        if (!currentUserId.equals(file.getUploadUserId())) {
+            throw new BusinessException(ErrorCodeEnum.FILE_PERMISSION_ERROR);
+        }
+        return file;
+    }
+
+    private ResourceFile requireOwnedFile(Long fileId) {
+        if (fileId == null || fileId <= 0 || fileId > Integer.MAX_VALUE) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        return requireOwnedFile(fileId.intValue());
+    }
+
+    private void requireSameFileFamily(ResourceFile first, ResourceFile second) {
+        Integer firstRootId = first.getParentFileId() == null ? first.getId() : first.getParentFileId();
+        Integer secondRootId = second.getParentFileId() == null ? second.getId() : second.getParentFileId();
+        if (!firstRootId.equals(secondRootId)) {
+            throw new BusinessException(ErrorCodeEnum.FILE_PERMISSION_ERROR);
+        }
+    }
+
+    private Page<ResourceFile> createPage(int page, int size) {
+        validatePageBounds(page, size);
+        return new Page<>((long) page + 1, size);
+    }
+
+    private void validatePageBounds(int page, int size) {
+        if (page < 0 || page > 1_000_000 || size <= 0 || size > 100
+                || page > Integer.MAX_VALUE / size) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private int normalizeLimit(Integer limit) {
+        if (limit == null || limit <= 0 || limit > 100) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        return limit;
+    }
+
+    private void validateIds(List<Long> ids) {
+        if (ids == null || ids.isEmpty() || ids.size() > 100
+                || ids.stream().anyMatch(id -> id == null || id <= 0 || id > Integer.MAX_VALUE)) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private long countOwnedFilesByExtensions(List<String> extensions) {
+        return count(ownedFilesQuery().in(ResourceFile::getFileType, extensions));
     }
 }

@@ -4,7 +4,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import travel.common.entity.travel_recommendation.Attraction;
-import travel.common.utils.AMapRouteService;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -24,12 +23,6 @@ public class GeneticAlgorithmTSP {
     private static final double MUTATION_RATE = 0.02;  // 变异率
     private static final double CROSSOVER_RATE = 0.8;  // 交叉率
     private static final int ELITISM_COUNT = 5;        // 精英保留数量
-
-    private final AMapRouteService aMapRouteService;
-
-    public GeneticAlgorithmTSP(AMapRouteService aMapRouteService) {
-        this.aMapRouteService = aMapRouteService;
-    }
 
     /**
      * 使用遗传算法优化景点顺序
@@ -118,49 +111,35 @@ public class GeneticAlgorithmTSP {
      * 评估单个染色体的适应度
      */
     private double evaluateFitness(int[] chromosome, List<Attraction> attractions, String optimizationType) {
-        List<double[]> coordinates = new ArrayList<>();
-        for (int index : chromosome) {
-            Attraction attraction = attractions.get(index);
-            if (attraction.getLatitude() != null && attraction.getLongitude() != null) {
-                coordinates.add(new double[]{
-                        attraction.getLongitude().doubleValue(),
-                        attraction.getLatitude().doubleValue()
-                });
+        double totalDistance = 0.0;
+        for (int index = 0; index < chromosome.length - 1; index++) {
+            Attraction current = attractions.get(chromosome[index]);
+            Attraction next = attractions.get(chromosome[index + 1]);
+            if (current.getLatitude() == null || current.getLongitude() == null
+                    || next.getLatitude() == null || next.getLongitude() == null) {
+                return 0.0;
             }
+            totalDistance += haversineDistance(
+                    current.getLongitude().doubleValue(), current.getLatitude().doubleValue(),
+                    next.getLongitude().doubleValue(), next.getLatitude().doubleValue());
         }
 
-        if (coordinates.size() < 2) {
+        if (totalDistance <= 0.0) {
             return 0.0;
         }
 
-        // 调用高德地图获取真实路径信息
-        AMapRouteService.RouteInfo routeInfo = aMapRouteService.calculateMultiPointRoute(coordinates);
+        // 遗传算法仅用坐标距离筛选顺序；最终距离和耗时统一由高德 API 计算。
+        return 1.0 / (1.0 + totalDistance);
+    }
 
-        if (routeInfo == null) {
-            return 0.0;
-        }
-
-        // 根据优化类型计算适应度
-        double fitness;
-        switch (optimizationType.toLowerCase()) {
-            case "distance":
-                fitness = 1.0 / (1.0 + routeInfo.getDistance());
-                break;
-            case "time":
-                fitness = 1.0 / (1.0 + routeInfo.getDuration());
-                break;
-            case "cost":
-                fitness = 1.0 / (1.0 + routeInfo.getCost());
-                break;
-            case "balanced":
-            default:
-                fitness = 1.0 / (1.0 + routeInfo.getDistance() * 0.4 +
-                        routeInfo.getDuration() * 0.3 +
-                        routeInfo.getCost() * 0.3);
-                break;
-        }
-
-        return fitness;
+    private double haversineDistance(double longitude1, double latitude1,
+                                     double longitude2, double latitude2) {
+        double latitudeDelta = Math.toRadians(latitude2 - latitude1);
+        double longitudeDelta = Math.toRadians(longitude2 - longitude1);
+        double value = Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2)
+                + Math.cos(Math.toRadians(latitude1)) * Math.cos(Math.toRadians(latitude2))
+                * Math.sin(longitudeDelta / 2) * Math.sin(longitudeDelta / 2);
+        return 6371.0 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value));
     }
 
     /**

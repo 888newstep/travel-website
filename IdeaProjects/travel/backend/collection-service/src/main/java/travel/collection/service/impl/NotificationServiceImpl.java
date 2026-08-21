@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -13,6 +14,7 @@ import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
 import travel.common.mapper.user_community_mapper.NotificationMapper;
 import travel.common.vo.NotificationMessageVO;
+import travel.common.security.AuthenticatedUserSupport;
 import travel.collection.service.NotificationService;
 import travel.collection.service.UserService;
 import travel.collection.util.CurrentUserSupport;
@@ -115,10 +117,11 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
     @Override
     public List<Notification> getByUserId(Integer userId, Integer page, Integer size) {
+        Integer currentUserId = resolveCurrentUserId();
+        Page<Notification> pageParam = createPage(page, size);
         LambdaQueryWrapper<Notification> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(Notification::getUserId, userId);
+        queryWrapper.eq(Notification::getUserId, currentUserId);
         queryWrapper.orderByDesc(Notification::getCreatedAt);
-        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Notification> pageParam = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
         return page(pageParam, queryWrapper).getRecords();
     }
 
@@ -130,12 +133,14 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean markAsRead(Integer id, Integer userId) {
+        Integer currentUserId = resolveCurrentUserId();
+        validateNotificationId(id);
         Notification notification = getById(id);
         if (notification == null) {
             throw new BusinessException(ErrorCodeEnum.NOTIFICATION_NOT_EXIST);
         }
 
-        if (!notification.getUserId().equals(userId)) {
+        if (!currentUserId.equals(notification.getUserId())) {
             throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
         }
 
@@ -161,12 +166,14 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     @Override
     @Transactional(rollbackFor = Exception.class)
     public boolean deleteNotification(Integer id, Integer userId) {
+        Integer currentUserId = resolveCurrentUserId();
+        validateNotificationId(id);
         Notification notification = getById(id);
         if (notification == null) {
             throw new BusinessException(ErrorCodeEnum.NOTIFICATION_NOT_EXIST);
         }
 
-        if (!notification.getUserId().equals(userId)) {
+        if (!currentUserId.equals(notification.getUserId())) {
             throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
         }
 
@@ -186,6 +193,10 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
      * 非 HTTP 线程或历史调用未建立 SecurityContext 时保留原有 Feign 兜底。
      */
     private Integer resolveCurrentUserId() {
+        Integer authenticatedUserId = AuthenticatedUserSupport.getIntegerUserIdOrNull();
+        if (authenticatedUserId != null) {
+            return authenticatedUserId;
+        }
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication != null && authentication.isAuthenticated()) {
             Object principal = authentication.getPrincipal();
@@ -198,6 +209,19 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
 
         User currentUser = CurrentUserSupport.requireUser(userService.getCurrentUser());
         return currentUser.getId();
+    }
+
+    private Page<Notification> createPage(Integer page, Integer size) {
+        if (page == null || page <= 0 || page > 1_000_000 || size == null || size <= 0 || size > 100) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        return new Page<>(page, size);
+    }
+
+    private void validateNotificationId(Integer id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
     }
 
     @Override
@@ -226,7 +250,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     @Override
     public boolean sendWarnNotification(String phone, String weather, Integer crowdLevel, Long attractionId, Long routeId) {
         // 1. 手机号校验
-        if (!PHONE_PATTERN.matcher(phone).matches()) {
+        if (phone == null || !PHONE_PATTERN.matcher(phone).matches()) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
 
@@ -241,14 +265,11 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
             // 3. 调用短信工具类发送
             boolean smsSuccess = thirdApiUtil.sendSmsNotification(phone, templateParam.toString(), warnTemplateCode);
             if (!smsSuccess) {
-                log.error("景点预警短信发送失败：手机号{}，景点{}", phone, attractionId);
+                log.error("景点预警短信发送失败：手机号{}，景点{}", maskPhone(phone), attractionId);
                 return false;
             }
 
-            // 4. 发送APP推送（模拟，实际对接极光/个推）
-            sendAppWarnNotification(phone, weather, crowdLevel, attractionId, routeId);
-
-            log.info("景点预警通知发送成功：手机号{}，景点{}", phone, attractionId);
+            log.info("景点预警短信发送成功：手机号{}，景点{}", maskPhone(phone), attractionId);
             return true;
         } catch (Exception e) {
             log.error("发送景点预警通知异常", e);
@@ -259,7 +280,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
     @Override
     public boolean sendRouteAdjustNotification(String phone, String routeName, String adjustReason) {
         // 1. 手机号校验
-        if (!PHONE_PATTERN.matcher(phone).matches()) {
+        if (phone == null || !PHONE_PATTERN.matcher(phone).matches()) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
 
@@ -272,14 +293,11 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
             // 3. 发送短信
             boolean smsSuccess = thirdApiUtil.sendSmsNotification(phone, templateParam.toString(), adjustTemplateCode);
             if (!smsSuccess) {
-                log.error("行程调整短信发送失败：手机号{}，路线{}", phone, routeName);
+                log.error("行程调整短信发送失败：手机号{}，路线{}", maskPhone(phone), routeName);
                 return false;
             }
 
-            // 4. 发送APP推送
-            sendAppAdjustNotification(phone, routeName, adjustReason);
-
-            log.info("行程调整通知发送成功：手机号{}，路线{}", phone, routeName);
+            log.info("行程调整短信发送成功：手机号{}，路线{}", maskPhone(phone), routeName);
             return true;
         } catch (Exception e) {
             log.error("发送行程调整通知异常", e);
@@ -302,25 +320,10 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         };
     }
 
-    /**
-     * 模拟发送APP预警推送（实际对接极光/个推API）
-     */
-    private void sendAppWarnNotification(String phone, String weather, Integer crowdLevel, Long attractionId, Long routeId) {
-        log.info("向手机号{}发送APP预警推送：景点{}，天气{}，人流{}", phone, attractionId, weather, crowdLevel);
-        // 对接极光推送示例：
-        // JPushClient jPushClient = new JPushClient(masterSecret, appKey);
-        // PushPayload payload = PushPayload.newBuilder()
-        //         .setPlatform(Platform.android_ios())
-        //         .setAudience(Audience.alias(phone))
-        //         .setNotification(Notification.alert("景点预警：" + getCrowdLevelDesc(crowdLevel)))
-        //         .build();
-        // jPushClient.sendPush(payload);
-    }
-
-    /**
-     * 模拟发送APP行程调整推送
-     */
-    private void sendAppAdjustNotification(String phone, String routeName, String adjustReason) {
-        log.info("向手机号{}发送APP行程调整推送：路线{}，原因{}", phone, routeName, adjustReason);
+    private String maskPhone(String phone) {
+        if (phone == null || phone.length() < 7) {
+            return "***";
+        }
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
 }

@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.route_planning.RouteAttraction;
 import travel.common.entity.travel_recommendation.Attraction;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.common.utils.CacheUtil;
 import travel.common.utils.CommonUtil;
 import travel.common.utils.ExceptionUtil;
@@ -88,13 +90,15 @@ public class IntelligentRouteEvaluationService {
             double costPerformanceScore = 0.0;
             double overallScore = qualityScore;
 
-            if (route != null) {
-                List<Attraction> attractions = getRouteAttractions(routeId.longValue());
-                diversityScore = calculateRouteDiversity(attractions);
-                reasonablenessScore = calculateRouteReasonableness(attractions, route.getDurationDays());
-                costPerformanceScore = calculateCostPerformance(attractions, route.getDurationDays());
-                overallScore = qualityScore * 0.5 + diversityScore * 0.2 + reasonablenessScore * 0.2 + costPerformanceScore * 0.1;
+            if (route == null) {
+                throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
             }
+            int durationDays = requireValidDuration(route);
+            List<Attraction> attractions = getRouteAttractions(routeId.longValue());
+            diversityScore = calculateRouteDiversity(attractions);
+            reasonablenessScore = calculateRouteReasonableness(attractions, durationDays);
+            costPerformanceScore = calculateCostPerformance(attractions, durationDays);
+            overallScore = qualityScore * 0.5 + diversityScore * 0.2 + reasonablenessScore * 0.2 + costPerformanceScore * 0.1;
 
             return RouteQualityEvaluation.builder()
                     .routeId(routeId)
@@ -104,9 +108,11 @@ public class IntelligentRouteEvaluationService {
                     .costPerformanceScore(costPerformanceScore)
                     .overallScore(overallScore)
                     .build();
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Evaluate route quality failed: routeId={}", routeId, e);
-            throw new RuntimeException("Evaluate route quality failed: " + e.getMessage(), e);
+            throw new RuntimeException("Evaluate route quality failed", e);
         }
     }
 
@@ -150,10 +156,9 @@ public class IntelligentRouteEvaluationService {
 
     private RouteComparisonDetail buildComparisonDetail(Route route) {
         List<Attraction> attractions = getRouteAttractions(route.getId().longValue());
-        double totalDistance = calculateTotalDistance(attractions);
+        Double totalDistance = calculateTotalDistance(attractions);
         double estimatedCost = calculateEstimatedCost(attractions);
-        double estimatedTime = calculateEstimatedTime(attractions);
-        double averageRating = attractions.stream().mapToDouble(a -> a.getRating().doubleValue()).average().orElse(0.0);
+        double averageRating = averageRating(attractions);
 
         return RouteComparisonDetail.builder()
                 .routeId(route.getId())
@@ -162,7 +167,7 @@ public class IntelligentRouteEvaluationService {
                 .totalAttractions(attractions.size())
                 .totalDistance(totalDistance)
                 .estimatedCost(estimatedCost)
-                .estimatedTime(estimatedTime)
+                .estimatedTime(null)
                 .averageRating(averageRating)
                 .viewCount(route.getViewCount())
                 .likeCount(route.getLikeCount())
@@ -178,7 +183,7 @@ public class IntelligentRouteEvaluationService {
     }
 
     private void buildTimeSuggestions(Route route, List<Attraction> attractions, List<String> suggestionList) {
-        if (attractions.size() > route.getDurationDays() * 4) {
+        if (attractions.size() > requireValidDuration(route) * 4) {
             suggestionList.add("Attraction count is too high for the available days.");
         }
         suggestionList.add("Reorder attractions to reduce travel time.");
@@ -187,7 +192,9 @@ public class IntelligentRouteEvaluationService {
 
     private void buildCostSuggestions(List<Attraction> attractions, List<String> suggestionList) {
         long highCostAttractions = attractions.stream()
-                .filter(a -> a.getTicketPrice().compareTo(BigDecimal.valueOf(50)) > 0)
+                .map(Attraction::getTicketPrice)
+                .filter(Objects::nonNull)
+                .filter(price -> price.compareTo(BigDecimal.valueOf(50)) > 0)
                 .count();
         if (highCostAttractions > attractions.size() / 2) {
             suggestionList.add("Add more free or low-cost attractions.");
@@ -244,13 +251,17 @@ public class IntelligentRouteEvaluationService {
 
     private double calculateCostPerformance(List<Attraction> attractions, int days) {
         int safeDays = Math.max(days, 1);
-        double totalCost = attractions.stream().mapToDouble(a -> a.getTicketPrice().doubleValue()).sum();
-        double averageRating = attractions.stream().mapToDouble(a -> a.getRating().doubleValue()).average().orElse(0.0);
+        double totalCost = attractions.stream()
+                .map(Attraction::getTicketPrice)
+                .filter(Objects::nonNull)
+                .mapToDouble(BigDecimal::doubleValue)
+                .sum();
+        double ratingScore = Math.max(0.0, Math.min(1.0, averageRating(attractions) / 5.0));
         double costPerDay = totalCost / safeDays;
-        return averageRating / (costPerDay / 100 + 1);
+        return ratingScore / (costPerDay / 100 + 1);
     }
 
-    private double calculateTotalDistance(List<Attraction> attractions) {
+    private Double calculateTotalDistance(List<Attraction> attractions) {
         if (attractions == null || attractions.size() < 2) {
             return 0.0;
         }
@@ -258,6 +269,10 @@ public class IntelligentRouteEvaluationService {
         for (int i = 0; i < attractions.size() - 1; i++) {
             Attraction current = attractions.get(i);
             Attraction next = attractions.get(i + 1);
+            if (current.getLatitude() == null || current.getLongitude() == null
+                    || next.getLatitude() == null || next.getLongitude() == null) {
+                return null;
+            }
             totalDistance += CommonUtil.calculateDistance(
                     current.getLatitude().doubleValue(), current.getLongitude().doubleValue(),
                     next.getLatitude().doubleValue(), next.getLongitude().doubleValue());
@@ -266,10 +281,27 @@ public class IntelligentRouteEvaluationService {
     }
 
     private double calculateEstimatedCost(List<Attraction> attractions) {
-        return attractions.stream().mapToDouble(a -> a.getTicketPrice().doubleValue()).sum() + attractions.size() * 20.0;
+        return attractions.stream()
+                .map(Attraction::getTicketPrice)
+                .filter(Objects::nonNull)
+                .mapToDouble(BigDecimal::doubleValue)
+                .sum();
     }
 
-    private double calculateEstimatedTime(List<Attraction> attractions) {
-        return attractions.size() * 2.0;
+    private double averageRating(List<Attraction> attractions) {
+        return attractions.stream()
+                .map(Attraction::getRating)
+                .filter(Objects::nonNull)
+                .mapToDouble(BigDecimal::doubleValue)
+                .average()
+                .orElse(0.0);
+    }
+
+    private int requireValidDuration(Route route) {
+        Integer durationDays = route.getDurationDays();
+        if (durationDays == null || durationDays <= 0) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_DURATION_ERROR);
+        }
+        return durationDays;
     }
 }

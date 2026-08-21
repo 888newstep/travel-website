@@ -32,19 +32,13 @@ public interface AttractionRealtimeStatusMapper extends BaseMapper<AttractionRea
     List<AttractionRealtimeStatus> selectNeedSync(LocalDateTime threshold);
 
     /**
-     * 查询景点历史平均人流
-     */
-    @Select("SELECT AVG(crowd_count) FROM attraction_realtime_status WHERE attraction_id = #{attractionId} AND deleted = 0")
-    Integer selectAvgCrowdCount(Long attractionId);
-
-    /**
      * 批量更新同步时间
      */
     @Update("<script>" +
-            "UPDATE attraction_realtime_status SET update_time = NOW() WHERE id IN " +
-            "<foreach collection='ids' item='id' open='(' separator=',' close=')'>" +
-            "#{id}" +
+            "UPDATE attraction_realtime_status SET update_time = NOW() WHERE attraction_id IN " +
+            "<foreach collection='attractionIds' item='attractionId' open='(' separator=',' close=')'>" +
+            "#{attractionId}" +
             "</foreach>" +
             "</script>")
-    int batchUpdateSyncTime(Long[] ids);
+    int batchUpdateSyncTime(@org.apache.ibatis.annotations.Param("attractionIds") Long[] attractionIds);
 }

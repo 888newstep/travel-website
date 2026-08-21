@@ -7,7 +7,8 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.travel_recommendation.Attraction;
-import travel.common.utils.CacheUtil;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.route.dto.ai.AIAskQuestionResponse;
 import travel.route.dto.ai.AIAttractionIntroResponse;
 import travel.route.dto.ai.AIOptimizeRouteResponse;
@@ -17,45 +18,27 @@ import travel.route.service.AttractionService;
 import travel.route.service.QwenService;
 import travel.route.service.RouteService;
 
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
 @Service
 @Primary
 @RequiredArgsConstructor
 public class RealQwenAssistantServiceImpl implements AIAssistantService {
 
     private static final Logger log = LoggerFactory.getLogger(RealQwenAssistantServiceImpl.class);
-    private static final String AI_PREFIX = "ai:";
     private static final String SOURCE_QWEN = "qwen";
 
     private final RouteService routeService;
     private final AttractionService attractionService;
-    private final CacheUtil cacheUtil;
     private final QwenService qwenService;
 
     @Override
     public AIAskQuestionResponse askQuestion(String question, Integer userId) {
-        String cacheKey = AI_PREFIX + "qa:" + question.hashCode();
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> cached = cacheUtil.get(cacheKey, Map.class);
-        if (cached != null) {
-            log.info("Return cached Qwen answer: question={}", question);
-            return AIAssistantResponseSupport.toAskQuestionResponse(cached);
-        }
-
         try {
             String answer = qwenService.travelQA(question);
-            Map<String, Object> result = AIAssistantResponseSupport.buildAskQuestionPayload(question, answer, 0.95, SOURCE_QWEN);
-            cacheUtil.set(cacheKey, result, 60, TimeUnit.MINUTES);
-            log.info("Qwen question answered: question={}", question);
-            return AIAssistantResponseSupport.toAskQuestionResponse(result);
-        } catch (Exception e) {
-            log.error("Qwen question failed, fallback applied: question={}", question, e);
             return AIAssistantResponseSupport.toAskQuestionResponse(
-                    AIAssistantResponseSupport.buildFallbackAskQuestionPayload(question)
-            );
+                    AIAssistantResponseSupport.buildAskQuestionPayload(question, answer, SOURCE_QWEN));
+        } catch (Exception e) {
+            log.error("Qwen question failed: question={}", question, e);
+            throw dependencyFailure(e);
         }
     }
 
@@ -63,24 +46,24 @@ public class RealQwenAssistantServiceImpl implements AIAssistantService {
     public AIOptimizeRouteResponse optimizeRouteByAI(Integer routeId) {
         Route route = routeService.getById(routeId);
         if (route == null) {
-            return AIAssistantResponseSupport.buildRouteNotFound(routeId);
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
         }
 
         try {
             String prompt = String.join("\n",
-                    "Please optimize the following travel route and reply in Chinese.",
-                    "Route title: " + defaultIfBlank(route.getTitle(), "N/A"),
-                    "City: " + routeCityName(route),
-                    "Give concrete and practical suggestions."
+                    "请用中文优化以下旅行路线。",
+                    "路线标题：" + defaultIfBlank(route.getTitle(), "未提供"),
+                    "城市：" + routeCityName(route),
+                    "请给出具体、可执行的调整建议。"
             );
             String suggestion = qwenService.chatCompletion(
                     prompt,
-                    "You are a professional travel planner. Reply in Chinese with concrete and actionable optimization suggestions."
+                    "你是一名专业旅行规划师，请只基于已提供的路线信息给出具体、可执行的中文建议。"
             );
-            return AIAssistantResponseSupport.buildOptimizationSuccess(routeId, suggestion, 88, SOURCE_QWEN);
+            return AIAssistantResponseSupport.buildOptimizationSuccess(routeId, suggestion, SOURCE_QWEN);
         } catch (Exception e) {
-            log.error("Qwen route optimization failed, fallback applied: routeId={}", routeId, e);
-            return AIAssistantResponseSupport.buildOptimizationFallback(routeId, e.getMessage());
+            log.error("Qwen route optimization failed: routeId={}", routeId, e);
+            throw dependencyFailure(e);
         }
     }
 
@@ -88,52 +71,44 @@ public class RealQwenAssistantServiceImpl implements AIAssistantService {
     public AIAttractionIntroResponse getAttractionIntro(Integer attractionId) {
         Attraction attraction = attractionService.getById(attractionId);
         if (attraction == null) {
-            return AIAssistantResponseSupport.buildAttractionNotFound(attractionId);
-        }
-
-        String cacheKey = AI_PREFIX + "intro:" + attractionId;
-        @SuppressWarnings("unchecked")
-        Map<String, Object> cached = cacheUtil.get(cacheKey, Map.class);
-        if (cached != null) {
-            return AIAssistantResponseSupport.toAttractionIntroResponse(cached);
+            throw new BusinessException(ErrorCodeEnum.ATTRACTION_NOT_EXIST);
         }
 
         try {
             String intro = qwenService.generateAttractionIntro(
-                    defaultIfBlank(attraction.getName(), "N/A"),
-                    defaultIfBlank(attraction.getAddress(), routeCityName(attraction))
+                    defaultIfBlank(attraction.getName(), "未提供"),
+                    defaultIfBlank(attraction.getAddress(), attractionCityName(attraction))
             );
-            Map<String, Object> result = AIAssistantResponseSupport.buildAttractionIntroPayload(
-                    attractionId,
-                    attraction.getName(),
-                    intro,
-                    "\u6682\u65e0\u8da3\u95fb",
-                    "\u5efa\u8bae\u4e0a\u5348 9:00-11:00 \u6216\u4e0b\u5348 14:00-17:00 \u524d\u5f80",
-                    "2-3\u5c0f\u65f6",
-                    SOURCE_QWEN
-            );
-            cacheUtil.set(cacheKey, result, 24, TimeUnit.HOURS);
-            return AIAssistantResponseSupport.toAttractionIntroResponse(result);
-        } catch (Exception e) {
-            log.error("Qwen attraction intro failed, fallback applied: attractionId={}", attractionId, e);
             return AIAssistantResponseSupport.toAttractionIntroResponse(
-                    AIAssistantResponseSupport.buildAttractionIntroFallbackPayload(attraction, attractionId, e.getMessage())
-            );
+                    AIAssistantResponseSupport.buildAttractionIntroPayload(
+                            attractionId, attraction.getName(), intro, SOURCE_QWEN));
+        } catch (Exception e) {
+            log.error("Qwen attraction intro failed: attractionId={}", attractionId, e);
+            throw dependencyFailure(e);
         }
+    }
+
+    private RuntimeException dependencyFailure(Exception exception) {
+        if (exception instanceof BusinessException businessException) {
+            return businessException;
+        }
+        return new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
     }
 
     private String routeCityName(Route route) {
-        if (route.getCity() != null && route.getCity().getName() != null && !route.getCity().getName().isBlank()) {
+        if (route.getCity() != null && route.getCity().getName() != null
+                && !route.getCity().getName().isBlank()) {
             return route.getCity().getName();
         }
-        return "unknown";
+        return "未提供";
     }
 
-    private String routeCityName(Attraction attraction) {
-        if (attraction.getCity() != null && attraction.getCity().getName() != null && !attraction.getCity().getName().isBlank()) {
+    private String attractionCityName(Attraction attraction) {
+        if (attraction.getCity() != null && attraction.getCity().getName() != null
+                && !attraction.getCity().getName().isBlank()) {
             return attraction.getCity().getName();
         }
-        return "unknown";
+        return "未提供";
     }
 
     private String defaultIfBlank(String value, String fallback) {

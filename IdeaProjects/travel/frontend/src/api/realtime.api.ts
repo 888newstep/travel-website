@@ -15,6 +15,16 @@ export interface AttractionRealtimeStatus {
     syncTime?: string;
 }
 
+export interface AttractionWarning {
+    warnId: string;
+    attractionId: number;
+    warnType: string;
+    warnLevel: '严重' | '较高' | '一般';
+    warnMessage: string;
+    createTime?: string;
+    status: 'active';
+}
+
 export const realtimeApi = {
     getAttractionRealtimeStatus(attractionId: number) {
         return apiClient.get<AttractionRealtimeStatus>(`/realtime-status/attraction/${attractionId}`);
@@ -32,10 +42,6 @@ export const realtimeApi = {
         return apiClient.post<boolean>('/realtime-status/batch-update', statusList);
     },
 
-    getHistoricalAvgCrowdCount(attractionId: number) {
-        return apiClient.get<number>(`/realtime-status/historical-avg/${attractionId}`);
-    },
-
     getNeedSyncStatus(minutes: number = DEFAULT_SYNC_MINUTES) {
         return apiClient.get<AttractionRealtimeStatus[]>('/realtime-status/need-sync', {
             params: { minutes },
@@ -43,15 +49,11 @@ export const realtimeApi = {
     },
 
     getActiveWarns() {
-        return apiClient.get<any[]>('/realtime-status/warns');
+        return apiClient.get<AttractionWarning[]>('/realtime-status/warns');
     },
 
     batchUpdateSyncTime(attractionIds: number[]) {
         return apiClient.post<number>('/realtime-status/sync-time', attractionIds);
-    },
-
-    get7DaysAvgCrowdCount(attractionId: number) {
-        return apiClient.get<number>(`/realtime-status/7days-avg/${attractionId}`);
     },
 
     getCrowdedAttractions(minCrowdLevel: number) {
@@ -60,25 +62,4 @@ export const realtimeApi = {
         });
     },
 
-    async getTrafficInfo(attractionId: number) {
-        // 后端未提供独立交通查询接口，复用实时状态查询并映射为前端展示结构
-        const status = await apiClient.get<AttractionRealtimeStatus>(`/realtime-status/attraction/${attractionId}`);
-        if (!status) {
-            return null;
-        }
-        const level = status.crowdLevel ?? 0;
-        const levelText = level >= 4 ? '拥堵' : level >= 3 ? '缓慢' : '畅通';
-        return {
-            status: levelText,
-            level: levelText,
-            congestion: level,
-            description: status.status ? `当前状态：${status.status}` : '暂无更多交通说明',
-            speed: null,
-            lastUpdateTime: status.lastUpdateTime,
-        };
-    },
-
-    triggerBatchUpdate() {
-        return apiClient.post<string>('/realtime-status/batch-update');
-    },
 };

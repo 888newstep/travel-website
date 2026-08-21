@@ -6,10 +6,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import travel.common.utils.Result;
+import travel.common.security.AuthenticatedUserSupport;
+import travel.common.exception.BusinessException;
 import travel.route.dto.optimization.ApplyOptimizationRequest;
 import travel.route.dto.optimization.OptimizationHistoryItem;
 import travel.route.dto.optimization.OptimizationSuggestion;
 import travel.route.service.RouteOptimizationService;
+import travel.route.service.RouteService;
 
 import java.util.List;
 
@@ -20,41 +23,52 @@ public class RouteOptimizationController {
 
     private static final Logger log = LoggerFactory.getLogger(RouteOptimizationController.class);
     private final RouteOptimizationService routeOptimizationService;
+    private final RouteService routeService;
 
     @GetMapping("/suggestions/{routeId}")
     public Result<List<OptimizationSuggestion>> getOptimizationSuggestions(@PathVariable Integer routeId) {
         try {
+            routeService.checkRouteOwner(routeId.longValue(), AuthenticatedUserSupport.requireUserId());
             log.info("获取路线优化建议请求: routeId={}", routeId);
             List<OptimizationSuggestion> suggestions = routeOptimizationService.getOptimizationSuggestions(routeId);
             return Result.success("获取建议成功", suggestions);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("获取路线优化建议失败: routeId={}, error={}", routeId, e.getMessage());
-            return Result.error("获取建议失败: " + e.getMessage());
+            throw new RuntimeException("获取路线优化建议失败", e);
         }
     }
 
     @PostMapping("/apply")
     public Result<Boolean> applyOptimization(@Valid @RequestBody ApplyOptimizationRequest request) {
         try {
+            routeService.checkRouteOwner(
+                    request.getRouteId().longValue(), AuthenticatedUserSupport.requireUserId());
             log.info("应用优化方案请求: routeId={}, suggestionId={}, optimizationType={}",
                     request.getRouteId(), request.getSuggestionId(), request.getOptimizationType());
             boolean result = routeOptimizationService.applyOptimization(request);
             return Result.success("应用优化方案成功", result);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("应用优化方案失败: error={}", e.getMessage());
-            return Result.error("应用优化方案失败: " + e.getMessage());
+            throw new RuntimeException("应用优化方案失败", e);
         }
     }
 
     @GetMapping("/history/{routeId}")
     public Result<List<OptimizationHistoryItem>> getOptimizationHistory(@PathVariable Integer routeId) {
         try {
+            routeService.checkRouteOwner(routeId.longValue(), AuthenticatedUserSupport.requireUserId());
             log.info("获取优化历史记录请求: routeId={}", routeId);
             List<OptimizationHistoryItem> history = routeOptimizationService.getOptimizationHistory(routeId);
             return Result.success("获取历史记录成功", history);
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
             log.error("获取优化历史记录失败: routeId={}, error={}", routeId, e.getMessage());
-            return Result.error("获取历史记录失败: " + e.getMessage());
+            throw new RuntimeException("获取路线优化历史记录失败", e);
         }
     }
 }

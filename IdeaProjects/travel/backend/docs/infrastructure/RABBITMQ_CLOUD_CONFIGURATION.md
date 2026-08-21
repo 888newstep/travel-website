@@ -2,19 +2,19 @@
 
 ## 当前结论
 
-- `newagent` 和 `novel_agent` 中没有 RabbitMQ 配置，两个项目只把云端地址（占位 `<CLOUD_HOST_PLACEHOLDER>`）用作 Milvus 云端地址。
 - 本机在 2026-08-10 验证 `<CLOUD_HOST_PLACEHOLDER>:5672` 和 `<CLOUD_HOST_PLACEHOLDER>:15672` TCP 可达。
-- 旅游项目当前按 RabbitMQ 与 Milvus 使用同一云服务器处理，但该地址仍可通过 `RABBITMQ_HOST` 覆盖，不能把该推断当作永久基础设施事实。
-- RabbitMQ 可靠通知的代码链路已完成本地编译和 Mock 状态机验证；云端 AMQP 登录、publisher confirm、消费和故障恢复仍未验收。
+- 旅游项目只使用该云服务器上的 RabbitMQ；连接地址可通过 `RABBITMQ_HOST` 覆盖，部署时不得依赖硬编码主机。
+- RabbitMQ 可靠通知的代码链路、数据库迁移、显式 Live IT 和一键验收脚本已完成；当前进程与 `deploy/.env` 缺少 `RABBITMQ_HOST`，因此本轮尚未执行云端 AMQP 发布和消费。
 
 ## 当前混合基础设施拓扑
 
 | 依赖 | 运行位置 | 旅游后端默认入口 | 可覆盖变量 | 当前边界 |
 | --- | --- | --- | --- | --- |
 | MySQL | Win11 本机 | `127.0.0.1:3306/travel_website` | `DB_HOST`、`DB_PORT`、`DB_NAME` | 业务服务直接使用，必须先完成本机数据库初始化 |
-| Redis | Win11 本机 | `127.0.0.1:6379/0` | `REDIS_HOST`、`REDIS_PORT`、`REDIS_DB` | 业务缓存、锁和幂等辅助依赖，当前未宣称 Redis 故障演练完成 |
+| Redis | Win11 本机 | `127.0.0.1:6379/3` | `REDIS_HOST`、`REDIS_PORT`、`REDIS_DB` | 业务缓存、锁和幂等辅助依赖；收藏写链路中断与恢复演练已完成 |
 | RabbitMQ | 云服务器 | `<CLOUD_HOST_PLACEHOLDER>:5672` | `RABBITMQ_HOST`、`RABBITMQ_PORT`、`RABBITMQ_VHOST` | 已具备版本化可靠通知拓扑、生产确认、消费幂等/重试/DLQ 和可选状态补偿；真实云端链路仍未验收 |
-| Milvus | 云服务器 | 不属于旅游后端当前运行时依赖 | 由 `newagent`/`novel_agent` 各自管理 | 旅游项目没有 Milvus SDK、Client 或集合配置，不能把 Milvus 检索能力计入本项目已交付能力 |
+
+本项目不使用向量数据库，不将其纳入架构、测试或交付范围。
 
 本机开发或测试可以使用以下非敏感环境变量；RabbitMQ 用户名和密码必须由运行环境注入：
 
@@ -24,7 +24,7 @@ DB_PORT=3306
 DB_NAME=travel_website
 REDIS_HOST=127.0.0.1
 REDIS_PORT=6379
-REDIS_DB=0
+REDIS_DB=3
 RABBITMQ_HOST=<CLOUD_HOST_PLACEHOLDER>
 RABBITMQ_PORT=5672
 RABBITMQ_VHOST=/
@@ -67,6 +67,8 @@ RABBITMQ_VHOST=/
 
 可靠拓扑的三个开关必须按顺序启用：先拓扑，再消费者，最后生产者。`MQ_RELIABLE_NOTIFICATION_PRODUCER_ENABLED=true` 前必须确认新队列已声明且消费者健康。
 
+生产者开关关闭时，应用会直接跳过通知发布，不会回退到没有仓库内消费者的旧 `notification.queue`。登录等主业务不会因 RabbitMQ 未启用或发布失败而失败。
+
 ## 部署顺序与回滚
 
 1. 备份本机 `travel_website`，人工执行 `backend/docs/infrastructure/MQ_RELIABLE_NOTIFICATION_MIGRATION.sql`，确认 `notification.source_message_id` 和唯一索引存在。
@@ -93,6 +95,13 @@ RABBITMQ_VHOST=/
 
 ## 本轮验证证据
 
+2026-08-20 追加验证：
+
+- 已执行 `MQ_RELIABLE_NOTIFICATION_MIGRATION.sql`，本机 `notification.source_message_id` 和 `uk_notification_source_message` 均存在。
+- 可靠消息定向回归通过：`RabbitMQConfigTest`、`MessageProducerServiceTest`、`MqMessageStatusServiceTest`、`ReliableNotificationConsumerTest`、`NotificationServiceImplTest` 均为 0 failure、0 error。
+- `ReliableNotificationLiveIT` 已离线编译，`ops/rabbitmq/run-reliable-notification-live-test.ps1` 已通过 Windows PowerShell 5.1 语法、纯 ASCII 和缺少主机时安全失败验证。
+- 配置 `RABBITMQ_HOST` 后执行 `.\ops\rabbitmq\run-reliable-notification-live-test.ps1`；结果写入 `run-logs/rabbitmq/<timestamp>/run-summary.json`，日志写入前会脱敏主机、用户名和密码。
+
 2026-08-11 已完成：
 
 - `mvn -q -pl common -am test`：common 模块 36 个测试通过，失败 0、错误 0、跳过 0。
@@ -109,12 +118,12 @@ RABBITMQ_VHOST=/
 
 尚未完成：
 
-- 本机 `travel_website` 尚未由本轮自动执行迁移脚本；不执行破坏性数据库操作，也不假设数据库密码。
-- 仍未在真实 broker 上发送业务消息验证 publisher confirm、消费 ACK、retry/DLQ 完整链路——需要部署包含 `ReliableNotificationConsumer` 的服务后发一条测试消息确认。
+- 当前进程和 `deploy/.env` 未配置 `RABBITMQ_HOST`，不能安全猜测云服务器地址。
+- 仍未在真实 broker 上发送业务消息验证 publisher confirm、消费 ACK、retry/DLQ 完整链路；地址补齐后可直接运行现有脚本，无需新增测试接口或人工拼装消息。
 
 ## 尚未宣称完成的部分
 
-- 本机 `travel_website` 尚未由本轮自动执行迁移脚本；本地 MySQL 密码和数据备份由部署者确认。
-- **云端凭据已就绪**（2026-08-16 追加验证）：Management API Basic Auth 200 + 节点名确认可访问。但仍不宣称 AMQP 发布确认或消费链路完成——需要部署服务后发一条测试消息验证 publisher confirm / consumer ACK / retry / DLQ 完整链路。
-- 尚未完成 Redis 不可用、RabbitMQ 断连、消费者重启和 DLQ 人工回放的真实故障演练；当前结论来自单元测试和契约替身。
+- 本机通知幂等与消息状态迁移已经完成；云端主机地址仍需通过 `RABBITMQ_HOST` 注入。
+- **云端用户名、密码和 vhost 已存在于本地未跟踪配置，但主机地址缺失。** 在地址补齐并执行 Live IT 前，不宣称 AMQP publisher confirm 或消费链路完成。
+- Redis 收藏链路中断演练已经完成；尚未完成 RabbitMQ 断连、消费者重启和 DLQ 人工回放的真实故障演练。
 - 本轮没有给既有队列追加 DLX 参数，避免云端同名队列触发 RabbitMQ `PRECONDITION_FAILED`；拓扑变更使用版本化资源和迁移窗口。

@@ -50,7 +50,7 @@ pnpm-debug.log*
 .DS_Store
 *.log
 
-# 我们已经把打包文件放进 resources/static，dist 可以不上传
+# 前端构建产物由部署流程生成，不提交到仓库
 dist/
 dist-ssr/
 *.local

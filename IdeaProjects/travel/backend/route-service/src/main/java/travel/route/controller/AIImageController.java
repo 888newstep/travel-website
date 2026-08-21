@@ -7,19 +7,25 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.common.utils.Result;
 import travel.route.dto.ai.AIAnalyzeImageRequest;
 import travel.route.dto.ai.AIAnalyzeImageResponse;
 import travel.route.dto.ai.AIImageAnalysisType;
-import travel.route.dto.ai.AISimilarAttractionItem;
 import travel.route.service.AIImageAnalysisResponseSupport;
-import travel.route.service.AIImageAnalysisService;
 import travel.route.service.BaiduAIService;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.Arrays;
+import java.util.stream.Collectors;
+import java.net.HttpURLConnection;
+import java.net.InetAddress;
+import java.net.URL;
 
 @RestController
 @RequestMapping("/ai")
@@ -28,8 +34,12 @@ public class AIImageController {
 
     private static final Logger log = LoggerFactory.getLogger(AIImageController.class);
     private final BaiduAIService baiduAIService;
-    private final AIImageAnalysisService aiImageAnalysisService;
     private final ObjectMapper objectMapper;
+
+    @Value("${travel.ai.image.allowed-hosts:${AI_IMAGE_ALLOWED_HOSTS:}}")
+    private String allowedImageHosts;
+
+    private static final int MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
     @GetMapping("/image-analysis/types")
     @Operation(summary = "获取图像分析类型", description = "返回可用的图像分析类型列表")
@@ -45,68 +55,19 @@ public class AIImageController {
     @PostMapping("/image-analysis")
     @Operation(summary = "图像分析", description = "使用百度AI进行图像识别和分析")
     public Result<AIAnalyzeImageResponse> analyzeImage(@Valid @RequestBody AIAnalyzeImageRequest request) {
-        try {
-            log.info("图像分析请求: analysisType={}", request.getAnalysisType());
-
-            byte[] imageData = downloadImageFromUrl(request.getImageUrl());
-            if (imageData == null) {
-                return Result.error("图片下载失败");
-            }
-
-            Map<String, Object> result;
-            String analysisType = request.getAnalysisType() != null ? request.getAnalysisType() : "scene";
-
-            switch (analysisType.toLowerCase()) {
-                case "dish":
-                    result = baiduAIService.recognizeDish(imageData);
-                    break;
-                case "text":
-                case "ocr":
-                    result = baiduAIService.recognizeText(imageData);
-                    break;
-                default:
-                    result = baiduAIService.recognizeScene(imageData);
-            }
-
-            AIAnalyzeImageResponse response = buildAnalyzeImageResponse(result, analysisType);
-            return Result.success("图像分析成功", response);
-        } catch (Exception e) {
-            log.error("图像分析失败: {}", e.getMessage(), e);
-            return Result.error("图像分析失败: " + e.getMessage());
+        log.info("图像分析请求: analysisType={}", request.getAnalysisType());
+        byte[] imageData = downloadImageFromUrl(request.getImageUrl());
+        String analysisType = request.getAnalysisType() != null ? request.getAnalysisType() : "scene";
+        Map<String, Object> result = switch (analysisType.toLowerCase()) {
+            case "dish" -> baiduAIService.recognizeDish(imageData);
+            case "text", "ocr" -> baiduAIService.recognizeText(imageData);
+            default -> baiduAIService.recognizeScene(imageData);
+        };
+        if (result == null || !Boolean.TRUE.equals(result.get("success"))) {
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
         }
-    }
-
-    @PostMapping("/image/analyze")
-    @Operation(summary = "图像分析（统一入口）", description = "上传图片进行分析，type=analyze|recognize|tags|description")
-    public Result<?> analyzeImageUpload(@RequestParam("file") MultipartFile file,
-                                        @RequestParam(defaultValue = "analyze") String type) {
-        try {
-            log.info("图像分析请求: filename={}, type={}", file.getOriginalFilename(), type);
-            Object result = switch (type) {
-                case "recognize" -> aiImageAnalysisService.recognizeAttraction(file);
-                case "tags" -> aiImageAnalysisService.analyzeImageTags(file);
-                case "description" -> aiImageAnalysisService.getImageDescription(file);
-                default -> aiImageAnalysisService.analyzeImage(file, null);
-            };
-            return Result.success("图像分析成功", result);
-        } catch (Exception e) {
-            log.error("图像分析失败: {}", e.getMessage(), e);
-            return Result.error("图像分析失败: " + e.getMessage());
-        }
-    }
-
-    @PostMapping("/image/similar")
-    @Operation(summary = "相似景点推荐", description = "根据图片推荐相似景点")
-    public Result<List<AISimilarAttractionItem>> getSimilarAttractions(@RequestParam("file") MultipartFile file,
-                                                                       @RequestParam(defaultValue = "5") int limit) {
-        try {
-            log.info("获取相似景点推荐请求: filename={}, limit={}", file.getOriginalFilename(), limit);
-            List<AISimilarAttractionItem> attractions = aiImageAnalysisService.getSimilarAttractions(file, limit);
-            return Result.success("获取相似景点成功", attractions);
-        } catch (Exception e) {
-            log.error("获取相似景点推荐失败: {}", e.getMessage(), e);
-            return Result.error("获取相似景点失败: " + e.getMessage());
-        }
+        AIAnalyzeImageResponse response = buildAnalyzeImageResponse(result, analysisType);
+        return Result.success("图像分析成功", response);
     }
 
     private AIAnalyzeImageResponse buildAnalyzeImageResponse(Map<String, Object> result, String analysisType) {
@@ -115,21 +76,62 @@ public class AIImageController {
                 .success(result != null && Boolean.TRUE.equals(result.get("success")))
                 .analysisType(analysisType)
                 .details(details)
-                .error(result == null || result.get("error") == null
-                        ? null : String.valueOf(result.get("error")))
+                .error(null)
                 .build();
     }
 
     private byte[] downloadImageFromUrl(String imageUrl) {
         try {
-            java.net.URL url = new java.net.URL(imageUrl);
-            java.io.InputStream inputStream = url.openStream();
-            byte[] imageData = inputStream.readAllBytes();
-            inputStream.close();
-            return imageData;
+            URL url = new URL(imageUrl);
+            if (!"http".equalsIgnoreCase(url.getProtocol()) && !"https".equalsIgnoreCase(url.getProtocol())) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_FORMAT_ERROR);
+            }
+            Set<String> allowedHosts = Arrays.stream(allowedImageHosts.split(","))
+                    .map(String::trim)
+                    .filter(value -> !value.isEmpty())
+                    .map(String::toLowerCase)
+                    .collect(Collectors.toSet());
+            String host = url.getHost().toLowerCase();
+            if (allowedHosts.isEmpty() || !allowedHosts.contains(host)) {
+                throw new BusinessException(4006, "图片地址不在允许的域名列表中");
+            }
+            for (InetAddress address : InetAddress.getAllByName(host)) {
+                if (address.isAnyLocalAddress() || address.isLoopbackAddress()
+                        || address.isLinkLocalAddress() || address.isSiteLocalAddress()
+                        || address.isMulticastAddress()) {
+                    throw new BusinessException(4006, "图片地址不可访问内网资源");
+                }
+            }
+            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(5_000);
+            connection.setReadTimeout(10_000);
+            connection.setRequestProperty("Accept", "image/*");
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
+            }
+            String contentType = connection.getContentType();
+            if (contentType == null || !contentType.toLowerCase().startsWith("image/")) {
+                throw new BusinessException(4006, "远程资源不是图片");
+            }
+            long contentLength = connection.getContentLengthLong();
+            if (contentLength > MAX_IMAGE_BYTES) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_LENGTH_ERROR);
+            }
+            try (java.io.InputStream inputStream = connection.getInputStream()) {
+                byte[] imageData = inputStream.readNBytes(MAX_IMAGE_BYTES + 1);
+                if (imageData.length > MAX_IMAGE_BYTES) {
+                    throw new BusinessException(ErrorCodeEnum.PARAM_LENGTH_ERROR);
+                }
+                return imageData;
+            } finally {
+                connection.disconnect();
+            }
+        } catch (BusinessException e) {
+            throw e;
         } catch (Exception e) {
-            log.error("下载图片失败: {}", e.getMessage());
-            return null;
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
         }
     }
 }

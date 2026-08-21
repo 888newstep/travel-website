@@ -93,15 +93,15 @@ export function NotificationPage() {
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3">
               <div className="metric-card">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{'\u6d88\u606f\u603b\u6570'}</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{'\u5f53\u524d\u9875\u6d88\u606f'}</div>
                 <div className="mt-3 text-2xl font-semibold text-slate-900">{notifications.length}</div>
               </div>
               <div className="metric-card">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{'\u672a\u8bfb\u6d88\u606f'}</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{'\u5f53\u524d\u9875\u672a\u8bfb'}</div>
                 <div className="mt-3 text-2xl font-semibold text-slate-900">{unreadCount}</div>
               </div>
               <div className="metric-card">
-                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{'\u5df2\u8bfb\u6d88\u606f'}</div>
+                <div className="text-xs uppercase tracking-[0.18em] text-slate-400">{'\u5f53\u524d\u9875\u5df2\u8bfb'}</div>
                 <div className="mt-3 text-2xl font-semibold text-slate-900">{readCount}</div>
               </div>
             </div>
@@ -143,8 +143,8 @@ export function NotificationPage() {
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <span className="section-kicker">{'\u6d88\u606f\u5217\u8868'}</span>
-            <h2 className="mt-3 text-lg font-semibold text-slate-900">{'\u5168\u90e8\u63d0\u9192'}</h2>
-            <p className="mt-1 text-sm text-slate-500">{'\u6309\u65f6\u95f4\u67e5\u770b\u5168\u90e8\u63d0\u9192\uff0c\u5e76\u5bf9\u672a\u8bfb\u6d88\u606f\u8fdb\u884c\u5904\u7406\u3002'}</p>
+            <h2 className="mt-3 text-lg font-semibold text-slate-900">{'\u5f53\u524d\u9875\u63d0\u9192'}</h2>
+            <p className="mt-1 text-sm text-slate-500">{'\u6309\u65f6\u95f4\u67e5\u770b\u5f53\u524d\u9875\u63d0\u9192\uff0c\u5e76\u5bf9\u672a\u8bfb\u6d88\u606f\u8fdb\u884c\u5904\u7406\u3002'}</p>
           </div>
           <span className="chip">{'\u672a\u8bfb '}{unreadCount} {'\u6761'}</span>
         </div>

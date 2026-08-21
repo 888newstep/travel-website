@@ -58,7 +58,7 @@ class AIControllerTest {
     @Test
     void shouldBindJsonNodePreferencesAndPreserveItineraryResponse() throws Exception {
         String endpoint = "/ai/itinerary/generate";
-        when(qwenService.recommendItinerary(anyString(), eq(2), eq("总预算不超过1800元")))
+        when(qwenService.recommendItinerary(eq("Hangzhou"), anyString(), eq(2), eq("总预算不超过1800元")))
                 .thenReturn("generated-itinerary");
 
         Map<String, Object> preferences = new LinkedHashMap<>();
@@ -83,7 +83,8 @@ class AIControllerTest {
                 .andExpect(jsonPath("$.data.itinerary").value("generated-itinerary"));
 
         ArgumentCaptor<String> preferencesCaptor = ArgumentCaptor.forClass(String.class);
-        verify(qwenService).recommendItinerary(preferencesCaptor.capture(), eq(2), eq("总预算不超过1800元"));
+        verify(qwenService).recommendItinerary(
+                eq("Hangzhou"), preferencesCaptor.capture(), eq(2), eq("总预算不超过1800元"));
         assertTrue(preferencesCaptor.getValue().contains("avoidCrowd"));
         assertTrue(preferencesCaptor.getValue().contains("relaxed"));
     }

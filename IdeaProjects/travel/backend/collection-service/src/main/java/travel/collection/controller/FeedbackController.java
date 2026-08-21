@@ -1,5 +1,7 @@
 package travel.collection.controller;
 
+import travel.common.exception.ExceptionPropagation;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.common.entity.user_community.Feedback;
@@ -34,7 +36,7 @@ public class FeedbackController {
             return Result.success("反馈提交成功", result);
         } catch (Exception e) {
             log.error("提交反馈失败: error={}", e.getMessage());
-            return Result.error("反馈提交失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -48,11 +50,11 @@ public class FeedbackController {
                                                       @RequestParam(defaultValue = "10") int size) {
         try {
             log.info("查询用户反馈列表请求: userId={}, page={}, size={}", userId, page, size);
-            List<Feedback> feedbackList = feedbackService.getUserFeedbackList(userId, page, size);
+            List<Feedback> feedbackList = feedbackService.getCurrentUserFeedbacks(page, size);
             return Result.success("查询反馈列表成功", feedbackList);
         } catch (Exception e) {
             log.error("查询用户反馈列表失败: userId={}, error={}", userId, e.getMessage());
-            return Result.error("查询反馈列表失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -68,7 +70,7 @@ public class FeedbackController {
             return Result.success("获取反馈详情成功", feedback);
         } catch (Exception e) {
             log.error("获取反馈详情失败: id={}, error={}", id, e.getMessage());
-            return Result.error("获取反馈详情失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -85,7 +87,7 @@ public class FeedbackController {
             return Result.success("回复反馈成功", result);
         } catch (Exception e) {
             log.error("回复反馈失败: id={}, error={}", id, e.getMessage());
-            return Result.error("回复反馈失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -101,7 +103,7 @@ public class FeedbackController {
             return Result.success("标记成功", result);
         } catch (Exception e) {
             log.error("标记反馈失败: id={}, error={}", id, e.getMessage());
-            return Result.error("标记失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -117,7 +119,7 @@ public class FeedbackController {
             return Result.success("删除反馈成功", result);
         } catch (Exception e) {
             log.error("删除反馈失败: id={}, error={}", id, e.getMessage());
-            return Result.error("删除反馈失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -133,7 +135,7 @@ public class FeedbackController {
             return Result.success("获取统计信息成功", statistics);
         } catch (Exception e) {
             log.error("获取反馈统计信息失败: error={}", e.getMessage());
-            return Result.error("获取统计信息失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -149,7 +151,7 @@ public class FeedbackController {
             return Result.success("获取反馈类型成功", types);
         } catch (Exception e) {
             log.error("获取反馈类型失败: error={}", e.getMessage());
-            return Result.error("获取反馈类型失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -167,7 +169,7 @@ public class FeedbackController {
             return Result.success("查询成功", feedbackList);
         } catch (Exception e) {
             log.error("按类型查询反馈失败: type={}, error={}", type, e.getMessage());
-            return Result.error("查询失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 }

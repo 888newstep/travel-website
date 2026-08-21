@@ -7,111 +7,70 @@ export interface TravelNote {
     author: string;
     image: string;
     likes: number;
-    comments: number;
     excerpt: string;
     content?: string;
     isLiked?: boolean;
     isCollected?: boolean;
-    commentList?: any[];
     createTime?: string;
+}
+
+function normalizeTravelNote(value: unknown): TravelNote {
+    const envelope = value && typeof value === 'object' ? value as Record<string, any> : {};
+    const source = envelope.travelNote && typeof envelope.travelNote === 'object'
+        ? envelope.travelNote as Record<string, any>
+        : envelope;
+    const content = typeof source.content === 'string' ? source.content : '';
+
+    return {
+        id: Number(source.id) || 0,
+        title: typeof source.title === 'string' ? source.title : '',
+        author: String(source.author || source.user?.nickname || source.user?.username || ''),
+        image: String(source.image || source.coverImage || ''),
+        likes: Number(source.likes ?? source.likesCount) || 0,
+        excerpt: String(source.excerpt || content),
+        content,
+        isLiked: Boolean(source.isLiked),
+        isCollected: Boolean(source.isCollected),
+        createTime: source.createTime || source.createdAt,
+    };
+}
+
+function normalizeTravelNotes(value: unknown): TravelNote[] {
+    return Array.isArray(value) ? value.map(normalizeTravelNote) : [];
 }
 
 export const noteApi = {
     getNotes(page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE, filters?: Record<string, any>) {
         return apiClient.get<TravelNote[]>('/travel-notes/list', {
             params: { page, size, ...filters },
-        });
+        }).then(normalizeTravelNotes);
     },
 
     getHotNotes(limit: number = DEFAULT_LIMIT) {
         return apiClient.get<TravelNote[]>('/travel-notes/hot', {
             params: { limit },
-        });
+        }).then(normalizeTravelNotes);
     },
 
     getLatestNotes(limit: number = DEFAULT_LIMIT) {
         return apiClient.get<TravelNote[]>('/travel-notes/latest', {
             params: { limit },
-        });
+        }).then(normalizeTravelNotes);
     },
 
     getNoteById(id: number) {
-        return apiClient.get<Record<string, any>>(`/travel-notes/${id}`);
+        return apiClient.get<unknown>(`/travel-notes/${id}`).then(normalizeTravelNote);
     },
 
     getUserTravelNotes(userId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
         return apiClient.get<TravelNote[]>(`/travel-notes/user/${userId}`, {
             params: { page, size },
-        });
-    },
-
-    createNote(data: {
-        travelNote: Omit<TravelNote, 'id' | 'likes' | 'comments' | 'createTime'>;
-        tags?: string[];
-    }) {
-        return apiClient.post<TravelNote>('/travel-notes', data);
-    },
-
-    updateNote(id: number, data: {
-        travelNote: Partial<TravelNote>;
-        tags?: string[];
-    }) {
-        return apiClient.put<TravelNote>(`/travel-notes/${id}`, data);
-    },
-
-    deleteNote(id: number, userId: number) {
-        return apiClient.delete<boolean>(`/travel-notes/${id}`, {
-            params: { userId },
-        });
-    },
-
-    likeNote(noteId: number, userId: number) {
-        return apiClient.post<boolean>(`/travel-notes/${noteId}/like`, null, {
-            params: { userId },
-        });
-    },
-
-    unlikeNote(noteId: number, userId: number) {
-        return apiClient.post<boolean>(`/travel-notes/${noteId}/unlike`, null, {
-            params: { userId },
-        });
-    },
-
-    toggleLikeNote(noteId: number, userId: number) {
-        return apiClient.post<{ liked: boolean; likeCount: number }>(
-            `/travel-notes/${noteId}/toggle-like`, null, { params: { userId } }
-        );
-    },
-
-    toggleCollectNote(noteId: number) {
-        return apiClient.post<{ collected: boolean }>(`/travel-notes/${noteId}/toggle-collect`);
-    },
-
-    collectNote(noteId: number) {
-        return apiClient.post<boolean>(`/travel-notes/${noteId}/collect`);
-    },
-
-    uncollectNote(noteId: number) {
-        return apiClient.post<boolean>(`/travel-notes/${noteId}/uncollect`);
-    },
-
-    incrementViews(noteId: number) {
-        return apiClient.post<boolean>(`/travel-notes/${noteId}/view`);
+        }).then(normalizeTravelNotes);
     },
 
     searchNotes(keyword: string, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
         return apiClient.get<TravelNote[]>('/travel-notes/search', {
             params: { keyword, page, size },
-        });
-    },
-
-    getComments(noteId: number, page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE) {
-        return apiClient.get<any[]>(`/travel-notes/${noteId}/comments`, {
-            params: { page, size },
-        });
-    },
-
-    addComment(noteId: number, content: string) {
-        return apiClient.post<any>(`/travel-notes/${noteId}/comments`, { content });
+        }).then(normalizeTravelNotes);
     },
 };

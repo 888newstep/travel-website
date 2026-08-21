@@ -5,13 +5,12 @@ import com.alibaba.dashscope.aigc.generation.GenerationParam;
 import com.alibaba.dashscope.aigc.generation.GenerationResult;
 import com.alibaba.dashscope.common.Message;
 import com.alibaba.dashscope.common.Role;
-import com.alibaba.dashscope.exception.ApiException;
-import com.alibaba.dashscope.exception.InputRequiredException;
-import com.alibaba.dashscope.exception.NoApiKeyException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.common.utils.AICacheManager;
 
 import java.util.ArrayList;
@@ -26,7 +25,7 @@ public class QwenService {
 
     private static final Logger log = LoggerFactory.getLogger(QwenService.class);
 
-    @Value("${ai.qwen.api-key}")
+    @Value("${ai.qwen.api-key:}")
     private String apiKey;
 
     @Value("${ai.qwen.model:qwen-plus}")
@@ -51,10 +50,7 @@ public class QwenService {
      * 智能对话 - 带缓存
      */
     public String chatCompletion(String userMessage, String systemPrompt) {
-        if (!enabled) {
-            log.warn("通义千问服务未启用");
-            return "AI服务暂未启用，请稍后再试";
-        }
+        ensureAvailable();
 
         // 使用缓存
         return cacheManager.getOrSetQACache(
@@ -67,6 +63,7 @@ public class QwenService {
      * 实际调用通义千问API
      */
     private String callQwenAPI(String userMessage, String systemPrompt) {
+        ensureAvailable();
         try {
             Generation gen = new Generation();
 
@@ -97,13 +94,16 @@ public class QwenService {
 
             GenerationResult result = gen.call(param);
             String response = result.getOutput().getChoices().get(0).getMessage().getContent();
+            if (response == null || response.isBlank()) {
+                throw new IllegalStateException("通义千问返回空响应");
+            }
 
             log.info("通义千问API调用成功，响应长度: {}", response.length());
             return response;
 
-        } catch (ApiException | NoApiKeyException | InputRequiredException e) {
+        } catch (Exception e) {
             log.error("通义千问API调用失败: {}", e.getMessage(), e);
-            return "抱歉，AI服务暂时不可用，请稍后重试";
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
         }
     }
 
@@ -118,16 +118,18 @@ public class QwenService {
     /**
      * 推荐行程 - 带缓存
      */
-    public String recommendItinerary(String preferences, int days, String budget) {
+    public String recommendItinerary(String destination, String preferences, int days, String budget) {
+        ensureAvailable();
         return cacheManager.getOrSetItineraryCache(
-                preferences, days, budget,
+                destination, days, preferences, budget,
                 () -> {
                     String prompt = String.format(
                             "请根据以下需求生成一个%d天的旅行行程：\n" +
+                                    "目的地：%s\n" +
                                     "用户偏好：%s\n" +
                                     "预算：%s\n\n" +
                                     "请以JSON格式返回，包含每天的行程安排、景点推荐、餐饮建议和交通方式。",
-                            days, preferences, budget
+                            days, destination, preferences, budget
                     );
 
                     String systemPrompt = "你是一个专业的旅行规划师，擅长制定详细的旅行行程。请以JSON格式输出结果。";
@@ -140,6 +142,7 @@ public class QwenService {
      * 景点介绍生成 - 带缓存
      */
     public String generateAttractionIntro(String attractionName, String location) {
+        ensureAvailable();
         return cacheManager.getOrSetAttractionIntroCache(
                 (attractionName + location).hashCode(),
                 () -> {
@@ -163,6 +166,7 @@ public class QwenService {
      * 旅行建议 - 带缓存
      */
     public String getTravelAdvice(String destination, String travelType) {
+        ensureAvailable();
         String cacheKey = destination + "_" + travelType;
         return cacheManager.getOrSetQACache(
                 cacheKey,
@@ -202,9 +206,7 @@ public class QwenService {
      * 多轮对话 - 不缓存（依赖对话历史）
      */
     public String multiTurnChat(List<Map<String, String>> conversationHistory, String newUserMessage) {
-        if (!enabled) {
-            return "AI服务暂未启用，请稍后再试";
-        }
+        ensureAvailable();
 
         try {
             Generation gen = new Generation();
@@ -235,11 +237,15 @@ public class QwenService {
                     .build();
 
             GenerationResult result = gen.call(param);
-            return result.getOutput().getChoices().get(0).getMessage().getContent();
+            String response = result.getOutput().getChoices().get(0).getMessage().getContent();
+            if (response == null || response.isBlank()) {
+                throw new IllegalStateException("通义千问返回空响应");
+            }
+            return response;
 
         } catch (Exception e) {
             log.error("多轮对话失败: {}", e.getMessage(), e);
-            return "抱歉，对话服务暂时不可用";
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
         }
     }
 
@@ -247,6 +253,7 @@ public class QwenService {
      * 文本摘要 - 带缓存
      */
     public String summarizeText(String text, int maxLength) {
+        ensureAvailable();
         String cacheKey = "summary_" + text.hashCode() + "_" + maxLength;
         return cacheManager.getOrSetQACache(
                 cacheKey,
@@ -262,9 +269,6 @@ public class QwenService {
         );
     }
 
-    /**
-     * 情感分析 - 带缓存
-     */
     /**
      * 情感分析 - 不缓存（结构化数据且需要实时性）
      */
@@ -300,20 +304,27 @@ public class QwenService {
             @SuppressWarnings("unchecked")
             Map<String, Object> parsed = mapper.readValue(jsonResponse, Map.class);
 
-            result.put("sentiment", parsed.getOrDefault("sentiment", "unknown"));
-            result.put("confidence", parsed.getOrDefault("confidence", 0.5));
+            result.put("sentiment", parsed.get("sentiment"));
+            result.put("confidence", parsed.get("confidence"));
             result.put("keywords", parsed.getOrDefault("keywords", new java.util.ArrayList<>()));
             result.put("success", true);
 
         } catch (Exception e) {
-            log.warn("JSON解析失败，使用原始响应: {}", e.getMessage());
-            result.put("sentiment", "neutral");
-            result.put("confidence", 0.5);
-            result.put("keywords", new java.util.ArrayList<>());
-            result.put("success", false);
-            result.put("parse_error", e.getMessage());
+            log.error("通义千问情感分析响应解析失败: {}", e.getMessage(), e);
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
         }
 
         return result;
+    }
+
+    private void ensureAvailable() {
+        if (!Boolean.TRUE.equals(enabled)) {
+            log.warn("通义千问服务未启用");
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
+        }
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("通义千问 API Key 未配置");
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR);
+        }
     }
 }

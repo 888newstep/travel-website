@@ -14,6 +14,10 @@ import java.util.concurrent.TimeUnit;
 public class CacheUtil {
 
     private static final Logger log = LoggerFactory.getLogger(CacheUtil.class);
+    private static final DefaultRedisScript<Long> CONSUME_IF_EQUALS_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('get', KEYS[1]) == ARGV[1] then "
+                    + "return redis.call('del', KEYS[1]) else return 0 end",
+            Long.class);
 
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -114,6 +118,23 @@ public class CacheUtil {
         }
     }
 
+    public Long incrementStrict(String key, long delta) {
+        if (redisTemplate == null) {
+            throw new IllegalStateException("Redis is not available");
+        }
+        Long result = redisTemplate.opsForValue().increment(key, delta);
+        if (result == null) {
+            throw new IllegalStateException("Redis increment returned null");
+        }
+        return result;
+    }
+
+    public void expireStrict(String key, long timeout, TimeUnit unit) {
+        if (redisTemplate == null || !Boolean.TRUE.equals(redisTemplate.expire(key, timeout, unit))) {
+            throw new IllegalStateException("Failed to set Redis key expiration");
+        }
+    }
+
     /**
      * 原子递减计数器
      */
@@ -180,6 +201,23 @@ public class CacheUtil {
             log.error("释放分布式锁失败: lockKey={}, error={}", lockKey, e.getMessage(), e);
             return false;
         }
+    }
+
+    /**
+     * 原子校验并消费一次性值，适用于验证码等不可重放凭证。
+     */
+    public boolean consumeIfEquals(String key, Object expectedValue) {
+        if (redisTemplate == null) {
+            throw new IllegalStateException("Redis is not available");
+        }
+        if (key == null || key.isBlank() || expectedValue == null) {
+            return false;
+        }
+        Long result = redisTemplate.execute(
+                CONSUME_IF_EQUALS_SCRIPT,
+                Collections.singletonList(key),
+                expectedValue);
+        return Long.valueOf(1L).equals(result);
     }
 
     /**

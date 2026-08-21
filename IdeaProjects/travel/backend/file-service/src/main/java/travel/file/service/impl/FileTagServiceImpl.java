@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
 import travel.common.entity.travel_recommendation.FileTag;
 import travel.common.mapper.user_community_mapper.FileTagMapper;
+import travel.common.security.AuthenticatedUserSupport;
 import travel.file.service.FileTagService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -222,6 +223,7 @@ public class FileTagServiceImpl extends ServiceImpl<FileTagMapper, FileTag> impl
 
     @Override
     public FileTag createFileTag(FileTag fileTag) {
+        AuthenticatedUserSupport.requireAdmin();
         try {
             fileTag.setCreateTime(LocalDateTime.now());
             fileTag.setUpdateTime(LocalDateTime.now());
@@ -236,6 +238,7 @@ public class FileTagServiceImpl extends ServiceImpl<FileTagMapper, FileTag> impl
 
     @Override
     public FileTag updateFileTag(Long id, FileTag fileTag) {
+        AuthenticatedUserSupport.requireAdmin();
         try {
             FileTag existingTag = getById(id);
             if (existingTag == null) {
@@ -254,6 +257,7 @@ public class FileTagServiceImpl extends ServiceImpl<FileTagMapper, FileTag> impl
 
     @Override
     public boolean deleteFileTag(Long id) {
+        AuthenticatedUserSupport.requireAdmin();
         try {
             boolean success = removeById(id.intValue());
             log.info("删除文件标签成功: id={}", id);
@@ -329,6 +333,7 @@ public class FileTagServiceImpl extends ServiceImpl<FileTagMapper, FileTag> impl
 
     @Override
     public boolean moveCategory(Long categoryId, Long newParentId) {
+        AuthenticatedUserSupport.requireAdmin();
         try {
             log.info("移动分类成功: categoryId={}, newParentId={}", categoryId, newParentId);
             return true;
@@ -352,6 +357,7 @@ public class FileTagServiceImpl extends ServiceImpl<FileTagMapper, FileTag> impl
 
     @Override
     public List<FileTag> batchCreateCategories(List<FileTag> categories) {
+        AuthenticatedUserSupport.requireAdmin();
         try {
             categories.forEach(category -> {
                 category.setCreateTime(LocalDateTime.now());

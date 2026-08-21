@@ -8,25 +8,11 @@ import { CROWD_LEVEL_MEDIUM } from '../constants'
 
 const DEFAULT_SYNC_MINUTES = 30
 
-type QuerySection = 'single' | 'batch' | 'crowded' | 'historical' | 'sevenDays' | 'needSync' | 'traffic'
+type QuerySection = 'single' | 'batch' | 'crowded' | 'needSync'
 
 interface InlineNotice {
   tone: StatusNoticeTone
   message: string
-}
-
-function getTrafficStatusClass(value: Record<string, any> | null) {
-  const status = String(value?.status || value?.level || '').toLowerCase()
-
-  if (status.includes('拥堵') || status.includes('严重') || status.includes('severe') || status.includes('busy')) {
-    return 'text-red-600'
-  }
-
-  if (status.includes('缓慢') || status.includes('slow') || status.includes('medium')) {
-    return 'text-sky-600'
-  }
-
-  return 'text-emerald-600'
 }
 
 function getWarnLevelLabel(severity?: string) {
@@ -69,41 +55,21 @@ export function RealtimeStatusPage() {
   const [batchResults, setBatchResults] = useState<Record<string, any>[]>([])
   const [minCrowdLevel, setMinCrowdLevel] = useState(String(CROWD_LEVEL_MEDIUM))
   const [crowdedList, setCrowdedList] = useState<Record<string, any>[]>([])
-  const [historicalAvgId, setHistoricalAvgId] = useState('')
-  const [historicalAvgResult, setHistoricalAvgResult] = useState<number | null>(null)
-  const [sevenDaysAvgId, setSevenDaysAvgId] = useState('')
-  const [sevenDaysAvgResult, setSevenDaysAvgResult] = useState<number | null>(null)
   const [warns, setWarns] = useState<Record<string, any>[]>([])
   const [warnsLoading, setWarnsLoading] = useState(false)
   const [needSyncMinutes, setNeedSyncMinutes] = useState(String(DEFAULT_SYNC_MINUTES))
   const [needSyncList, setNeedSyncList] = useState<Record<string, any>[]>([])
-  const [trafficAttractionId, setTrafficAttractionId] = useState('')
-  const [trafficResult, setTrafficResult] = useState<Record<string, any> | null>(null)
-  const [batchUpdateLoading, setBatchUpdateLoading] = useState(false)
-  const [batchUpdateResult, setBatchUpdateResult] = useState('')
   const [loadingSection, setLoadingSection] = useState<QuerySection | null>(null)
   const [singleNotice, setSingleNotice] = useState<InlineNotice | null>(null)
   const [batchNotice, setBatchNotice] = useState<InlineNotice | null>(null)
   const [crowdedNotice, setCrowdedNotice] = useState<InlineNotice | null>(null)
-  const [historicalNotice, setHistoricalNotice] = useState<InlineNotice | null>(null)
-  const [sevenDaysNotice, setSevenDaysNotice] = useState<InlineNotice | null>(null)
   const [warnsNotice, setWarnsNotice] = useState<InlineNotice | null>(null)
   const [needSyncNotice, setNeedSyncNotice] = useState<InlineNotice | null>(null)
-  const [trafficNotice, setTrafficNotice] = useState<InlineNotice | null>(null)
   const [hasFetchedSingle, setHasFetchedSingle] = useState(false)
   const [hasFetchedBatch, setHasFetchedBatch] = useState(false)
   const [hasFetchedCrowded, setHasFetchedCrowded] = useState(false)
-  const [hasFetchedHistorical, setHasFetchedHistorical] = useState(false)
-  const [hasFetchedSevenDays, setHasFetchedSevenDays] = useState(false)
   const [hasFetchedWarns, setHasFetchedWarns] = useState(false)
   const [hasFetchedNeedSync, setHasFetchedNeedSync] = useState(false)
-  const [hasFetchedTraffic, setHasFetchedTraffic] = useState(false)
-
-  const trafficStatusColor = useMemo(() => getTrafficStatusClass(trafficResult), [trafficResult])
-  const batchUpdateTone = useMemo<StatusNoticeTone | null>(() => {
-    if (!batchUpdateResult) return null
-    return batchUpdateResult.includes('\u6210\u529f') ? 'success' : 'error'
-  }, [batchUpdateResult])
 
   function isLoading(section: QuerySection) {
     return loadingSection === section
@@ -177,54 +143,6 @@ export function RealtimeStatusPage() {
     }
   }
 
-  async function fetchHistoricalAvg() {
-    const id = historicalAvgId.trim()
-    if (!id) {
-      setHasFetchedHistorical(false)
-      setHistoricalAvgResult(null)
-      setHistoricalNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u666f\u70b9\u7f16\u53f7\u3002' })
-      return
-    }
-
-    setHasFetchedHistorical(true)
-    setHistoricalNotice(null)
-    setLoadingSection('historical')
-    try {
-      const result = await realtimeApi.getHistoricalAvgCrowdCount(Number(id))
-      const normalized = Number(result)
-      setHistoricalAvgResult(Number.isFinite(normalized) ? normalized : null)
-    } catch {
-      setHistoricalAvgResult(null)
-      setHistoricalNotice({ tone: 'error', message: '\u5386\u53f2\u5e73\u5747\u5ba2\u6d41\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
-    } finally {
-      setLoadingSection(null)
-    }
-  }
-
-  async function fetchSevenDaysAvg() {
-    const id = sevenDaysAvgId.trim()
-    if (!id) {
-      setHasFetchedSevenDays(false)
-      setSevenDaysAvgResult(null)
-      setSevenDaysNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u666f\u70b9\u7f16\u53f7\u3002' })
-      return
-    }
-
-    setHasFetchedSevenDays(true)
-    setSevenDaysNotice(null)
-    setLoadingSection('sevenDays')
-    try {
-      const result = await realtimeApi.get7DaysAvgCrowdCount(Number(id))
-      const normalized = Number(result)
-      setSevenDaysAvgResult(Number.isFinite(normalized) ? normalized : null)
-    } catch {
-      setSevenDaysAvgResult(null)
-      setSevenDaysNotice({ tone: 'error', message: '\u8fd1 7 \u5929\u5e73\u5747\u5ba2\u6d41\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
-    } finally {
-      setLoadingSection(null)
-    }
-  }
-
   async function fetchWarns() {
     setHasFetchedWarns(true)
     setWarnsNotice(null)
@@ -257,49 +175,12 @@ export function RealtimeStatusPage() {
     }
   }
 
-  async function fetchTraffic() {
-    const id = trafficAttractionId.trim()
-    if (!id) {
-      setHasFetchedTraffic(false)
-      setTrafficResult(null)
-      setTrafficNotice({ tone: 'warning', message: '\u8bf7\u5148\u8f93\u5165\u666f\u70b9\u7f16\u53f7\u3002' })
-      return
-    }
-
-    setHasFetchedTraffic(true)
-    setTrafficNotice(null)
-    setTrafficResult(null)
-    setLoadingSection('traffic')
-    try {
-      const result = await realtimeApi.getTrafficInfo(Number(id))
-      setTrafficResult(result || null)
-    } catch {
-      setTrafficResult(null)
-      setTrafficNotice({ tone: 'error', message: '\u4ea4\u901a\u4fe1\u606f\u52a0\u8f7d\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002' })
-    } finally {
-      setLoadingSection(null)
-    }
-  }
-
-  async function batchUpdateStatus() {
-    setBatchUpdateResult('')
-    setBatchUpdateLoading(true)
-    try {
-      await realtimeApi.triggerBatchUpdate()
-      setBatchUpdateResult('批量状态刷新成功')
-    } catch {
-      setBatchUpdateResult('批量状态刷新失败')
-    } finally {
-      setBatchUpdateLoading(false)
-    }
-  }
-
-  const overviewCards = [
+  const overviewCards = useMemo(() => [
     { label: '批量状态', value: batchResults.length },
     { label: '拥挤景点', value: crowdedList.length },
     { label: '活动预警', value: warns.length },
     { label: '待同步项', value: needSyncList.length },
-  ]
+  ], [batchResults.length, crowdedList.length, needSyncList.length, warns.length])
 
   return (
     <div className="app-container pb-16 pt-4 md:pt-6">
@@ -314,11 +195,11 @@ export function RealtimeStatusPage() {
             <div className="mt-3 flex flex-wrap gap-2">
               <span className="chip">实时动态</span>
               <span className="chip">客流与预警</span>
-              <span className="chip">交通状态</span>
+              <span className="chip">数据新鲜度</span>
             </div>
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">把景点状态、拥挤度和交通信息放在同一块看</h1>
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">集中查看景点天气、客流和状态预警</h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
-              这一页现在更适合做出发前和途中判断：先查单个景点，再看批量状态、拥挤列表、活动预警和交通信息，减少来回切页的成本。
+              这里展示当前景点状态快照、拥挤列表和活动预警，帮助判断是否需要调整当天安排。
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {overviewCards.map((item) => (
@@ -331,7 +212,7 @@ export function RealtimeStatusPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium text-slate-500">快捷操作</div>
-                <div className="mt-1 text-xl font-semibold text-slate-900">先刷新状态，再决定是否调整路线</div>
+                <div className="mt-1 text-xl font-semibold text-slate-900">先核对当前快照，再决定是否调整路线</div>
               </div>
               <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">
                 {'\u5b9e\u65f6\u770b\u677f'}
@@ -340,13 +221,7 @@ export function RealtimeStatusPage() {
             <div className="mt-4 grid gap-3 text-sm text-slate-600">
               <div className="travel-step-card">单景点查询适合出发前确认排队和天气。</div>
               <div className="travel-step-card">拥挤列表和预警适合中途决定是否临时换点。</div>
-              <div className="travel-step-card">交通状态可以辅助判断是否继续按原路线前进。</div>
-            </div>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button type="button" onClick={batchUpdateStatus} className="btn-primary">
-                {batchUpdateLoading ? '刷新中...' : '批量刷新状态'}
-              </button>
-            {batchUpdateTone ? <StatusNotice tone={batchUpdateTone} message={batchUpdateResult} className="mt-4" /> : null}
+              <div className="travel-step-card">待同步列表用于识别数据是否已经超过设定的新鲜度阈值。</div>
             </div>
           </div>
         </div>
@@ -417,7 +292,7 @@ export function RealtimeStatusPage() {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
+      <section className="mt-6">
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
           <SectionHeader title="拥挤景点" description="按最低拥挤等级筛出当前更需要回避的景点。" />
           <div className="flex gap-3">
@@ -452,65 +327,6 @@ export function RealtimeStatusPage() {
           ) : null}
         </div>
 
-        <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title="历史客流参考" description="把历史平均值和近 7 天均值放在一起，辅助判断今天是否异常拥挤。" />
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="metric-card">
-              <div className="text-xs text-slate-500">历史平均客流</div>
-              <div className="mt-3 flex gap-3">
-                <input
-                  value={historicalAvgId}
-                  onChange={(event) => setHistoricalAvgId(event.target.value)}
-                  type="text"
-                  placeholder={'\u8f93\u5165\u666f\u70b9\u7f16\u53f7'}
-                  className="search-input flex-1"
-                />
-                <button className="btn-secondary" onClick={fetchHistoricalAvg}>查询</button>
-              </div>
-              {historicalNotice ? (
-                <StatusNotice
-                  tone={historicalNotice.tone}
-                  message={historicalNotice.message}
-                  actionLabel={historicalNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
-                  onAction={historicalNotice.tone === 'error' ? fetchHistoricalAvg : undefined}
-                  className="mt-4"
-                />
-              ) : null}
-              {isLoading('historical') ? <div className="mt-4"><LoadingSpinner /></div> : null}
-{!isLoading('historical') && historicalAvgResult !== null ? <div className="mt-4 text-sm text-slate-600">{'\u7ed3\u679c\uff1a'}{historicalAvgResult}</div> : null}
-              {!isLoading('historical') && hasFetchedHistorical && historicalAvgResult === null && !historicalNotice ? (
-                <SearchEmptyState className="mt-4 p-6" message={'\u6682\u672a\u83b7\u53d6\u5230\u5386\u53f2\u5e73\u5747\u5ba2\u6d41\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchHistoricalAvg} />
-              ) : null}
-            </div>
-            <div className="metric-card">
-              <div className="text-xs text-slate-500">近 7 天平均客流</div>
-              <div className="mt-3 flex gap-3">
-                <input
-                  value={sevenDaysAvgId}
-                  onChange={(event) => setSevenDaysAvgId(event.target.value)}
-                  type="text"
-                  placeholder={'\u8f93\u5165\u666f\u70b9\u7f16\u53f7'}
-                  className="search-input flex-1"
-                />
-                <button className="btn-secondary" onClick={fetchSevenDaysAvg}>查询</button>
-              </div>
-              {sevenDaysNotice ? (
-                <StatusNotice
-                  tone={sevenDaysNotice.tone}
-                  message={sevenDaysNotice.message}
-                  actionLabel={sevenDaysNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
-                  onAction={sevenDaysNotice.tone === 'error' ? fetchSevenDaysAvg : undefined}
-                  className="mt-4"
-                />
-              ) : null}
-              {isLoading('sevenDays') ? <div className="mt-4"><LoadingSpinner /></div> : null}
-{!isLoading('sevenDays') && sevenDaysAvgResult !== null ? <div className="mt-4 text-sm text-slate-600">{'\u7ed3\u679c\uff1a'}{sevenDaysAvgResult}</div> : null}
-              {!isLoading('sevenDays') && hasFetchedSevenDays && sevenDaysAvgResult === null && !sevenDaysNotice ? (
-                <SearchEmptyState className="mt-4 p-6" message={'\u6682\u672a\u83b7\u53d6\u5230\u8fd1 7 \u5929\u5e73\u5747\u5ba2\u6d41\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchSevenDaysAvg} />
-              ) : null}
-            </div>
-          </div>
-        </div>
       </section>
 
       <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
@@ -583,46 +399,6 @@ export function RealtimeStatusPage() {
         </div>
       </section>
 
-      <section className="mt-6 grid gap-6 xl:grid-cols-[1fr_1fr]">
-        <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title="交通信息查询" description="快速查看指定景点周边交通状态、速度和拥堵指数。" />
-          <div className="flex gap-3">
-            <input
-              value={trafficAttractionId}
-              onChange={(event) => setTrafficAttractionId(event.target.value)}
-              type="text"
-              placeholder={'\u8f93\u5165\u666f\u70b9\u7f16\u53f7'}
-              className="search-input flex-1"
-            />
-            <button className="btn-primary" onClick={fetchTraffic}>查询</button>
-          </div>
-          {trafficNotice ? (
-            <StatusNotice
-              tone={trafficNotice.tone}
-              message={trafficNotice.message}
-              actionLabel={trafficNotice.tone === 'error' ? '\u91cd\u8bd5' : undefined}
-              onAction={trafficNotice.tone === 'error' ? fetchTraffic : undefined}
-              className="mt-4"
-            />
-          ) : null}
-          {isLoading('traffic') ? <div className="mt-4"><LoadingSpinner /></div> : null}
-          {!isLoading('traffic') && trafficResult ? (
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="space-y-2 text-sm">
-                <p className="text-slate-700">
-                  {'\u4ea4\u901a\u72b6\u6001\uff1a'}<span className={trafficStatusColor}>{String(trafficResult.status || trafficResult.level || '\u672a\u77e5')}</span>
-                </p>
-                {trafficResult.speed ? <p className="text-slate-600">{'\u5e73\u5747\u901f\u5ea6\uff1a'}{trafficResult.speed} km/h</p> : null}
-                {trafficResult.congestion ? <p className="text-slate-600">{'\u62e5\u5835\u6307\u6570\uff1a'}{trafficResult.congestion}</p> : null}
-                {trafficResult.description ? <p className="text-xs text-slate-500">{trafficResult.description}</p> : null}
-              </div>
-            </div>
-          ) : null}
-          {!isLoading('traffic') && hasFetchedTraffic && !trafficResult && !trafficNotice ? (
-            <SearchEmptyState className="mt-4" message={'\u6682\u672a\u67e5\u8be2\u5230\u8be5\u666f\u70b9\u7684\u4ea4\u901a\u4fe1\u606f\u3002'} actionLabel={'\u91cd\u65b0\u67e5\u8be2'} onAction={fetchTraffic} />
-          ) : null}
-        </div>
-      </section>
     </div>
   )
 }

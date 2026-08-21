@@ -108,8 +108,6 @@
 | `GET /travel-notes/hot` | `TravelNoteController#getHotNotes` | 已对齐 | 热门游记 |
 | `GET /travel-notes/latest` | `TravelNoteController#getLatestNotes` | 已对齐 | 最新游记 |
 | `POST /travel-notes/{noteId}/toggle-collect` | `TravelNoteController#toggleCollect` | 已对齐 | 推荐替代 collect/uncollect |
-| `GET /travel-notes/{noteId}/comments` | 未在当前控制器映射中确认 | 待确认 | 需确认评论子资源是否存在 |
-| `POST /travel-notes/{noteId}/comments` | 未在当前控制器映射中确认 | 待确认 | 需确认子评论接口 |
 
 ## 5. 通知、反馈、统计、文件
 | 前端接口 | 后端接口 | 状态 | 备注 |
@@ -152,39 +150,25 @@
 | `GET /ai/assistant/optimize-route/{routeId}` | `AIAssistantController#optimizeRoute` | 已对齐 | 路线优化建议 |
 | `GET /ai/assistant/attraction-intro/{attractionId}` | `AIAssistantController#getAttractionIntro` | 已对齐 | 景点介绍 |
 | `POST /ai/advanced/plan` | `AIAdvancedController#plan` | 已对齐 | 高级规划 |
-| `POST /ai/advanced/budget` | `AIAdvancedController#budget` | 已对齐 | 预算估算 |
-| `GET /ai/advanced/safety/{cityId}` | `AIAdvancedController#getSafetyAdvice` | 已对齐 | 安全建议 |
+| `POST /ai/advanced/budget` | `AIAdvancedController#budget` | 后端保留、前端移除 | 无可信价格源，当前明确返回无数据 |
+| `GET /ai/advanced/safety/{cityId}` | `AIAdvancedController#getSafetyAdvice` | 后端保留、前端移除 | 无可信安全数据源，当前明确返回无数据 |
 | `POST /ai/advanced/chat` | `AIAdvancedController#advancedChatbot` | 已对齐 | 高级聊天 |
-| `POST /ai/multimodal/query` | `AIMultimodalController#multimodalQuery` | 已对齐 | 多模态问答 |
-| `POST /ai/multimodal/recommend` | `AIMultimodalController#multimodalRecommend` | 已对齐 | 多模态推荐 |
-| `POST /ai/multimodal/search` | `AIMultimodalController#multimodalSearch` | 已对齐 | 多模态搜索 |
 | `GET /ai/image-analysis/types` | `AIImageController#getImageAnalysisTypes` | 已对齐 | 图片分析类型 |
 | `POST /ai/image-analysis` | `AIImageController#analyzeImage` | 已对齐 | 图片分析 |
 
-## 7. 明显不一致项
-| 前端接口 | 后端现状 | 建议 |
-|---|---|---|
-| `POST /v1/route-collections/collect` | 后端未见该路径 | 改用 `POST /v1/route-collections/toggle` |
-| `DELETE /v1/route-collections/uncollect` | 后端未见该路径 | 改用 `POST /v1/route-collections/toggle` |
-| `POST /v1/route-collections/add` | 后端未见该路径 | 统一用 `toggle` 或补后端接口 |
-| `DELETE /v1/route-collections/remove` | 后端未见该路径 | 统一用 `toggle` 或补后端接口 |
-| `PUT /v1/route-collections/update-note` | 后端未见该路径 | 改用 `PUT /v1/route-collections/{collectionId}/notes` |
-| `POST /route-comments/{id}/like` | 后端未见该路径 | 改用 `POST /route-comments/{id}/toggle-like` |
-| `POST /route-comments/{id}/unlike` | 后端未见该路径 | 改用 `POST /route-comments/{id}/toggle-like` |
-| `POST /travel-notes/{id}/like` | 后端未见该路径 | 改用 `POST /travel-notes/{id}/toggle-like` |
-| `POST /travel-notes/{id}/unlike` | 后端未见该路径 | 改用 `POST /travel-notes/{id}/toggle-like` |
-| `POST /travel-notes/{id}/collect` | 后端未见该路径 | 改用 `POST /travel-notes/{id}/toggle-collect` |
-| `POST /travel-notes/{id}/uncollect` | 后端未见该路径 | 改用 `POST /travel-notes/{id}/toggle-collect` |
-| `GET /attractions/{id}/nearby` | 后端未见该路径 | 若需要，补后端接口或改前端调用 |
-| `POST /attractions/{id}/review` | 后端未见该路径 | 若需要，补后端接口或改前端调用 |
-| `GET /realtime-status/traffic/{id}` | 后端未见该路径 | 改为已有实时状态接口或补后端查询 |
-| `POST /realtime-status/batch-update`（无请求体） | 可能与后端签名不一致 | 确认是否需要 body |
-| `GET /routes/smart/popular` | 后端未见该路径 | 改前端或补后端 |
-| `GET /routes/smart/seasonal` | 后端未见该路径 | 改前端或补后端 |
-| `GET /routes/smart/theme` | 后端未见该路径 | 改前端或补后端 |
-| `GET /routes/smart/optimization-suggestions/{routeId}` | 后端未见该路径 | 优先用 `/route-optimization/suggestions/{routeId}` |
-| `GET /dictionary/*` | 后端未见对应 Controller | 确认是否走公共字典服务 |
-| `POST /ai/advanced/voice` | 后端未见该路径 | 若需要语音能力，补后端 |
+## 7. 已完成的契约治理
+| 范围 | 当前状态 |
+|---|---|
+| 路线收藏 | 统一使用 `toggle`、`check`、`remove` 和资源 ID 路径；用户身份只取 JWT，不再由前端提交 |
+| 路线评论与游记互动 | 删除不存在的 `like/unlike/collect/uncollect` 旧别名，保留后端实际存在的接口 |
+| 游记评论 | 当前无评论明细表和后端接口，前端评论区及虚假评论计数已移除 |
+| 景点周边与点评 | 已对齐 `/attractions/{id}/nearby` 和 `/attractions/{id}/review`，点评用户取 JWT |
+| 实时状态 | 删除无请求体批量更新调用，以及用景点人流冒充道路交通的前端映射 |
+| 历史客流 | 当前只有最新快照；历史平均和近 7 天接口明确返回 HTTP 503 与错误码 `20007` |
+| AI 多模态 | 后端没有真实图片入模链路，相关 Controller、Service、DTO、API 方法和前端页签已删除 |
+| 路线优化 | 前端只展示并提交 `distance` 最近邻顺序优化，不再展示时间、费用或虚构评分收益 |
+| 智能路线 | 热门、季节和主题统一走 `/routes/smart/list`，优化建议走 `/route-optimization/suggestions/{routeId}` |
+| UI 字典 | 后端无字典路由，前端改用受版本控制的静态能力清单，不再发送必然 404 的请求 |
 
 ## 8. 联调检查项
 - 登录后 token 是否正确注入 `Authorization`。
@@ -194,13 +178,13 @@
 - AI 接口是否需要流式返回或长轮询。
 - 路线收藏、评论、分享是否存在参数名差异。
 
-## 9. 建议的修正顺序
-1. 先修正明显不一致的收藏、评论、游记接口。
-2. 再修正路线智能接口的 `popular / seasonal / theme / optimization-suggestions` 调用。
-3. 然后确认实时状态和字典接口。
-4. 最后确认 AI 语音能力是否真的需要。
+## 9. 后续联调重点
+1. 使用真实账号验证收藏、点评和游记详情的 JWT 身份边界。
+2. 使用真实 `AMAP_API_KEY` 验证路线分段交通，不以景点客流替代道路交通。
+3. 游记评论和历史客流只有在增加明细表、唯一约束及对应测试后才能重新开放。
+4. AI 语音能力无后端实现，前端入口和字典种子已移除。
 
 ## 10. 结论
-- 当前前后端主链路大体已对齐。
-- 主要风险集中在“老接口命名”和“前端预留接口”上。
-- 最优策略是：**优先改前端调用到后端已存在的路径，只有确有业务必要时再补后端**。
+- 当前前后端展示主链路已按实际 Controller 路径对齐。
+- 无数据模型或无后端实现的能力不再出现在用户界面中。
+- 后续新增能力必须同时具备数据来源、持久化模型、权限校验和回归测试。

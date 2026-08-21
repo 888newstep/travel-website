@@ -32,9 +32,8 @@ public class AIPlanConstraintScheduler {
     private static final int MAX_DAILY_MINUTES = 24 * 60;
 
     private static final List<ActivityTemplate> ACTIVITY_TEMPLATES = List.of(
-            new ActivityTemplate("09:00-12:00", 180, "attraction", "景点%d-上午", "上午游览当地著名景点"),
-            new ActivityTemplate("12:00-13:30", 90, "restaurant", "餐厅%d", "品尝当地特色美食"),
-            new ActivityTemplate("14:00-17:00", 180, "attraction", "景点%d-下午", "下午参观文化景点")
+            new ActivityTemplate("09:00-12:00", 180, "attraction", "游览用户指定景点"),
+            new ActivityTemplate("14:00-17:00", 180, "attraction", "游览用户指定景点")
     );
 
     /**
@@ -67,26 +66,11 @@ public class AIPlanConstraintScheduler {
 
         for (int templateIndex = 0; templateIndex < ACTIVITY_TEMPLATES.size(); templateIndex++) {
             ActivityTemplate template = ACTIVITY_TEMPLATES.get(templateIndex);
-            boolean attraction = "attraction".equals(template.type());
-            boolean mustVisit = attraction
-                    && nextMustVisitIndex[0] < context.mustVisitAttractions().size();
-            String activityName = mustVisit
-                    ? context.mustVisitAttractions().get(nextMustVisitIndex[0])
-                    : String.format(Locale.ROOT, template.nameTemplate(), day);
-
-            if (attraction && !mustVisit && isAvoided(activityName, context.avoidAttractions())) {
-                log.debug("跳过被避开的默认景点: day={}, name={}", day, activityName);
+            boolean mustVisit = nextMustVisitIndex[0] < context.mustVisitAttractions().size();
+            if (!mustVisit) {
                 continue;
             }
-
-            // 可选活动不能抢占剩余必游景点的容量或时间窗口。
-            if (!attraction
-                    && nextMustVisitIndex[0] < context.mustVisitAttractions().size()
-                    && !canScheduleRemainingMustVisits(templateIndex, template, usedMinutes, cursor,
-                    nextMustVisitIndex[0], context)) {
-                log.debug("跳过可能阻塞必游景点的可选活动: day={}, name={}", day, activityName);
-                continue;
-            }
+            String activityName = context.mustVisitAttractions().get(nextMustVisitIndex[0]);
 
             if (usedMinutes + template.durationMinutes() > context.maxDailyMinutes()) {
                 log.debug("活动超过每日时长约束，跳过: day={}, name={}", day, activityName);
@@ -101,9 +85,7 @@ public class AIPlanConstraintScheduler {
 
             activities.add(new AIActivity(time, template.type(), activityName, template.description()));
             usedMinutes += template.durationMinutes();
-            if (mustVisit) {
-                nextMustVisitIndex[0]++;
-            }
+            nextMustVisitIndex[0]++;
         }
 
         return new AIDailyPlan(day, "第" + day + "天行程", activities);
@@ -168,7 +150,7 @@ public class AIPlanConstraintScheduler {
     }
 
     private record ActivityTemplate(String defaultTime, int durationMinutes, String type,
-                                    String nameTemplate, String description) {
+                                    String description) {
     }
 
     private record TimeRange(int startMinute, int endMinute) {

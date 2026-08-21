@@ -2,13 +2,20 @@ package travel.attraction.service.impl;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.AfterEach;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import travel.common.entity.travel_recommendation.Attraction;
 import travel.common.entity.travel_recommendation.AttractionReview;
+import travel.common.entity.travel_realtime.AttractionRealtimeStatus;
 import travel.common.mapper.travel_recommendation_mapper.AttractionReviewMapper;
+import travel.common.mapper.travel_realtime_mapper.AttractionRealtimeStatusMapper;
 import travel.attraction.service.AttractionService;
 import travel.common.utils.CacheUtil;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -25,6 +32,7 @@ class AttractionDetailServiceImplTest {
     private AttractionService attractionService;
     private CacheUtil cacheUtil;
     private AttractionReviewMapper reviewMapper;
+    private AttractionRealtimeStatusMapper realtimeStatusMapper;
     private AttractionDetailServiceImpl service;
 
     @BeforeEach
@@ -32,7 +40,15 @@ class AttractionDetailServiceImplTest {
         attractionService = mock(AttractionService.class);
         cacheUtil = mock(CacheUtil.class);
         reviewMapper = mock(AttractionReviewMapper.class);
-        service = new AttractionDetailServiceImpl(attractionService, cacheUtil, reviewMapper);
+        realtimeStatusMapper = mock(AttractionRealtimeStatusMapper.class);
+        service = new AttractionDetailServiceImpl(attractionService, cacheUtil, reviewMapper, realtimeStatusMapper);
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(42L, null, List.of()));
+    }
+
+    @AfterEach
+    void tearDown() {
+        SecurityContextHolder.clearContext();
     }
 
     private Attraction attraction(int id, int cityId, String name, double lat, double lng) {
@@ -55,7 +71,9 @@ class AttractionDetailServiceImplTest {
         review.setContent("不错");
         review.setCreatedAt(java.time.LocalDateTime.of(2026, 8, 10, 12, 0));
 
-        when(reviewMapper.selectList(any())).thenReturn(Arrays.asList(review));
+        Page<AttractionReview> reviewPage = new Page<>();
+        reviewPage.setRecords(List.of(review));
+        when(reviewMapper.selectPage(any(), any())).thenReturn(reviewPage);
 
         List<Map<String, Object>> result = service.getAttractionReviews(5L, 0, 10);
 
@@ -64,12 +82,13 @@ class AttractionDetailServiceImplTest {
         assertEquals(4, result.get(0).get("rating"));
         assertEquals("不错", result.get(0).get("content"));
         assertNotNull(result.get(0).get("createTime"));
-        verify(reviewMapper, times(1)).selectList(any());
+        verify(reviewMapper, times(1)).selectPage(any(), any());
     }
 
     @Test
     void saveAttractionReview_insertsAndReturnsReview() {
-        when(reviewMapper.insert(any(AttractionReview.class))).thenAnswer(inv -> {
+        when(attractionService.getById(7)).thenReturn(new Attraction());
+        when(reviewMapper.upsertReview(any(AttractionReview.class))).thenAnswer(inv -> {
             AttractionReview r = inv.getArgument(0);
             r.setId(99);  // 模拟自增回填
             return 1;
@@ -79,10 +98,10 @@ class AttractionDetailServiceImplTest {
 
         assertEquals(99, result.get("id"));
         assertEquals(7, result.get("attractionId"));
-        assertEquals(2, result.get("userId"));
+        assertEquals(42, result.get("userId"));
         assertEquals(5, result.get("rating"));
         assertNotNull(result.get("createTime"));
-        verify(reviewMapper, times(1)).insert(any(AttractionReview.class));
+        verify(reviewMapper, times(1)).upsertReview(any(AttractionReview.class));
     }
 
     @Test
@@ -101,5 +120,76 @@ class AttractionDetailServiceImplTest {
         assertTrue(((Double) result.get(0).get("distance")) < 1.0);
         Assertions.assertTrue(((Double) result.get(1).get("distance")) > 10.0);
         assertNotNull(result.get(0).get("name"));
+    }
+
+    @Test
+    void getCrowdForecast_exposesCurrentSnapshotWithoutFabricatingForecast() {
+        AttractionRealtimeStatus status = new AttractionRealtimeStatus();
+        status.setAttractionId(5L);
+        status.setCrowdCount(320);
+        status.setCrowdLevel(2);
+        status.setUpdateTime(LocalDateTime.of(2026, 8, 18, 12, 0));
+        when(realtimeStatusMapper.selectByAttractionId(5L)).thenReturn(status);
+
+        Map<String, Object> result = service.getCrowdForecast(5, "2026-08-18");
+
+        assertEquals(true, result.get("dataAvailable"));
+        assertEquals(false, result.get("forecastAvailable"));
+        assertEquals(2, result.get("overallLevel"));
+        assertEquals(320, result.get("currentVisitorCount"));
+        assertEquals(List.of(), result.get("hourlyForecast"));
+    }
+
+    @Test
+    void getHistoricalCrowdData_reportsUnavailableInsteadOfRandomValues() {
+        Map<String, Object> result = service.getHistoricalCrowdData(5, 30);
+
+        assertEquals(false, result.get("dataAvailable"));
+        assertNull(result.get("averageDailyVisitors"));
+        assertEquals(List.of(), result.get("monthlyTrend"));
+    }
+
+    @Test
+    void attractionMetadata_doesNotClaimUnverifiedFacilitiesOrAccessibility() {
+        Attraction attraction = attraction(5, 10, "测试景点", 39.9, 116.4);
+        when(attractionService.getById(5)).thenReturn(attraction);
+
+        Map<String, Object> openingHours = service.getOpeningHoursDetail(5);
+        Map<String, Object> accessibility = service.getAccessibilityInfo(5);
+
+        assertEquals(false, openingHours.get("dataAvailable"));
+        assertNull(openingHours.get("isOpenNow"));
+        assertEquals(List.of(), service.getAttractionFacilities(5));
+        assertEquals(false, accessibility.get("dataAvailable"));
+        assertNull(accessibility.get("wheelchairAccessible"));
+        assertEquals(List.of(), service.getPhotoSpots(5));
+    }
+
+    @Test
+    void getRatingStatistics_aggregatesPersistedReviews() {
+        when(attractionService.getById(5)).thenReturn(new Attraction());
+        when(reviewMapper.selectRatingCounts(5)).thenReturn(List.of(
+                Map.of("rating", 5, "rating_count", 3L),
+                Map.of("rating", 3, "rating_count", 1L)));
+
+        Map<String, Object> result = service.getRatingStatistics(5L);
+
+        assertEquals(4.5, result.get("avgRating"));
+        assertEquals(4L, result.get("totalReviews"));
+        @SuppressWarnings("unchecked")
+        Map<String, Long> distribution = (Map<String, Long>) result.get("ratingDistribution");
+        assertEquals(3L, distribution.get("5"));
+        assertEquals(1L, distribution.get("3"));
+        assertEquals(0L, distribution.get("1"));
+    }
+
+    @Test
+    void incrementViews_delegatesToAtomicUpdate() {
+        when(attractionService.incrementViewCount(5)).thenReturn(true);
+
+        assertTrue(service.incrementViews(5L));
+
+        verify(attractionService).incrementViewCount(5);
+        verify(attractionService, never()).updateById(any(Attraction.class));
     }
 }

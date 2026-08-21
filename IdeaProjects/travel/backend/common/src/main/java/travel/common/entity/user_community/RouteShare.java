@@ -1,5 +1,6 @@
 package travel.common.entity.user_community;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -49,6 +50,8 @@ public class RouteShare {
     private Boolean isActive = true;
 
     @TableField("password")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @lombok.ToString.Exclude
     private String password;
 
     @TableField("file_name")

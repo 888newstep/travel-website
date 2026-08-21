@@ -9,6 +9,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
@@ -21,19 +23,23 @@ import travel.route.dto.route.RouteQualityEvaluation;
 import travel.route.dto.route.RouteQualityEvaluationRequest;
 import travel.route.service.IntelligentRouteService;
 import travel.route.service.RouteService;
+import travel.common.entity.route_planning.Route;
 
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -64,7 +70,59 @@ public class RouteControllerTest {
 
     @AfterEach
     void tearDown() {
+        SecurityContextHolder.clearContext();
         validator.close();
+    }
+
+    @Test
+    void shouldUseAuthenticatedUserWhenCreatingRoute() throws Exception {
+        authenticate(42L);
+        doReturn(true).when(routeService).save(any(Route.class));
+
+        mockMvc.perform(post("/routes")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"id":99,"userId":7,"title":"secure route","cityId":1}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(42));
+
+        ArgumentCaptor<Route> captor = ArgumentCaptor.forClass(Route.class);
+        verify(routeService).save(captor.capture());
+        assertNull(captor.getValue().getId());
+        assertEquals(42, captor.getValue().getUserId());
+    }
+
+    @Test
+    void shouldCheckOwnerAndPreserveOwnerWhenUpdatingRoute() throws Exception {
+        authenticate(42L);
+        Route existing = new Route();
+        existing.setId(8);
+        existing.setUserId(42);
+        existing.setViewCount(10);
+        existing.setLikeCount(5);
+        doReturn(existing).when(routeService).getById(8);
+        doReturn(true).when(routeService).updateById(any(Route.class));
+
+        mockMvc.perform(put("/routes/8")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":7,"title":"updated route"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.userId").value(42));
+
+        verify(routeService).checkRouteOwner(8L, 42L);
+        ArgumentCaptor<Route> captor = ArgumentCaptor.forClass(Route.class);
+        verify(routeService).updateById(captor.capture());
+        assertEquals(42, captor.getValue().getUserId());
+        assertEquals(10, captor.getValue().getViewCount());
+        assertEquals(5, captor.getValue().getLikeCount());
+    }
+
+    private void authenticate(Object principal) {
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(principal, null, List.of()));
     }
 
     @Test
@@ -85,6 +143,7 @@ public class RouteControllerTest {
 
     @Test
     void shouldBindTypedRealtimeAdjustmentRequestAndPreserveExtensions() throws Exception {
+        authenticate(42L);
         when(intelligentRouteService.getRealTimeAdjustment(eq(1), any(RealTimeAdjustmentRequest.class)))
                 .thenReturn(RealTimeAdjustmentResult.builder()
                         .routeId(1)
@@ -280,6 +339,10 @@ public class RouteControllerTest {
 
     @Test
     void shouldBindRouteQualityEvaluationExtensions() throws Exception {
+        Route publicRoute = new Route();
+        publicRoute.setId(1);
+        publicRoute.setIsPublic(true);
+        when(routeService.getById(1)).thenReturn(publicRoute);
         when(intelligentRouteService.evaluateRouteQuality(eq(1), any(RouteQualityEvaluationRequest.class)))
                 .thenReturn(RouteQualityEvaluation.builder()
                         .routeId(1)

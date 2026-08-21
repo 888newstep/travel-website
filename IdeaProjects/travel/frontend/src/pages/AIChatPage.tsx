@@ -146,24 +146,6 @@ export function AIChatPage() {
 
     imageError,
 
-    multimodalForm,
-
-    setMultimodalForm,
-
-    multimodalLoading,
-
-    multimodalResult,
-
-    budgetForm,
-
-    setBudgetForm,
-
-    budgetLoading,
-
-    budgetResult,
-
-    budgetError,
-
     assistantInput,
 
     setAssistantInput,
@@ -182,26 +164,6 @@ export function AIChatPage() {
 
     planError,
 
-    safetyCityId,
-
-    setSafetyCityId,
-
-    safetyLoading,
-
-    safetyResult,
-
-    safetyError,
-
-    voiceText,
-
-    setVoiceText,
-
-    voiceLoading,
-
-    voiceResult,
-
-    voiceError,
-
     chatBoxRef,
 
     assistantBoxRef,
@@ -218,17 +180,9 @@ export function AIChatPage() {
 
     analyzeImage,
 
-    runMultimodalQuery,
-
-    getBudgetAdvice,
-
     sendAssistantQuery,
 
     planRoute,
-
-    fetchSafetyAdvice,
-
-    processVoice,
 
   } = useAIChatPage()
 
@@ -258,7 +212,7 @@ export function AIChatPage() {
 
               <span className="chip">AI 旅行助手</span>
 
-              <span className="chip">多模态服务</span>
+              <span className="chip">真实图像识别</span>
 
               <span className="chip">智能出行建议</span>
 
@@ -268,7 +222,7 @@ export function AIChatPage() {
 
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
 
-              这里整合了对话问答、景点推荐、路线规划、预算估算与语音处理等能力，界面已统一为更适合 Edge 浏览器的轻量旅游风格。
+              这里整合了对话问答、景点推荐、行程生成、真实图像识别与本地约束排程，所有入口都对应当前可验证实现。
 
             </p>
 
@@ -314,7 +268,7 @@ export function AIChatPage() {
 
               <div className="travel-step-card">再用“行程生成”或“路线规划”细化每日安排。</div>
 
-              <div className="travel-step-card">出发前补一轮“预算估算”和“安全建议”会更稳妥。</div>
+              <div className="travel-step-card">需要识图时仅使用已配置白名单和百度 AI 凭据的真实图像入口。</div>
 
             </div>
 
@@ -666,164 +620,6 @@ export function AIChatPage() {
 
 
 
-      {activeTab === 'multimodal' ? (
-
-        <section className="scenic-shell-soft edge-glow animate-fade-in p-6">
-
-          <SectionHint title="多模态问答" description="同时结合文字与图片信息发起查询，适合问招牌、菜品或景点介绍。" />
-
-          <div className="grid gap-4">
-
-            <textarea
-
-              value={multimodalForm.text}
-
-              onChange={(event) => setMultimodalForm((current) => ({ ...current, text: event.target.value }))}
-
-              rows={4}
-
-              placeholder="描述你的问题，例如：这张图片里的建筑是什么风格？"
-
-              className="search-input"
-
-            />
-
-            <input
-
-              value={multimodalForm.image}
-
-              onChange={(event) => setMultimodalForm((current) => ({ ...current, image: event.target.value }))}
-
-              placeholder="图片地址，可选"
-
-              className="search-input"
-
-            />
-
-          </div>
-
-          <button onClick={runMultimodalQuery} className="btn-primary mt-4">
-
-            提交查询
-
-          </button>
-
-          <FeedbackPanel loading={multimodalLoading}>
-
-            {multimodalResult ? (
-
-              <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-
-                {multimodalResult}
-
-              </div>
-
-            ) : null}
-
-          </FeedbackPanel>
-
-        </section>
-
-      ) : null}
-
-
-
-      {activeTab === 'budget' ? (
-
-        <section className="scenic-shell-soft edge-glow animate-fade-in p-6">
-
-          <SectionHint title="预算估算" description="按目的地、出行人数和风格估算费用，适合出发前做成本预案。" />
-
-          <div className="grid gap-4 md:grid-cols-2">
-
-            <input
-
-              value={budgetForm.destination}
-
-              onChange={(event) => setBudgetForm((current) => ({ ...current, destination: event.target.value }))}
-
-              placeholder="目的地"
-
-              className="search-input"
-
-            />
-
-            <input
-
-              value={budgetForm.days}
-
-              onChange={(event) => setBudgetForm((current) => ({ ...current, days: event.target.value }))}
-
-              placeholder="天数"
-
-              className="search-input"
-
-            />
-
-            <input
-
-              value={budgetForm.budget}
-
-              onChange={(event) => setBudgetForm((current) => ({ ...current, budget: event.target.value }))}
-
-              placeholder="预算上限"
-
-              className="search-input"
-
-            />
-
-            <input
-
-              value={budgetForm.people}
-
-              onChange={(event) => setBudgetForm((current) => ({ ...current, people: event.target.value }))}
-
-              placeholder="人数"
-
-              className="search-input"
-
-            />
-
-            <input
-
-              value={budgetForm.style}
-
-              onChange={(event) => setBudgetForm((current) => ({ ...current, style: event.target.value }))}
-
-              placeholder="旅行风格，例如 轻奢 / 亲子 / 穷游"
-
-              className="search-input md:col-span-2"
-
-            />
-
-          </div>
-
-          <button onClick={getBudgetAdvice} className="btn-primary mt-4">
-
-            估算预算
-
-          </button>
-
-          <FeedbackPanel error={budgetError} loading={budgetLoading}>
-
-            {budgetResult ? (
-
-              <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-
-                {budgetResult}
-
-              </div>
-
-            ) : null}
-
-          </FeedbackPanel>
-
-        </section>
-
-      ) : null}
-
-
-
       {activeTab === 'assistant' ? (
 
         <section className="scenic-shell-soft edge-glow animate-fade-in p-6">
@@ -945,98 +741,6 @@ export function AIChatPage() {
       ) : null}
 
 
-
-      {activeTab === 'safety' ? (
-
-        <section className="scenic-shell-soft edge-glow animate-fade-in p-6">
-
-          <SectionHint title="安全建议" description="按城市查询出行提醒，适合出发前核对天气、拥堵和特殊注意事项。" />
-
-          <div className="flex gap-3">
-
-            <input
-
-              value={safetyCityId}
-
-              onChange={(event) => setSafetyCityId(event.target.value)}
-
-              placeholder={'\u8f93\u5165\u57ce\u5e02\u7f16\u53f7'}
-
-              className="search-input flex-1"
-
-            />
-
-            <button onClick={fetchSafetyAdvice} className="btn-primary">
-
-              查询
-
-            </button>
-
-          </div>
-
-          <FeedbackPanel error={safetyError} loading={safetyLoading}>
-
-            {safetyResult ? (
-
-              <div className="mt-4">
-
-                <ResultCard value={safetyResult} />
-
-              </div>
-
-            ) : null}
-
-          </FeedbackPanel>
-
-        </section>
-
-      ) : null}
-
-
-
-      {activeTab === 'voice' ? (
-
-        <section className="scenic-shell-soft edge-glow animate-fade-in p-6">
-
-          <SectionHint title="语音处理" description="把语音内容转为可理解文本后再交给 AI 处理，适合移动端快速记录灵感。" />
-
-          <textarea
-
-            value={voiceText}
-
-            onChange={(event) => setVoiceText(event.target.value)}
-
-            rows={4}
-
-            placeholder="输入语音转写文本，例如：帮我整理成明天的行程重点"
-
-            className="search-input"
-
-          />
-
-          <button onClick={processVoice} className="btn-primary mt-4">
-
-            开始处理
-
-          </button>
-
-          <FeedbackPanel error={voiceError} loading={voiceLoading}>
-
-            {voiceResult ? (
-
-              <div className="mt-4 whitespace-pre-wrap rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-
-                {voiceResult}
-
-              </div>
-
-            ) : null}
-
-          </FeedbackPanel>
-
-        </section>
-
-      ) : null}
 
     </div>
 

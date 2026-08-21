@@ -429,71 +429,66 @@ TravelJobHandler.cleanExpiredData()  // 每天凌晨 2 点
 
 ### 3.3 collection-service 收藏服务
 
-#### 3.3.1 路线收藏链路 (分布式锁 + 全局事务)
+#### 3.3.1 路线收藏切换链路（JWT + HTTP 幂等 + 分布式锁）
 
 ```
-POST /api/v1/route-collections/collect/{routeId}
+POST /api/v1/route-collections/toggle
+Header: Idempotency-Key: <客户端请求标识>
+Body: { "routeId": 1 }
   ↓
-RouteCollectionController.collectRoute()
+HttpIdempotencyFilter
+  ├─ Redis 原子占位成功 → 执行业务
+  ├─ 相同键处理中 → HTTP 409
+  └─ 相同键已完成且请求指纹一致 → 重放首次响应
   ↓
-RouteCollectionServiceImpl.collectRoute(routeId, userId)
+RouteCollectionController.toggleCollection()
+  └─ userId 只从 JWT SecurityContext 获取
+  ↓
+RouteCollectionServiceImpl.toggleCollection(routeId, userId)
   │
-  ├─ 1. 获取 Redisson 分布式锁
-  │     └─ distributedLockService.executeWithLock("collect:{userId}:{routeId}")
+  ├─ 1. 获取统一的 Redisson 分布式锁
+  │     └─ distributedLockService.executeWithLock("collection:{userId}:{routeId}")
   │         ├─ 获取锁成功 → 继续执行
-  │         └─ 获取锁失败 → 抛出异常 "操作过于频繁"
+  │         └─ 获取锁失败 → 返回系统繁忙错误
   │
-  ├─ 2. 开启 Seata 全局事务
-  │     └─ @GlobalTransactional(timeoutMills = 300000, name = "collect-route-tx")
+  ├─ 2. 在锁内查询当前事实
+  │     └─ WHERE user_id=? AND item_id=? AND item_type='route' AND collection_type='collect'
   │
-  ├─ 3. 检查是否已收藏
-  │     └─ SELECT * FROM user_collection WHERE user_id = ? AND route_id = ?
-  │         ├─ 已收藏 → 返回 false
-  │         └─ 未收藏 → 继续
+  ├─ 3. 已存在 → 删除收藏；不存在 → 校验路线和用户后插入
+  │     └─ UNIQUE KEY uk_user_item_action
+  │        (user_id, item_id, item_type, collection_type) 作为数据库最终兜底
   │
-  ├─ 4. 写入收藏记录
-  │     └─ routeCollectionMapper.insert(collection)
+  ├─ 4. 删除状态、分页列表、路线计数及公开列表缓存
   │
-  ├─ 5. 更新路线收藏数 (跨服务)
-  │     └─ routeFeignClient.incrementCollectionCount(routeId)
+  ├─ 5. 返回切换后的 collected 状态
   │
-  ├─ 6. 删除用户收藏列表缓存
-  │     └─ cacheUtil.delete("route_collection:user:{userId}")
-  │
-  ├─ 7. 发送通知消息 (异步)
-  │     └─ messageProducerService.sendNotification(userId, "收藏成功")
-  │
-  ├─ 8. 提交事务
-  │     └─ Seata TC 协调各分支事务提交
-  │
-  └─ 9. 释放锁
+  └─ 6. 释放锁，并将成功响应写入 HTTP 幂等记录
         └─ lock.unlock()
 ```
 
 **关键代码位置**:
-- `RouteCollectionServiceImpl.java:42-62`
-- `DistributedLockService.java:24-48`
+- `HttpIdempotencyFilter.java`
+- `RouteCollectionController.java`
+- `RouteCollectionServiceImpl.java`
+- `DistributedLockService.java`
+- `USER_COLLECTION_ACTION_INDEX_MIGRATION.sql`
 
 #### 3.3.2 取消收藏链路
 
 ```
-POST /api/v1/route-collections/uncollect/{routeId}
+DELETE /api/v1/route-collections/remove?routeId={routeId}
   ↓
 RouteCollectionServiceImpl.uncollectRoute(routeId, userId)
   │
-  ├─ 1. 获取分布式锁
+  ├─ 1. 获取 collection:{userId}:{routeId} 分布式锁
   │
-  ├─ 2. 查询收藏记录
-  │     └─ SELECT * FROM user_collection WHERE user_id = ? AND route_id = ?
+  ├─ 2. 查询 route + collect 收藏记录
   │
-  ├─ 3. 删除收藏记录
-  │     └─ routeCollectionMapper.deleteById(collectionId)
+  ├─ 3. 存在则删除；不存在也返回成功，保证 DELETE 语义幂等
   │
-  ├─ 4. 更新路线收藏数
+  ├─ 4. 删除相关缓存
   │
-  ├─ 5. 删除缓存
-  │
-  └─ 6. 返回结果
+  └─ 5. 返回 true
 ```
 
 #### 3.3.3 评论发布链路

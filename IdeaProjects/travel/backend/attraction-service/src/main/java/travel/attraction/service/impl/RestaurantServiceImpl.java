@@ -3,162 +3,158 @@ package travel.attraction.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import travel.common.entity.travel_recommendation.Restaurant;
 import travel.common.mapper.travel_recommendation_mapper.RestaurantMapper;
 import travel.attraction.service.RestaurantService;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RestaurantServiceImpl extends ServiceImpl<RestaurantMapper, Restaurant> implements RestaurantService {
 
     @Override
     public List<Restaurant> getByCityId(Integer cityId) {
-        try {
-            QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("city_id", cityId);
-            queryWrapper.orderByDesc("rating");
-            return list(queryWrapper);
-        } catch (Exception e) {
-            log.error("获取城市饭店列表失败: cityId={}", cityId, e);
-            return new ArrayList<>();
-        }
+        validateCityId(cityId);
+        QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("city_id", cityId);
+        queryWrapper.orderByDesc("rating");
+        return list(queryWrapper);
     }
 
     @Override
     public List<Restaurant> getByCuisineType(Integer cityId, String cuisineType) {
-        try {
-            QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("city_id", cityId);
-            queryWrapper.eq("cuisine_type", cuisineType);
-            queryWrapper.orderByDesc("rating");
-            return list(queryWrapper);
-        } catch (Exception e) {
-            log.error("获取菜系饭店列表失败: cityId={}, cuisineType={}", cityId, cuisineType, e);
-            return new ArrayList<>();
-        }
+        validateCityId(cityId);
+        validateText(cuisineType);
+        QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("city_id", cityId);
+        queryWrapper.eq("cuisine_type", cuisineType.trim());
+        queryWrapper.orderByDesc("rating");
+        return list(queryWrapper);
     }
 
     @Override
     public List<Restaurant> getByPriceLevel(Integer cityId, String priceLevel) {
-        try {
-            QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("city_id", cityId);
-            queryWrapper.eq("price_level", priceLevel);
-            queryWrapper.orderByDesc("rating");
-            return list(queryWrapper);
-        } catch (Exception e) {
-            log.error("获取价格等级饭店列表失败: cityId={}, priceLevel={}", cityId, priceLevel, e);
-            return new ArrayList<>();
-        }
+        validateCityId(cityId);
+        validateText(priceLevel);
+        QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("city_id", cityId);
+        queryWrapper.eq("price_level", priceLevel.trim());
+        queryWrapper.orderByDesc("rating");
+        return list(queryWrapper);
     }
 
     @Override
     public List<Restaurant> getTopRated(Integer cityId, int limit) {
-        try {
-            QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("city_id", cityId);
-            queryWrapper.orderByDesc("rating");
-            queryWrapper.last("LIMIT " + limit);
-            return list(queryWrapper);
-        } catch (Exception e) {
-            log.error("获取高评分饭店列表失败: cityId={}, limit={}", cityId, limit, e);
-            return new ArrayList<>();
-        }
+        validateCityId(cityId);
+        validateLimit(limit);
+        QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("city_id", cityId);
+        queryWrapper.orderByDesc("rating");
+        queryWrapper.last("LIMIT " + limit);
+        return list(queryWrapper);
     }
 
     @Override
     public List<Map<String, Object>> getByDistance(Integer cityId, Double latitude, Double longitude, int limit) {
-        try {
-            // 获取城市所有饭店
-            List<Restaurant> restaurants = getByCityId(cityId);
-            
-            // 计算距离并排序
-            List<Map<String, Object>> result = restaurants.stream()
-                    .map(restaurant -> {
-                        Map<String, Object> map = new HashMap<>();
-                        map.put("restaurant", restaurant);
-                        // 计算距离（这里使用简化的距离计算）
-                        double distance = calculateDistance(latitude, longitude, restaurant.getLatitude(), restaurant.getLongitude());
-                        map.put("distance", distance);
-                        return map;
-                    })
-                    .sorted((m1, m2) -> Double.compare((Double) m1.get("distance"), (Double) m2.get("distance")))
-                    .limit(limit)
-                    .collect(Collectors.toList());
-            
-            return result;
-        } catch (Exception e) {
-            log.error("根据距离获取饭店列表失败: cityId={}, latitude={}, longitude={}, limit={}", cityId, latitude, longitude, limit, e);
-            return new ArrayList<>();
-        }
+        validateCityId(cityId);
+        validateLimit(limit);
+        validateCoordinates(latitude, longitude);
+        List<Restaurant> restaurants = getByCityId(cityId);
+
+        return restaurants.stream()
+                .filter(restaurant -> restaurant.getLatitude() != null && restaurant.getLongitude() != null)
+                .map(restaurant -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("restaurant", restaurant);
+                    double distance = calculateDistance(
+                            latitude, longitude, restaurant.getLatitude(), restaurant.getLongitude());
+                    map.put("distance", distance);
+                    return map;
+                })
+                .sorted((m1, m2) -> Double.compare(
+                        (Double) m1.get("distance"), (Double) m2.get("distance")))
+                .limit(limit)
+                .collect(Collectors.toList());
     }
 
     @Override
     public List<Restaurant> search(Integer cityId, String keyword) {
-        try {
-            QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
-            queryWrapper.eq("city_id", cityId);
-            queryWrapper.like("name", keyword).or().like("feature", keyword).or().like("cuisine_type", keyword);
-            queryWrapper.orderByDesc("rating");
-            return list(queryWrapper);
-        } catch (Exception e) {
-            log.error("搜索饭店失败: cityId={}, keyword={}", cityId, keyword, e);
-            return new ArrayList<>();
-        }
+        validateCityId(cityId);
+        validateText(keyword);
+        String normalizedKeyword = keyword.trim();
+        QueryWrapper<Restaurant> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("city_id", cityId)
+                .and(wrapper -> wrapper.like("name", normalizedKeyword)
+                        .or().like("feature", normalizedKeyword)
+                        .or().like("cuisine_type", normalizedKeyword));
+        queryWrapper.orderByDesc("rating");
+        return list(queryWrapper);
     }
 
     @Override
     public Map<String, Object> getRestaurantDetail(Integer id) {
-        try {
-            Restaurant restaurant = getById(id);
-            if (restaurant == null) {
-                throw new RuntimeException("饭店不存在");
-            }
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("restaurant", restaurant);
-            // 这里可以添加更多信息，如评论、推荐菜等
-            
-            return result;
-        } catch (Exception e) {
-            log.error("获取饭店详情失败: id={}", id, e);
-            return new HashMap<>();
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
+        Restaurant restaurant = getById(id);
+        if (restaurant == null) {
+            throw new BusinessException(ErrorCodeEnum.RESTAURANT_NOT_EXIST);
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("restaurant", restaurant);
+        return result;
     }
 
     @Override
     public List<Map<String, Object>> recommendRestaurants(Integer cityId, Map<String, Object> preferences, int limit) {
-        try {
-            // 获取城市所有饭店
-            List<Restaurant> restaurants = getByCityId(cityId);
-            
-            // 根据偏好筛选和排序
-            List<Map<String, Object>> result = restaurants.stream()
-                    .map(restaurant -> {
-                        Map<String, Object> map = new HashMap<>();
-                        map.put("restaurant", restaurant);
-                        // 计算推荐分数
-                        double score = calculateRecommendationScore(restaurant, preferences);
-                        map.put("score", score);
-                        return map;
-                    })
-                    .sorted((m1, m2) -> Double.compare((Double) m2.get("score"), (Double) m1.get("score")))
-                    .limit(limit)
-                    .collect(Collectors.toList());
-            
-            return result;
-        } catch (Exception e) {
-            log.error("推荐饭店失败: cityId={}, preferences={}, limit={}", cityId, preferences, limit, e);
-            return new ArrayList<>();
+        validateCityId(cityId);
+        validateLimit(limit);
+        List<Restaurant> restaurants = getByCityId(cityId);
+
+        return restaurants.stream()
+                .map(restaurant -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("restaurant", restaurant);
+                    map.put("score", calculateRecommendationScore(restaurant, preferences));
+                    return map;
+                })
+                .sorted((m1, m2) -> Double.compare(
+                        (Double) m2.get("score"), (Double) m1.get("score")))
+                .limit(limit)
+                .collect(Collectors.toList());
+    }
+
+    private void validateCityId(Integer cityId) {
+        if (cityId == null || cityId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private void validateLimit(int limit) {
+        if (limit < 1 || limit > 100) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_RANGE_ERROR);
+        }
+    }
+
+    private void validateText(String value) {
+        if (value == null || value.isBlank() || value.length() > 100) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private void validateCoordinates(Double latitude, Double longitude) {
+        if (latitude == null || longitude == null
+                || latitude < -90 || latitude > 90
+                || longitude < -180 || longitude > 180) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_RANGE_ERROR);
         }
     }
 

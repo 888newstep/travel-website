@@ -1,315 +1,303 @@
-# 智慧旅游系统 (Smart Travel System)
+# 智慧旅游工程化展示项目
 
 [English](README_EN.md) | 中文
 
-基于 Spring Cloud Alibaba 微服务架构 + React 构建的**企业级智慧旅游平台**，覆盖「AI 智能出行助手 → 路线规划 → 实时数据 → 用户社区」完整链路：6 大微服务 + 智能遗传算法路径优化 + 多模态 AI 能力 + 可靠消息投递，开箱即用的 Docker Compose 一键部署。
+面向**秋招答辩、企业与学校技术交流**的全栈项目，重点展示 Spring Boot 微服务、JWT 鉴权、HTTP 幂等、并发一致性、高德真实交通、RabbitMQ 可靠通知和 JMeter 可复现压测。它不是已经商业化运营的旅游平台，因此文档会明确区分已验证能力、外部条件能力和未实现能力。
 
 [![CI/CD Pipeline](https://github.com/888newstep/travel-website/actions/workflows/ci.yml/badge.svg)](https://github.com/888newstep/travel-website/actions/workflows/ci.yml)
 [![JDK 17](https://img.shields.io/badge/JDK-17-blue.svg)](https://adoptium.net/)
-[![Spring Boot 3](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
-[![Spring Cloud Alibaba](https://img.shields.io/badge/Spring%20Cloud%20Alibaba-2023.0.3-red.svg)](https://github.com/alibaba/spring-cloud-alibaba)
+[![Spring Boot 3.3.5](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
 
-An enterprise-grade **Smart Travel Platform** built on **Spring Cloud Alibaba microservices + React**, featuring a genetic-algorithm TSP route optimizer, a multimodal AI agent matrix (Qwen / Baidu AI / AMap), and production-grade reliable messaging (RabbitMQ + outbox + idempotent retry) — with one-command Docker Compose deployment.
+> **范围约束**：不使用 Milvus；不加入短信计费、余额或账单；交通数据只接受项目配置的高德 API 结果；RabbitMQ 使用云端实例，Win11 本机运行 MySQL、Redis 和 JMeter。
 
-## 为什么选择智慧旅游系统？
+## 当前验收快照
 
-与普通的 CRUD Demo、单体旅游网站相比，这个项目的独特组合是 **微服务 + AI 智能体 + 算法工程 + 可靠消息**：
+| 项目 | 结果 |
+|------|------|
+| 后端全量测试 | 245 tests，0 failure，0 error，3 skipped |
+| 路线收藏同键幂等 | 100 并发仅 1 次业务执行，99 个处理中 409，最终 1 条记录 |
+| 景点点评 UPSERT | 100 并发全部 HTTP 200，最终同一点评 ID、1 条记录 |
+| 路线评论点赞 | 100 用户并发，最终点赞数和行为记录数均为 100 |
+| 路线优化 | 100 个不同幂等键全部 HTTP 200，仅 1 次真实变更，历史 1 条 |
+| Redis 故障 | 幂等写请求 fail-closed 返回 HTTP 503，数据库不新增重复记录 |
+| 高德真实外呼 | 代码与本地桩已验证；当前仍待配置真实 `AMAP_API_KEY` |
+| 云 RabbitMQ | 拓扑与测试已就绪；当前仍待配置云 broker 凭据完成 L4 实测 |
 
-| 对比对象 | 差异化优势 |
-|---------|-----------|
-| 普通单体 / CRUD Demo | Spring Cloud Alibaba 微服务架构、开放 Feign 服务编排、Nacos 注册配置中心 |
-| 普通旅游网站 | TSP 遗传算法路径优化 + AI 个性化行程生成 + 实时人流状态联动 |
-| 常见 AI Chat 应用 | 多模态（文本/图像）问答、智能行程、预算估算、图像识别闭环的 AI 能力矩阵 |
-| 简单消息队列接入 | 可靠消息投递（消息表 + 定时重投 + Redis 幂等）与 RabbitMQ 生产级配置 |
-
-> **🎯 适用人群**
-> - 正在准备大厂 Java / AI 岗位面试的求职者（覆盖微服务、算法、消息队列高频考点）
-> - 需要可落地旅游/出行平台原型的中小企业或独立开发者
-> - 想学习 Spring Cloud Alibaba 微服务 + AI 集成完整实践的技术爱好者
-> - 需要前后端分离 + Docker 一键部署样板的产品开发者
-
----
+完整数据和日志索引见 [验收证据索引](backend/docs/showcase/EVIDENCE_INDEX.md)。
 
 ## 架构总览
 
-```
-                    ┌──────────────────────────────────────────────┐
-                    │                前端 React 19                  │
-                    │           (React Router + Vite + Tailwind)    │
-                    └──────────────────────┬───────────────────────┘
-                                   HTTP /api (Vite Proxy)
-                    ┌──────────────────────▼───────────────────────┐
-                    │        Gateway  (端口 8090, Spring Cloud      │
-                    │        Gateway + Sentinel + JWT 鉴权)           │
-                    └──────────────────────┬───────────────────────┘
-        ┌───────────────┬──────────────────┼───────────────────┬───────────────┐
-        ▼               ▼                  ▼                   ▼               ▼
- ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐ ┌──────────────┐ ┌─────────────┐
- │ User Service│ │ Attraction  │ │   Route Service  │ │  Collection  │ │ File Service│
- │ (8091)      │ │ (8092)      │ │   (8093)         │ │  (8094)      │ │ (8095)      │
- │ 登录/JWT    │ │ 景点/城市   │ │ 路线/TSP遗传算法 │ │ 游记/评论    │ │ 文件/标签   │
- │             │ │ 美食/实时   │ │ AI智能体/多模态  │ │ 收藏/分享    │ │ 资源管理    │
- └──────┬──────┘ └────┬────────┘ └────────┬─────────┘ └──────┬───────┘ └──────┬──────┘
-        │             │                   │                  │                │
-        └─────────────┴───────┐           │                  │                │
-                              ▼           ▼                                    │
-                    ┌──────────────────────┐        ┌──────────────────────────┘
-                    │  Nacos 注册/配置中心   │        │
-                    │ (8848)             │        │
-                    └──────────────────────┘        │
-        ┌───────────────────────────────────────────▼──────────────────────────┐
-        │   基础设施层: MySQL 8 · Redis(Redisson分布式锁/缓存/限流)              │
-        │   · RabbitMQ(可靠消息投递) · XXL-Job(定时任务) · 高德地图/百度AI/通义千问  │
-        └───────────────────────────────────────────────────────────────────────┘
-```
-
-**核心链路**：用户请求经 **Gateway（Sentinel 限流 + JWT 鉴权）** 路由到各微服务 → Route Service 基于高德地图数据与 **遗传算法 TSP** 生成/优化路线，或由 **AI 智能体**（通义千问）完成对话、行程生成、图片识别与预算估算 → 数据通过 MyBatis-Plus 落库 MySQL，热点经 Redis 缓存、跨服务调用经 Redisson 分布式锁与 RabbitMQ **可靠消息**解耦。
-
-### 架构图（Mermaid）
-
 ```mermaid
 flowchart LR
-    Client[前端 React] -->|HTTP /api| GW[Gateway 8090]
-    GW --> US[User 8091]
-    GW --> AS[Attraction 8092]
-    GW --> RS[Route 8093]
-    GW --> CS[Collection 8094]
-    GW --> FS[File 8095]
-    RS -->|Feign| AS
-    CS -->|Feign| RS & US
-    US & AS & RS & CS & FS --> N[Nacos 8848]
-    US & AS & RS & CS & FS --> DB[(MySQL 8)]
-    US & AS & RS & CS & FS --> R[(Redis)]
-    RS --> MQ[(RabbitMQ)]
-    RS --> AI[通义千问/百度AI/高德]
-    RS --> JOB[XXL-Job]
+    Browser[React 19 + Vite] -->|HTTP /api| Gateway[Spring Cloud Gateway :8090]
+
+    Gateway --> User[user-service :8091]
+    Gateway --> Attraction[attraction-service :8092]
+    Gateway --> Route[route-service :8093]
+    Gateway --> Collection[collection-service :8094]
+    Gateway --> File[file-service :8095]
+
+    User --> MySQL[(MySQL 8)]
+    Attraction --> MySQL
+    Route --> MySQL
+    Collection --> MySQL
+    File --> MySQL
+
+    User --> Redis[(Redis)]
+    Attraction --> Redis
+    Route --> Redis
+    Collection --> Redis
+    File --> Redis
+
+    User -.可靠通知.-> Rabbit[(云 RabbitMQ)]
+    Rabbit -.消费落库.-> Collection
+    Route -.真实路线/路况.-> AMap[高德开放平台]
+    Route -.条件可用.-> Qwen[通义千问]
+    Route -.条件可用.-> Baidu[百度 AI]
+
+    Nacos[Nacos：仅本地启动模式] -.注册发现.-> Gateway
+    Nacos -.注册发现.-> User
+    Nacos -.注册发现.-> Attraction
+    Nacos -.注册发现.-> Route
+    Nacos -.注册发现.-> Collection
+    Nacos -.注册发现.-> File
 ```
 
----
+### 运行模块
 
-## 功能特性
+| 模块 | 端口 | 主要职责 |
+|------|------|----------|
+| Gateway | 8090 | 路由、JWT 验签、可信用户头重建、入口限流配置 |
+| User Service | 8091 | 注册、登录、Token、资料与密码 |
+| Attraction Service | 8092 | 城市、景点、餐厅、点评和最新状态快照 |
+| Route Service | 8093 | 路线、日程、优化、高德交通和条件 AI 接口 |
+| Collection Service | 8094 | 收藏、评论、游记、分享、通知、反馈和统计 |
+| File Service | 8095 | 文件、分类、标签和版本 |
+| `common` | 非运行模块 | 实体、Mapper、安全、幂等、Redis、RabbitMQ 和第三方调用基础设施 |
 
-- **微服务架构** — 6 大服务按业务域拆分（user / attraction / route / collection / file / gateway），Nacos 注册与配置中心
-- **AI 智能体矩阵** — 智能对话、行程生成、智能客服问答、景点智能介绍、个性化推荐、预算估算、旅行攻略生成（通义千问）
-- **多模态 AI** — 文本 + 图像联合问答与搜索，百度 AI 图像识别（类型/标签/描述/相似景点）
-- **路线规划与优化** — `RoutePlanAlgorithm` 混合规划 + **遗传算法 TSP**（种群 100 / 200 代收敛），支持距离/时间/成本/均衡多目标优化，AI 约束注入（偏好 + 时间窗）
-- **实时数据** — 景点实时状态、人流监控与预警
-- **用户社区** — 游记分享、路线收藏/分享/评论、积分统计、点赞通知
-- **可靠消息投递** — RabbitMQ 消息表 + 定时重投 + Redis 幂等，防丢失、防重复
-- **安全与治理** — Spring Security + JWT 网关鉴权、Sentinel 限流熔断、Redis 限流、Druid 监控、统一异常与 `Result<T>` 响应
-- **资源文件管理** — 文件上传/标签/多格式支持，`file-service` 独立服务
-- **一键部署** — Docker Compose 编排 MySQL + Redis + RabbitMQ + 6 微服务 + Nginx 前端，`start-all.bat` 本机一键启动
+### 两种部署模式
 
----
+| 模式 | 服务发现 | MySQL/Redis | RabbitMQ | 适用场景 |
+|------|----------|-------------|----------|----------|
+| Win11 本地脚本 | 内置 Nacos | 本机服务 | 云端 | 当前开发、调试和 JMeter 验收 |
+| Docker Compose | 关闭 Nacos，使用容器 DNS 静态路由 | Compose 容器 | 外部云 broker | 一体化容器展示 |
 
-## 技术栈
+Compose **不包含 Nacos，也不启动本地 RabbitMQ**。
 
-全栈概览（后端完整技术栈详见 [backend/README.md](backend/README.md)，前端详见 [frontend/README.md](frontend/README.md)）：
+## 核心工程设计
 
-| 层级 | 技术 |
-|------|------|
-| 后端 | Spring Boot 3.3.5 · Spring Cloud 2023.0.3 · Spring Cloud Alibaba 2023.0.3.2 · Java 17 · MyBatis-Plus 3.5.8 · Druid 1.2.23 |
-| 前端 | React 19 · TypeScript · Vite 6 · React Router 7 · Axios · Tailwind CSS 4 |
-| 基础设施 | MySQL 8.0 · Redis（Redisson 3.37）· RabbitMQ（可靠消息投递）· Nacos · XXL-Job 2.4.1 |
-| AI | DashScope（通义千问）2.14 · 百度 AI SDK · 高德地图 · OkHttp |
-| 安全与治理 | Spring Security + JWT（jjwt 0.12.5）· Sentinel · Knife4j 4.5 / OpenAPI 3.0 |
-| 算法 | JTS 1.19 几何计算 · 自研遗传算法 TSP |
-| 部署 | Docker · Docker Compose · Nginx |
+### 1. 认证与授权
 
----
+- Gateway 移除客户端伪造的 `X-User-*` 请求头，校验 JWT 后重新注入可信身份。
+- 每个业务服务再次解析 Bearer Token、检查 Redis 黑名单并建立 Spring Security 上下文。
+- 路线、收藏、评论、文件和用户资料写操作执行角色或对象所有权校验。
+- `JWT_SECRET` 为空或不足 32 字节时 Gateway 拒绝启动。
+
+### 2. HTTP 幂等
+
+- 已认证写请求支持 `Idempotency-Key`，前端 Axios 拦截器自动生成并在重试时复用。
+- Redis Lua 原子维护 `PROCESSING` / `COMPLETED` 状态，并缓存首次状态码和响应体。
+- 同键不同请求返回 409，处理中返回 409，完成请求返回原响应并附带 `Idempotency-Replayed: true`。
+- Redis 不可用时返回 503 且不执行写库；关键业务再由 MySQL 唯一键兜底。
+
+### 3. 路线优化一致性
+
+- 同一路线先获取 Redisson 分布式锁，再在事务中使用 `SELECT ... FOR UPDATE` 锁定完整日程。
+- 换位先把旧 `visit_order` 写成 `-id`，再批量写回 1..N，避免临时唯一键冲突。
+- `uk_route_day_visit_order(route_id, day_number, visit_order)` 保证同一天位置唯一。
+- 无变化请求不重复更新、不重复写历史；优化历史在事务提交后写 Redis，缓存失败不回滚 MySQL。
+- 当前 `/route-optimization/apply` 使用显式完整顺序或按天最近邻排序；仓库中的 `GeneticAlgorithmTSP` 属于算法实验，不包装成当前入口的线上最优解。
+
+### 4. RabbitMQ 可靠通知
+
+- publisher confirm、mandatory returned、手动 ACK、5/30/120 秒 TTL 重试队列和 DLQ。
+- Redis 消费状态机做快速幂等，`notification.source_message_id` 唯一键做最终兜底。
+- 重试或死信消息只有获得 broker confirm 且未 returned 后，消费者才 ACK 原消息。
+- 消息状态表支持状态记录和补偿抢占原语；当前尚无自动定时补偿扫描任务，不宣称完整 Outbox 自动重投。
+
+### 5. 真实数据原则
+
+- 路线距离、时长和拥堵来自高德驾车 API 的真实响应；失败时返回 `dataAvailable=false`。
+- 没有历史客流明细时，历史平均和趋势接口明确不可用，不生成随机曲线。
+- 没有可信价格或安全数据时，预算、安全评分和高级攻略接口明确不可用。
+- 大模型输出只作为辅助文本，不作为交通、价格、开放时间或安全事实。
+
+四条完整时序图见 [核心链路时序图](backend/docs/showcase/ARCHITECTURE_SEQUENCE_DIAGRAMS.md)。
+
+## 能力边界
+
+### 已验证并适合主演示
+
+- JWT 登录、角色与对象所有权校验。
+- 景点/城市/餐厅查询、景点点评原子 UPSERT。
+- 路线 CRUD、收藏、评论、分享和路线优化一致性。
+- HTTP 幂等响应复用、Redis 故障 fail-closed、数据库唯一键兜底。
+- RabbitMQ 可靠消费代码与本地测试、JMeter 并发验证资产。
+
+### 需要外部条件
+
+- 高德路线与路况：需要真实 `AMAP_API_KEY`。
+- 云 RabbitMQ：需要 broker 地址和凭据，并显式开启可靠通知开关。
+- 通义千问文本能力：需要 `QWEN_API_KEY`。
+- 百度 URL 图像识别：需要 `BAIDU_*` 和远程图片域名白名单。
+
+### 不可用、遗留或不在范围
+
+- 高级攻略、预算、安全评分和无数据源个性化推荐不作为完成能力。
+- 上传图片综合分析、相似景点和多模态推荐/搜索仍有遗留占位实现，已从演示主线排除。
+- 不建设 Milvus/RAG、短信计费、订单支付、酒店门票库存和历史客流预测。
+
+逐项状态、降级行为和展示红线见 [项目能力边界](backend/docs/showcase/CAPABILITY_BOUNDARIES.md)。
 
 ## 快速开始
 
-> 详细的启动步骤见 [STARTUP_GUIDE.md](STARTUP_GUIDE.md)。本项目主要面向 **Windows 本机 + Linux 虚拟机生产** 双轨部署。
-
 ### 前置条件
 
-- JDK 17+、Maven 3.8+
-- MySQL 8.0（端口 3306）、Redis（端口 6379）
-- Node.js 18+（前端，可选）
-- Docker & Docker Compose（可选，用于一键容器化部署）
+- JDK 17、Maven 3.8+、Node.js 18+
+- MySQL 8、Redis 6+
+- Windows 本地模式需要项目内置 Nacos
+- Docker Compose 模式需要 Docker Desktop，并准备云 RabbitMQ 连接参数
 
-### 方式一：一键启动（Windows）
+### 方式一：Win11 本地模式（当前推荐）
+
+在当前 PowerShell 会话设置数据库、Redis、JWT 和可选外部服务环境变量。`deploy/.env` 只供 Compose 使用，`start-all.bat` 不会自动读取它。
 
 ```powershell
-# 1. 配置数据库密码等环境变量
-Copy-Item deploy\.env.example deploy\.env
+$env:JWT_SECRET = '<至少 32 字节的本地密钥>'
+$env:DB_HOST = '127.0.0.1'
+$env:DB_PORT = '3306'
+$env:DB_NAME = 'travel_website'
+$env:DB_USERNAME = 'root'
+$env:DB_PASSWORD = '<本机 MySQL 密码>'
+$env:REDIS_HOST = '127.0.0.1'
+$env:REDIS_PORT = '6379'
+$env:REDIS_PASSWORD = '<本机 Redis 密码>'
 
-# 2. 一键启动（自动拉起 Nacos、编译并启动 6 个微服务）
 .\start-all.bat
+npm --prefix frontend install
+npm --prefix frontend run dev
 ```
 
-### 方式二：手动启动
+- 前端：`http://localhost:3000`
+- Gateway：`http://localhost:8090`
+- Nacos：`http://localhost:8848/nacos`
 
-```bash
-# 1. 启动 Nacos（地址 http://localhost:8848/nacos，默认 nacos/nacos）
-cd backend/nacos/nacos
-bin/startup.cmd -m standalone
+详细排障步骤见 [STARTUP_GUIDE.md](STARTUP_GUIDE.md)。
 
-# 2. 编译后端
-cd backend
-mvn clean package -DskipTests
+### 方式二：Docker Compose
 
-# 3. 依次启动 6 个微服务（命令与端口详见 backend/README.md「启动服务」）
-
-# 4. 启动前端（可选，或使用 Nginx 托管 dist）
-cd frontend
-npm install
-npm run dev                                                       # http://localhost:3000
-```
-
-### 方式三：Docker Compose 一键部署
-
-```bash
+```powershell
 Copy-Item deploy\.env.example deploy\.env
-docker compose -f deploy/docker-compose.yml up --build -d
+# 编辑 deploy/.env，至少修改密码、JWT_SECRET 和云 RabbitMQ 连接参数
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up --build -d
 ```
 
-一键拉起 **MySQL + Redis + RabbitMQ + 全部微服务 + Nginx 前端**，含健康检查与依赖编排。访问 `http://localhost:8080`；API 经网关 `http://localhost:8090`。
+- Web：`http://localhost:8080`
+- Gateway：`http://localhost:8090`
+- Compose 会启动 MySQL、Redis、5 个业务服务、Gateway 和 Web。
+- Compose 关闭 Nacos/Sentinel/Seata，并通过容器 DNS 使用静态 Gateway 路由。
+- `RABBITMQ_HOST`、账号和密码必须指向外部 broker；可靠通知功能开关默认仍为 `false`。
 
-### 环境变量
+## 关键环境变量
 
-复制 `deploy/.env.example` 为 `deploy/.env` 并填写：`DB_PASSWORD`、`REDIS_PASSWORD`、`RABBITMQ_*`、`JWT_SECRET`、`DRUID_*`；AI 相关密钥（`AMAP_API_KEY`、`BAIDU_*`、`QWEN_API_KEY`）按需填写，不填则对应能力降级。
+| 变量 | 用途 | 默认/要求 |
+|------|------|-----------|
+| `JWT_SECRET` | JWT 签名 | 必填，至少 32 字节 |
+| `DB_*` | MySQL | 本地默认 `127.0.0.1:3306/travel_website` |
+| `REDIS_*` | Redis、锁、缓存、幂等 | 本地默认 `127.0.0.1:6379` |
+| `RABBITMQ_*` | 云 RabbitMQ | 外部验收时必填 |
+| `MQ_RELIABLE_NOTIFICATION_*_ENABLED` | 拓扑、生产者、消费者开关 | 默认 `false` |
+| `MQ_STATUS_PERSISTENCE_ENABLED` | 消息状态表 | 默认 `false` |
+| `AMAP_API_KEY` | 高德 Web 服务 | 真实交通必填 |
+| `QWEN_API_KEY` | 通义千问 | 文本 AI 可选 |
+| `BAIDU_*` | 百度 AI | 图像识别可选 |
+| `CAPTCHA_DEMO_MODE` | 本地验证码展示 | 默认 `false`，公开环境禁止开启 |
 
----
+模板见 [deploy/.env.example](deploy/.env.example)。
 
-## API 使用示例
+## API 示例
 
-统一响应结构：`{ "code": 200, "message": "操作成功", "data": {...}, "timestamp": 1704067200000, "success": true }`。
+统一入口为 `http://localhost:8090/api/**`，响应使用 `Result<T>`。
 
-所有请求经网关 `http://localhost:8090/api/**`。完整接口表见 [backend/README.md](backend/README.md#主要-api)，以下为代表性调用示例：
+```powershell
+$baseUrl = 'http://127.0.0.1:8090/api'
 
-### 用户登录
+# 公开景点查询
+Invoke-RestMethod "$baseUrl/attractions"
 
-```bash
-curl -X POST http://localhost:8090/api/users/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"123456"}'
-# 返回 token，后续请求携带 Authorization: Bearer <token>
+# 登录
+$login = Invoke-RestMethod -Method Post `
+  -Uri "$baseUrl/users/login" `
+  -ContentType 'application/json' `
+  -Body (@{ username = '<账号>'; password = '<密码>' } | ConvertTo-Json)
+
+$headers = @{ Authorization = "Bearer $($login.data.token)" }
+Invoke-RestMethod -Headers $headers "$baseUrl/routes/my"
 ```
 
-### AI 智能对话
+幂等重放、路线优化、高德和 RabbitMQ 的完整演示命令见 [五分钟演示脚本](backend/docs/showcase/DEMO_SCRIPT_5_MINUTES.md)。
 
-```bash
-curl -X POST http://localhost:8090/api/ai/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message":"推荐杭州 3 天 2 晚的亲子游路线"}'
+## 验证与压测
+
+```powershell
+# 后端全量测试
+.\mvnw.cmd -q -f backend\pom.xml clean test
+
+# 前端静态检查与构建
+npm --prefix frontend run lint
+npm --prefix frontend run build
+
+# 100 并发场景
+.\ops\jmeter\run-idempotency-test.ps1 -Threads 100
+.\ops\jmeter\run-attraction-review-upsert-test.ps1 -Threads 100
+.\ops\jmeter\run-route-comment-like-test.ps1 -Threads 100
+.\ops\jmeter\run-route-optimization-test.ps1 -Threads 100
 ```
 
-### AI 行程生成
-
-```bash
-curl -X POST http://localhost:8090/api/ai/itinerary/generate \
-  -H "Content-Type: application/json" \
-  -d '{"destination":"杭州","days":3,"preferences":{"theme":"亲子","budget":"经济"}}'
-```
-
-### 智能路线规划（约束 + 偏好）
-
-```bash
-curl -X POST http://localhost:8090/api/ai/advanced/plan \
-  -H "Content-Type: application/json" \
-  -d '{"preferences":{"startCityId":1,"days":3,"theme":"自然风光"},"constraints":{"maxTravelTimePerDay":6,"preferedStartTime":"09:00"}}'
-```
-
-### 图像分析（多模态）
-
-```bash
-curl -X POST http://localhost:8090/api/ai/image-analysis \
-  -H "Content-Type: application/json" \
-  -d '{"imageUrl":"https://example.com/photo.jpg","analysisType":"attraction-recognition"}'
-```
-
-### 路线优化（遗传算法）
-
-```bash
-curl -X GET "http://localhost:8090/api/routes/smart/list?cityId=1&optimizationType=distance&limit=5"
-```
-
-### 文件上传
-
-```bash
-curl -X POST -F "file=@guide.pdf" http://localhost:8090/api/file/upload
-```
-
----
+JMeter 使用和指标解释见 [JMETER_IDEMPOTENCY_TEST.md](backend/docs/performance/JMETER_IDEMPOTENCY_TEST.md)。
 
 ## 项目结构
 
-```
+```text
 travel/
-├── backend/            # Spring Cloud 多模块后端（common / gateway / user-service / attraction-service /
-│                       #   route-service / collection-service / file-service）
-│                       #   ※ 技术栈、模块结构、启动与 API 详见 backend/README.md
-├── frontend/           # React 19 + Vite + TypeScript（详见 frontend/README.md）
-├── deploy/             # Docker Compose / Dockerfile / Nginx / 环境变量模板
-├── docs/               # 实习指南、数据库实验报告
-├── ops/scripts/        # 运维脚本（健康检查等）
-├── scripts/            # 开发脚本（API smoke 测试）
-├── start-all.bat / stop-all.bat   # Windows 一键启动/停止
-└── STARTUP_GUIDE.md    # 详细启动指南
+├── backend/                 # Maven 多模块后端
+│   ├── common/
+│   ├── gateway/
+│   ├── user-service/
+│   ├── attraction-service/
+│   ├── route-service/
+│   ├── collection-service/
+│   ├── file-service/
+│   └── docs/
+├── frontend/                # React 19 + TypeScript + Vite
+├── deploy/                  # Docker Compose、Dockerfile、Nginx、环境变量模板
+├── ops/                     # JMeter、高德、RabbitMQ 与运维脚本
+├── run-logs/                # 本地验收证据（运行时生成）
+├── start-all.bat
+└── STARTUP_GUIDE.md
 ```
 
----
+## 展示文档
 
-## 服务端口一览
-
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| Gateway | 8090 | API 网关（鉴权 + 限流） |
-| User Service | 8091 | 用户与认证 |
-| Attraction Service | 8092 | 景点/城市/美食/实时 |
-| Route Service | 8093 | 路线/算法/AI 智能体 |
-| Collection Service | 8094 | 社区/收藏/评论/通知 |
-| File Service | 8095 | 文件管理 |
-| Nacos | 8848 | 注册与配置中心 |
-| MySQL | 3306 | 数据库 |
-| Redis | 6379 | 缓存/锁/限流 |
-| RabbitMQ | 5672 / 15672 | 可靠消息 |
-| Frontend | 3000 | 前端开发服务器 |
-| Nginx(容器) | 8080 | 前端生产托管 |
-
----
+- [核心链路时序图](backend/docs/showcase/ARCHITECTURE_SEQUENCE_DIAGRAMS.md)
+- [项目能力边界](backend/docs/showcase/CAPABILITY_BOUNDARIES.md)
+- [五分钟演示脚本](backend/docs/showcase/DEMO_SCRIPT_5_MINUTES.md)
+- [验收证据索引](backend/docs/showcase/EVIDENCE_INDEX.md)
+- [业务与工程治理计划](backend/docs/PROJECT_HARDENING_PLAN.md)
+- [RabbitMQ 云端配置](backend/docs/infrastructure/RABBITMQ_CLOUD_CONFIGURATION.md)
+- [后端说明](backend/README.md)
+- [前端说明](frontend/README.md)
 
 ## 面试价值
 
-该项目适用于以下面试场景：
-
-### Java 后端岗
-
-| 知识点 | 项目体现 |
-|--------|---------|
-| 微服务架构 | Spring Cloud Alibaba 全套、按业务域拆分 6 服务、OpenFeign 服务编排 |
-| 网关 | Gateway 路由、JWT 全局鉴权、Sentinel 限流熔断 |
-| 消息队列 | RabbitMQ 可靠投递：消息表 + 定时重投 + Redis 幂等 |
-| 分布式锁 | Redisson 分布式锁、缓存一致性 |
-| 数据库优化 | 20 表设计、Druid 连接池、索引与逻辑删除规范 |
-| 安全 | Spring Security + JWT、接口鉴权 |
-
-### AI 应用岗
-
-| 知识点 | 项目体现 |
-|--------|---------|
-| AI Agent 集成 | DashScope 通义千问对话/行程/攻略/预算估算 |
-| 多模态 | 文本 + 图像联合问答、百度 AI 图像识别 |
-| 智能推荐 | 个性化推荐、相似景点、实时调整 |
-| 路径算法 | 遗传算法 TSP、多目标优化（距离/时间/成本） |
-
----
-
-## Contributors
-
-Thanks to the people who have contributed to this project:
-
-<a href="https://github.com/888newstep">
-  <img src="https://github.com/888newstep.png" width="40px" alt="888newstep" />
-</a>
-
-> Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions are welcome!
-
----
+- **幂等性**：为什么要同时使用入口状态机、业务锁和数据库唯一键。
+- **并发一致性**：分布式锁、行锁、事务边界和唯一约束如何协作。
+- **消息可靠性**：confirm、returned、manual ACK、TTL 重试、DLQ 与消费幂等。
+- **外部依赖治理**：超时、响应体上限、并发舱壁、Key 脱敏和明确降级。
+- **数据可信度**：没有数据源时为何返回不可用，而不是生成漂亮但不可验证的数据。
+- **工程验证**：单元测试、真实服务集成、JMeter 指标和数据库最终状态如何形成证据链。
 
 ## License
 

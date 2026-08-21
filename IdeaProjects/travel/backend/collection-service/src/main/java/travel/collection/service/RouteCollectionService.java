@@ -9,6 +9,11 @@ import java.util.List;
 public interface RouteCollectionService extends IService<RouteCollection> {
 
     /**
+     * 原子切换当前用户的路线收藏状态，返回切换后的状态。
+     */
+    boolean toggleCollection(Integer routeId, Integer userId);
+
+    /**
      * 收藏路线
      */
     boolean collectRoute(Integer routeId, Integer userId);
@@ -27,6 +32,8 @@ public interface RouteCollectionService extends IService<RouteCollection> {
      * 获取用户的收藏列表
      */
     List<RouteCollectionVO> getUserCollections(Integer userId, int page, int size);
+
+    List<RouteCollectionVO> getUserCollectionsByCategory(Integer userId, String category, int page, int size);
 
     /**
      * 统计用户的收藏数量
@@ -71,5 +78,5 @@ public interface RouteCollectionService extends IService<RouteCollection> {
     /**
      * 批量删除收藏
      */
-    int batchRemoveCollections(List<Integer> ids);
+    int batchRemoveCollections(List<Integer> ids, Integer userId);
 }

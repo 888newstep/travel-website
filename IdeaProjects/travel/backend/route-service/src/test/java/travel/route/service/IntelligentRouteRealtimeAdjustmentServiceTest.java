@@ -16,6 +16,7 @@ import travel.route.dto.route.RealTimeLocation;
 import travel.route.dto.route.RealTimeTrafficFactors;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,6 +31,8 @@ class IntelligentRouteRealtimeAdjustmentServiceTest {
     private AttractionService attractionService;
     @Mock
     private RouteAttractionService routeAttractionService;
+    @Mock
+    private RouteRealTimeAdjustmentService routeRealTimeAdjustmentService;
 
     @InjectMocks
     private IntelligentRouteRealtimeAdjustmentService intelligentRouteRealtimeAdjustmentService;
@@ -48,12 +51,18 @@ class IntelligentRouteRealtimeAdjustmentServiceTest {
                 buildAttraction(201, "Museum", "博物馆 历史", 10),
                 buildAttraction(202, "Indoor", "室内 文化", 10)
         ));
-        when(attractionService.getById(201)).thenReturn(buildAttraction(201, "Museum", "博物馆 历史", 10));
+        when(routeRealTimeAdjustmentService.getRealTimeTrafficInfo(1L)).thenReturn(Map.of(
+                "dataAvailable", true,
+                "segment:101-102", "heavy"));
+        when(routeRealTimeAdjustmentService.getRealTimeAttractionStatus(List.of(101L, 102L)))
+                .thenReturn(Map.of(
+                        101L, Map.of("weather", "rainy", "crowdLevel", 2),
+                        102L, Map.of("weather", "rainy", "crowdLevel", 4)));
 
         RealTimeAdjustmentResult result = intelligentRouteRealtimeAdjustmentService.getRealTimeAdjustment(
                 1,
-                request(new RealTimeLocation(31.2, 121.5), "rainy",
-                        List.of("Road-A", "Road-B"), List.of(201))
+                request(new RealTimeLocation(31.2, 121.5), "sunny",
+                        List.of("client-road"), List.of(999))
         );
 
         assertEquals(1, result.getRouteId());
@@ -61,7 +70,12 @@ class IntelligentRouteRealtimeAdjustmentServiceTest {
         assertEquals(3, result.getAdjustments().size());
         assertEquals(2, result.getAlternativeAttractions().size());
         assertTrue(result.getAdjustments().get(0).contains("indoor"));
-        assertTrue(result.getAdjustments().get(1).contains("Road-A"));
+        assertTrue(result.getAdjustments().get(1).contains("segment:101-102"));
+        assertTrue(result.getAdjustments().get(2).contains("B"));
+        assertEquals("rainy", result.getRealTimeFactors().getWeather());
+        assertEquals(List.of("segment:101-102"),
+                result.getRealTimeFactors().getTraffic().getCongestedRoutes());
+        assertEquals(List.of(102), result.getRealTimeFactors().getCrowd().getCrowdedAttractions());
     }
 
     @Test
@@ -72,6 +86,9 @@ class IntelligentRouteRealtimeAdjustmentServiceTest {
         route.setCityId(20);
         when(routeService.getById(2)).thenReturn(route);
         when(routeAttractionService.getByRouteIdOrderByDayAndVisit(2L)).thenReturn(List.of());
+        when(routeRealTimeAdjustmentService.getRealTimeTrafficInfo(2L)).thenReturn(Map.of(
+                "dataAvailable", false,
+                "source", "amap"));
 
         RealTimeAdjustmentResult result = intelligentRouteRealtimeAdjustmentService.getRealTimeAdjustment(2, new RealTimeAdjustmentRequest());
 
@@ -79,8 +96,8 @@ class IntelligentRouteRealtimeAdjustmentServiceTest {
         assertTrue(result.getAdjustments().isEmpty());
         assertTrue(result.getAlternativeAttractions().isEmpty());
         assertEquals(null, result.getRealTimeFactors().getWeather());
-        assertEquals(null, result.getRealTimeFactors().getTraffic());
-        assertEquals(null, result.getRealTimeFactors().getCrowd());
+        assertTrue(result.getRealTimeFactors().getTraffic().getCongestedRoutes().isEmpty());
+        assertTrue(result.getRealTimeFactors().getCrowd().getCrowdedAttractions().isEmpty());
         assertTrue(result.getRealTimeFactors().getExtensions() == null
                 || result.getRealTimeFactors().getExtensions().isEmpty());
     }

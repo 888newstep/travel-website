@@ -6,6 +6,7 @@ import travel.collection.service.RouteCollectionService;
 import travel.collection.service.RouteShareService;
 import travel.collection.service.TravelNoteService;
 import travel.collection.service.UserStatisticsService;
+import travel.common.security.AuthenticatedUserSupport;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -22,6 +23,7 @@ public class UserStatisticsServiceImpl implements UserStatisticsService {
 
     @Override
     public Map<String, Object> getUserStats(Integer userId) {
+        userId = AuthenticatedUserSupport.requireIntegerUserId();
         if (userId == null || userId <= 0) {
             log.warn("无效的用户ID: {}", userId);
             return new HashMap<>();

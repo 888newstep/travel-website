@@ -3,9 +3,13 @@ package travel.attraction.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import travel.common.enums.ErrorCodeEnum;
 import travel.common.entity.travel_realtime.AttractionRealtimeStatus;
+import travel.common.exception.BusinessException;
 import travel.common.mapper.travel_realtime_mapper.AttractionRealtimeStatusMapper;
 import travel.common.utils.AMapService;
+import travel.common.utils.CacheUtil;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -18,46 +22,48 @@ public class RealtimeTrafficService {
 
     private final AttractionRealtimeStatusMapper realtimeStatusMapper;
     private final AMapService aMapService;
+    private final CacheUtil cacheUtil;
 
     /**
      * 更新景点实时状态
      */
     public void updateAttractionRealtimeStatus(Long attractionId, Double longitude, Double latitude) {
+        AttractionRealtimeStatus existing = realtimeStatusMapper.selectByAttractionId(attractionId);
         AttractionRealtimeStatus status = new AttractionRealtimeStatus();
         status.setAttractionId(attractionId);
 
-        // 获取实时天气信息（根据景点位置获取）
-        if (longitude != null && latitude != null) {
-            String location = longitude + "," + latitude;
-            Map<String, Object> weather = aMapService.getWeatherByLocation(location);
-            if (weather != null) {
-                status.setWeather((String) weather.get("dayweather"));
-                status.setTemperature((Integer) weather.get("daytemp"));
-            }
-        } else {
-            // 降级方案：使用城市代码
-            Map<String, Object> weather = aMapService.getWeather("110000");
-            if (weather != null) {
-                status.setWeather((String) weather.get("dayweather"));
-                status.setTemperature((Integer) weather.get("daytemp"));
-            }
+        if (longitude == null || latitude == null
+                || longitude < -180 || longitude > 180
+                || latitude < -90 || latitude > 90) {
+            throw new BusinessException(ErrorCodeEnum.REALTIME_DATA_FETCH_FAILED);
+        }
+        String location = longitude + "," + latitude;
+        Map<String, Object> weather = aMapService.getWeatherByLocation(location);
+        applyWeather(status, weather);
+
+        if (status.getWeather() == null && status.getTemperature() == null) {
+            throw new BusinessException(ErrorCodeEnum.REALTIME_DATA_FETCH_FAILED);
         }
 
-        // TODO: 集成真实的人流数据API，目前使用模拟数据
-        status.setCrowdCount((int) (Math.random() * 1000));
-        status.setCrowdLevel((int) (Math.random() * 5) + 1);
+        // 当前仅接入真实天气数据；人流供应商接入前保留已有值，禁止写入模拟数据。
+        if (existing != null) {
+            status.setCrowdCount(existing.getCrowdCount());
+            status.setCrowdLevel(existing.getCrowdLevel());
+        }
 
         status.setUpdateTime(LocalDateTime.now());
         status.setDeleted(0);
 
         // 检查是否已存在记录
-        AttractionRealtimeStatus existing = realtimeStatusMapper.selectByAttractionId(attractionId);
         if (existing != null) {
             status.setId(existing.getId());
             realtimeStatusMapper.updateById(status);
         } else {
             realtimeStatusMapper.insert(status);
         }
+
+        cacheUtil.delete("attraction:status:" + attractionId);
+        cacheUtil.delete("attraction:active_warns");
 
         log.info("更新景点实时状态成功: attractionId={}", attractionId);
     }
@@ -72,13 +78,39 @@ public class RealtimeTrafficService {
     /**
      * 批量更新景点实时状态
      */
+    @Transactional(rollbackFor = Exception.class)
     public void batchUpdateAttractionsRealtimeStatus(List<Map<String, Object>> attractions) {
         for (Map<String, Object> attraction : attractions) {
             Long attractionId = ((Number) attraction.get("id")).longValue();
-            Double longitude = (Double) attraction.get("longitude");
-            Double latitude = (Double) attraction.get("latitude");
+            Double longitude = toDouble(attraction.get("longitude"));
+            Double latitude = toDouble(attraction.get("latitude"));
             updateAttractionRealtimeStatus(attractionId, longitude, latitude);
         }
+
+    }
+
+    private void applyWeather(AttractionRealtimeStatus status, Map<String, Object> weather) {
+        if (weather == null) {
+            return;
+        }
+        Object weatherValue = weather.get("weather");
+        Object temperatureValue = weather.get("temperature");
+        if (weatherValue != null) {
+            status.setWeather(weatherValue.toString());
+        }
+        if (temperatureValue instanceof Number number) {
+            status.setTemperature(number.intValue());
+        } else if (temperatureValue != null) {
+            try {
+                status.setTemperature(Integer.valueOf(temperatureValue.toString()));
+            } catch (NumberFormatException exception) {
+                log.warn("忽略无法解析的天气温度: value={}", temperatureValue);
+            }
+        }
+    }
+
+    private Double toDouble(Object value) {
+        return value instanceof Number number ? number.doubleValue() : null;
     }
 
     /**
@@ -86,17 +118,6 @@ public class RealtimeTrafficService {
      */
     public List<AttractionRealtimeStatus> getCrowdedAttractions(int minCrowdLevel) {
         return realtimeStatusMapper.selectByCrowdLevel(minCrowdLevel);
-    }
-
-    /**
-     * 获取历史平均人流
-     */
-    public Integer getHistoricalAvgCrowdCount(Long attractionId) {
-        AttractionRealtimeStatus status = realtimeStatusMapper.selectByAttractionId(attractionId);
-        if (status != null && status.getCrowdCount() != null) {
-            return status.getCrowdCount();
-        }
-        return 0;
     }
 
     /**
@@ -123,22 +144,4 @@ public class RealtimeTrafficService {
         return count;
     }
 
-    /**
-     * 获取7天平均人流
-     */
-    public Integer get7DaysAvgCrowdCount(Long attractionId) {
-        AttractionRealtimeStatus status = realtimeStatusMapper.selectByAttractionId(attractionId);
-        if (status != null && status.getCrowdCount() != null) {
-            return status.getCrowdCount();
-        }
-        return 0;
-    }
-
-    /**
-     * 获取活跃预警
-     */
-    public List<?> getActiveWarns() {
-        // TODO: 实现预警功能
-        return List.of();
-    }
 }

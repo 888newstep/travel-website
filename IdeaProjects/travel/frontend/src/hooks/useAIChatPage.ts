@@ -1,6 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { aiApi } from '../api/ai.api'
-import { dictionaryApi } from '../api/dictionary.api'
 
 interface TabItem {
   key: string
@@ -17,12 +16,8 @@ const defaultTabs: TabItem[] = [
   { key: 'recommend', label: '智能推荐' },
   { key: 'itinerary', label: '行程生成' },
   { key: 'image', label: '图像识别' },
-  { key: 'multimodal', label: '多模态问答' },
-  { key: 'budget', label: '预算估算' },
   { key: 'assistant', label: '旅行顾问' },
   { key: 'plan', label: '路线规划' },
-  { key: 'safety', label: '安全建议' },
-  { key: 'voice', label: '语音处理' },
 ]
 
 export function stringifyResult(value: unknown) {
@@ -70,7 +65,7 @@ function parseKeyValueText(value: string) {
 }
 
 export function useAIChatPage() {
-  const [tabs, setTabs] = useState<TabItem[]>(defaultTabs)
+  const tabs = defaultTabs
   const [activeTab, setActiveTab] = useState('chat')
 
   const [input, setInput] = useState('')
@@ -102,21 +97,6 @@ export function useAIChatPage() {
   const [imageResult, setImageResult] = useState<any>(null)
   const [imageError, setImageError] = useState('')
 
-  const [multimodalForm, setMultimodalForm] = useState({ text: '', image: '' })
-  const [multimodalLoading, setMultimodalLoading] = useState(false)
-  const [multimodalResult, setMultimodalResult] = useState('')
-
-  const [budgetForm, setBudgetForm] = useState({
-    destination: '',
-    days: '',
-    budget: '',
-    people: '',
-    style: '',
-  })
-  const [budgetLoading, setBudgetLoading] = useState(false)
-  const [budgetResult, setBudgetResult] = useState('')
-  const [budgetError, setBudgetError] = useState('')
-
   const [assistantInput, setAssistantInput] = useState('')
   const [assistantLoading, setAssistantLoading] = useState(false)
   const [assistantMessages, setAssistantMessages] = useState<ChatMessage[]>([])
@@ -126,29 +106,10 @@ export function useAIChatPage() {
   const [planResult, setPlanResult] = useState<any>(null)
   const [planError, setPlanError] = useState('')
 
-  const [safetyCityId, setSafetyCityId] = useState('')
-  const [safetyLoading, setSafetyLoading] = useState(false)
-  const [safetyResult, setSafetyResult] = useState<any>(null)
-  const [safetyError, setSafetyError] = useState('')
-
-  const [voiceText, setVoiceText] = useState('')
-  const [voiceLoading, setVoiceLoading] = useState(false)
-  const [voiceResult, setVoiceResult] = useState('')
-  const [voiceError, setVoiceError] = useState('')
-
   const chatBoxRef = useRef<HTMLDivElement | null>(null)
   const assistantBoxRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    dictionaryApi
-      .getByType('ai_tabs')
-      .then((response) => {
-        if (Array.isArray(response) && response.length) {
-          setTabs(response.map((item) => ({ key: item.key, label: item.label })))
-        }
-      })
-      .catch(() => {})
-
     aiApi
       .getImageAnalysisTypes()
       .then((response) => {
@@ -275,49 +236,6 @@ export function useAIChatPage() {
     }
   }
 
-  async function runMultimodalQuery() {
-    if (!multimodalForm.text.trim()) {
-      return
-    }
-
-    setMultimodalLoading(true)
-    setMultimodalResult('')
-
-    try {
-      const response = await aiApi.multimodalQuery({
-        text: multimodalForm.text,
-        image: multimodalForm.image || undefined,
-      })
-      setMultimodalResult(getMessageText(response))
-    } catch (error) {
-      setMultimodalResult(getAIErrorMessage(error))
-    } finally {
-      setMultimodalLoading(false)
-    }
-  }
-
-  async function getBudgetAdvice() {
-    setBudgetError('')
-    setBudgetResult('')
-    setBudgetLoading(true)
-
-    const payload: Record<string, any> = {}
-    if (budgetForm.destination) payload.destination = budgetForm.destination
-    if (budgetForm.days) payload.days = Number(budgetForm.days)
-    if (budgetForm.budget) payload.budget = Number(budgetForm.budget)
-    if (budgetForm.people) payload.people = Number(budgetForm.people)
-    if (budgetForm.style) payload.style = budgetForm.style
-
-    try {
-      const response = await aiApi.getBudgetEstimation(payload)
-      setBudgetResult(getMessageText(response))
-    } catch (error) {
-      setBudgetError(getAIErrorMessage(error))
-    } finally {
-      setBudgetLoading(false)
-    }
-  }
-
   async function sendAssistantQuery() {
     const query = assistantInput.trim()
     if (!query || assistantLoading) {
@@ -356,46 +274,6 @@ export function useAIChatPage() {
     }
   }
 
-  async function fetchSafetyAdvice() {
-    const cityId = safetyCityId.trim()
-    if (!cityId) {
-      return
-    }
-
-    setSafetyError('')
-    setSafetyResult(null)
-    setSafetyLoading(true)
-
-    try {
-      const response = await aiApi.getSafetyAdvice(Number(cityId))
-      setSafetyResult(response?.data || response)
-    } catch (error) {
-      setSafetyError(getAIErrorMessage(error))
-    } finally {
-      setSafetyLoading(false)
-    }
-  }
-
-  async function processVoice() {
-    const text = voiceText.trim()
-    if (!text) {
-      return
-    }
-
-    setVoiceError('')
-    setVoiceResult('')
-    setVoiceLoading(true)
-
-    try {
-      const response = await aiApi.processVoice({ audioData: null, text })
-      setVoiceResult(getMessageText(response))
-    } catch (error) {
-      setVoiceError(getAIErrorMessage(error))
-    } finally {
-      setVoiceLoading(false)
-    }
-  }
-
   return {
     tabs,
     activeTab,
@@ -420,15 +298,6 @@ export function useAIChatPage() {
     imageLoading,
     imageResult,
     imageError,
-    multimodalForm,
-    setMultimodalForm,
-    multimodalLoading,
-    multimodalResult,
-    budgetForm,
-    setBudgetForm,
-    budgetLoading,
-    budgetResult,
-    budgetError,
     assistantInput,
     setAssistantInput,
     assistantLoading,
@@ -438,16 +307,6 @@ export function useAIChatPage() {
     planLoading,
     planResult,
     planError,
-    safetyCityId,
-    setSafetyCityId,
-    safetyLoading,
-    safetyResult,
-    safetyError,
-    voiceText,
-    setVoiceText,
-    voiceLoading,
-    voiceResult,
-    voiceError,
     chatBoxRef,
     assistantBoxRef,
     totalMessages,
@@ -456,11 +315,7 @@ export function useAIChatPage() {
     getRecommendation,
     generateItinerary,
     analyzeImage,
-    runMultimodalQuery,
-    getBudgetAdvice,
     sendAssistantQuery,
     planRoute,
-    fetchSafetyAdvice,
-    processVoice,
   }
 }

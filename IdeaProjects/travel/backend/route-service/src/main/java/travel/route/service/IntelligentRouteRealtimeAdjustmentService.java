@@ -7,7 +7,8 @@ import org.springframework.stereotype.Service;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.route_planning.RouteAttraction;
 import travel.common.entity.travel_recommendation.Attraction;
-import travel.common.utils.ExceptionUtil;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
 import travel.route.dto.route.RealTimeAdjustmentRequest;
 import travel.route.dto.route.RealTimeAlternativeAttraction;
 import travel.route.dto.route.RealTimeCrowdFactors;
@@ -16,7 +17,9 @@ import travel.route.dto.route.RealTimeAdjustmentResult;
 import travel.route.dto.route.RealTimeTrafficFactors;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -29,58 +32,91 @@ public class IntelligentRouteRealtimeAdjustmentService {
     private final RouteService routeService;
     private final AttractionService attractionService;
     private final RouteAttractionService routeAttractionService;
+    private final RouteRealTimeAdjustmentService routeRealTimeAdjustmentService;
 
     public RealTimeAdjustmentResult getRealTimeAdjustment(Integer routeId, RealTimeAdjustmentRequest request) {
-        try {
-            log.info("Get realtime route adjustment: routeId={}, request={}", routeId, request);
-
-            RealTimeFactors safeFactors = request == null || request.getRealTimeFactors() == null
-                    ? new RealTimeFactors() : request.getRealTimeFactors();
-            Route route = routeService.getById(routeId);
-            ExceptionUtil.checkNotNull(route, "Route not found");
-
-            getRouteAttractions(routeId.longValue());
-            String weather = Objects.toString(safeFactors.getWeather(), "sunny");
-            RealTimeTrafficFactors traffic = safeFactors.getTraffic();
-            RealTimeCrowdFactors crowd = safeFactors.getCrowd();
-
-            List<String> adjustments = new ArrayList<>();
-            List<RealTimeAlternativeAttraction> alternativeAttractions = new ArrayList<>();
-
-            if ("rainy".equalsIgnoreCase(weather)) {
-                adjustments.add("Prefer indoor attractions because of rainy weather.");
-                alternativeAttractions.addAll(getAlternativeIndoorAttractions(resolveRouteCityId(route)));
-            }
-
-            List<String> congestedRoutes = traffic == null || traffic.getCongestedRoutes() == null
-                    ? List.of() : traffic.getCongestedRoutes();
-            if (!congestedRoutes.isEmpty()) {
-                adjustments.add("Avoid congested segments: " + String.join(", ", congestedRoutes));
-            }
-
-            List<Integer> crowdedAttractions = crowd == null || crowd.getCrowdedAttractions() == null
-                    ? List.of() : crowd.getCrowdedAttractions();
-            if (!crowdedAttractions.isEmpty()) {
-                adjustments.add("Avoid crowded attractions: " + crowdedAttractions.stream()
-                        .map(id -> {
-                            Attraction attraction = attractionService.getById(id);
-                            return attraction != null ? attraction.getName() : String.valueOf(id);
-                        })
-                        .collect(Collectors.joining(", ")));
-            }
-
-            return RealTimeAdjustmentResult.builder()
-                    .routeId(routeId)
-                    .routeName(route.getTitle())
-                    .adjustments(adjustments)
-                    .alternativeAttractions(alternativeAttractions)
-                    .currentLocation(request == null ? null : request.getCurrentLocation())
-                    .realTimeFactors(safeFactors)
-                    .build();
-        } catch (Exception e) {
-            log.error("Get realtime route adjustment failed: routeId={}", routeId, e);
-            throw new RuntimeException("Get realtime route adjustment failed: " + e.getMessage(), e);
+        log.info("Get realtime route adjustment: routeId={}", routeId);
+        Route route = routeService.getById(routeId);
+        if (route == null) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
         }
+
+        List<Attraction> routeAttractions = getRouteAttractions(routeId.longValue());
+        List<Long> attractionIds = routeAttractions.stream()
+                .map(Attraction::getId)
+                .filter(Objects::nonNull)
+                .map(Integer::longValue)
+                .toList();
+        Map<String, Object> trafficInfo = routeRealTimeAdjustmentService
+                .getRealTimeTrafficInfo(routeId.longValue());
+        Map<Long, Map<String, Object>> attractionStatus = attractionIds.isEmpty()
+                ? Map.of()
+                : routeRealTimeAdjustmentService.getRealTimeAttractionStatus(attractionIds);
+
+        List<String> congestedRoutes = trafficInfo.entrySet().stream()
+                .filter(entry -> entry.getKey().startsWith("segment:"))
+                .filter(entry -> "heavy".equals(entry.getValue()) || "severe".equals(entry.getValue()))
+                .map(Map.Entry::getKey)
+                .toList();
+        List<Integer> crowdedAttractions = attractionStatus.entrySet().stream()
+                .filter(entry -> crowdLevel(entry.getValue()) >= 4)
+                .map(entry -> Math.toIntExact(entry.getKey()))
+                .toList();
+        String weather = attractionStatus.values().stream()
+                .map(status -> Objects.toString(status.get("weather"), null))
+                .filter(Objects::nonNull)
+                .filter(value -> !value.isBlank())
+                .findFirst()
+                .orElse(null);
+
+        RealTimeTrafficFactors trafficFactors = new RealTimeTrafficFactors();
+        trafficFactors.setCongestedRoutes(congestedRoutes);
+        RealTimeCrowdFactors crowdFactors = new RealTimeCrowdFactors();
+        crowdFactors.setCrowdedAttractions(crowdedAttractions);
+        RealTimeFactors actualFactors = new RealTimeFactors();
+        actualFactors.setWeather(weather);
+        actualFactors.setTraffic(trafficFactors);
+        actualFactors.setCrowd(crowdFactors);
+
+        List<String> adjustments = new ArrayList<>();
+        List<RealTimeAlternativeAttraction> alternativeAttractions = new ArrayList<>();
+        if (isRainy(weather)) {
+            adjustments.add("Prefer indoor attractions because of rainy weather.");
+            alternativeAttractions.addAll(getAlternativeIndoorAttractions(resolveRouteCityId(route)));
+        }
+        if (!congestedRoutes.isEmpty()) {
+            adjustments.add("Avoid congested segments: " + String.join(", ", congestedRoutes));
+        }
+        if (!crowdedAttractions.isEmpty()) {
+            Map<Integer, String> attractionNames = new LinkedHashMap<>();
+            routeAttractions.forEach(attraction -> attractionNames.put(
+                    attraction.getId(), Objects.toString(attraction.getName(), attraction.getId().toString())));
+            adjustments.add("Avoid crowded attractions: " + crowdedAttractions.stream()
+                    .map(id -> attractionNames.getOrDefault(id, id.toString()))
+                    .collect(Collectors.joining(", ")));
+        }
+
+        return RealTimeAdjustmentResult.builder()
+                .routeId(routeId)
+                .routeName(route.getTitle())
+                .adjustments(adjustments)
+                .alternativeAttractions(alternativeAttractions)
+                .currentLocation(request == null ? null : request.getCurrentLocation())
+                .realTimeFactors(actualFactors)
+                .build();
+    }
+
+    private int crowdLevel(Map<String, Object> status) {
+        Object value = status == null ? null : status.get("crowdLevel");
+        return value instanceof Number number ? number.intValue() : 0;
+    }
+
+    private boolean isRainy(String weather) {
+        if (weather == null) {
+            return false;
+        }
+        String normalized = weather.trim().toLowerCase();
+        return normalized.contains("rain") || normalized.contains("雨");
     }
 
     private List<Attraction> getRouteAttractions(Long routeId) {

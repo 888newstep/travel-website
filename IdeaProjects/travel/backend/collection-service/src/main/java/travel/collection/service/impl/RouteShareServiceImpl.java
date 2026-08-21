@@ -9,6 +9,8 @@ import travel.common.entity.user_community.User;
 import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
 import travel.common.mapper.route_planning_mapper.RouteShareMapper;
+import travel.common.mapper.user_community_mapper.TravelNoteMapper;
+import travel.common.mapper.travel_recommendation_mapper.ResourceFileMapper;
 import travel.collection.service.RouteService;
 import travel.collection.service.RouteShareService;
 import travel.collection.service.UserService;
@@ -35,6 +37,8 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
     private final RouteService routeService;
     private final UserService userService;
     private final CacheUtil cacheUtil;
+    private final TravelNoteMapper travelNoteMapper;
+    private final ResourceFileMapper resourceFileMapper;
 
     private static final String SHARE_CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     private static final int SHARE_CODE_LENGTH = 16;
@@ -274,7 +278,7 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
         }
 
         // 校验归属
-        if (routeShare.getUser() == null || !routeShare.getUser().getId().equals(userId)) {
+        if (!userId.equals(routeShare.getUserId())) {
             throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
         }
 
@@ -316,9 +320,17 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
     }
 
     @Override
-    public Map<String, Object> getShareStatistics(Long shareId) {
-        if (shareId == null || shareId <= 0) {
+    public Map<String, Object> getShareStatistics(Long shareId, Integer userId) {
+        if (shareId == null || shareId <= 0 || userId == null || userId <= 0) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        RouteShare routeShare = getById(shareId);
+        if (routeShare == null) {
+            throw new BusinessException(ErrorCodeEnum.SHARE_NOT_EXIST);
+        }
+        if (!userId.equals(routeShare.getUserId())) {
+            throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
         }
 
         // 尝试从缓存获取
@@ -333,11 +345,6 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
                 }
             }
             return result;
-        }
-
-        RouteShare routeShare = getById(shareId);
-        if (routeShare == null) {
-            throw new BusinessException(ErrorCodeEnum.SHARE_NOT_EXIST);
         }
 
         Map<String, Object> statistics = new HashMap<>();
@@ -460,22 +467,17 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
     }
 
     @Override
-    public boolean cancelShare(Long id) {
-        log.info("取消分享: id={}", id);
-        RouteShare share = getById(id.intValue());
-        if (share == null) {
-            return false;
+    public boolean updateShareSettings(Long id, Integer userId, Map<String, Object> settings) {
+        if (id == null || userId == null || userId <= 0 || settings == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
         }
-        share.setIsActive(false);
-        return updateById(share);
-    }
-
-    @Override
-    public boolean updateShareSettings(Long id, Map<String, Object> settings) {
         log.info("更新分享设置: id={}", id);
         RouteShare share = getById(id.intValue());
         if (share == null) {
             return false;
+        }
+        if (!userId.equals(share.getUserId())) {
+            throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
         }
         if (settings.containsKey("shareTitle")) {
             share.setShareTitle((String) settings.get("shareTitle"));
@@ -490,11 +492,11 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
     }
 
     @Override
-    public int batchCancelShares(List<Long> ids) {
+    public int batchCancelShares(List<Long> ids, Integer userId) {
         log.info("批量取消分享: count={}", ids.size());
         int count = 0;
         for (Long id : ids) {
-            if (cancelShare(id)) {
+            if (cancelShare(id.intValue(), userId)) {
                 count++;
             }
         }
@@ -517,6 +519,7 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
         if (share == null || !isShareValid(share)) {
             return null;
         }
+        incrementVisitCount(share.getId());
         Map<String, Object> routeInfo = new HashMap<>();
         routeInfo.put("routeId", share.getRouteId());
         routeInfo.put("shareTitle", share.getShareTitle());
@@ -530,6 +533,40 @@ public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteSh
 
         if (share.getItemId() == null) {
             throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "项目ID不能为空");
+        }
+        if (share.getUserId() == null) {
+            throw new BusinessException(ErrorCodeEnum.UNAUTHORIZED);
+        }
+        if ("route".equals(share.getItemType())) {
+            Integer routeId = share.getRouteId() != null ? share.getRouteId() : share.getItemId();
+            Route route = routeService.getById(routeId.longValue());
+            if (route == null) {
+                throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+            }
+            if (!share.getUserId().equals(route.getUserId())) {
+                throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+            }
+            share.setRouteId(routeId);
+            share.setItemId(routeId);
+        } else if ("note".equals(share.getItemType())) {
+            var travelNote = travelNoteMapper.selectById(share.getItemId());
+            if (travelNote == null) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "游记不存在");
+            }
+            if (!share.getUserId().equals(travelNote.getUserId())) {
+                throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+            }
+        } else if ("file".equals(share.getItemType())) {
+            var resourceFile = resourceFileMapper.selectById(share.getItemId());
+            if (resourceFile == null) {
+                throw new BusinessException(ErrorCodeEnum.FILE_NOT_EXIST);
+            }
+            if (!share.getUserId().equals(resourceFile.getUploadUserId())) {
+                throw new BusinessException(ErrorCodeEnum.FILE_PERMISSION_ERROR);
+            }
+            share.setFileName(resourceFile.getFileName());
+        } else {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "不支持的分享类型");
         }
 
         String shareCode = generateUniqueShareCode();

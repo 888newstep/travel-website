@@ -36,6 +36,21 @@ public interface RouteAttractionService extends IService<RouteAttraction> {
     List<RouteAttraction> getByRouteIdOrderByDayAndVisit(Long routeId);
 
     /**
+     * 在当前事务内锁定路线景点并按天数、访问顺序返回。
+     * @param routeId 路线ID
+     * @return 已加数据库排他锁的路线景点列表
+     */
+    List<RouteAttraction> getByRouteIdOrderByDayAndVisitForUpdate(Long routeId);
+
+    /**
+     * 使用两阶段写入替换整条路线日程，避免交换顺序时触发唯一键临时冲突。
+     * @param routeId 路线ID
+     * @param routeAttractions 路线的完整景点日程
+     * @return 是否更新成功
+     */
+    boolean replaceRouteSchedule(Integer routeId, List<RouteAttraction> routeAttractions);
+
+    /**
      * 根据路线ID查询关联的景点列表（按天数+访问顺序排序）
      * @param routeId 路线ID
      * @return 路线景点列表

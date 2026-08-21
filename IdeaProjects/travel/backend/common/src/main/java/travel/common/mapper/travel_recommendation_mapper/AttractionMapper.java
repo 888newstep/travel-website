@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 import travel.common.entity.travel_recommendation.Attraction;
 import org.springframework.stereotype.Repository;
 
@@ -46,5 +47,7 @@ public interface AttractionMapper extends BaseMapper<Attraction> {
             @Param("offset") int offset,
             @Param("size") int size
     );
-}
 
+    @Update("UPDATE attraction SET view_count = COALESCE(view_count, 0) + 1 WHERE id = #{attractionId}")
+    int incrementViewCount(@Param("attractionId") Integer attractionId);
+}

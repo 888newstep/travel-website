@@ -7,7 +7,6 @@ export const DEFAULT_PAGE_SIZE = 20
 export const DEFAULT_PAGE_SIZE_SMALL = 10
 export const DEFAULT_LIMIT = 10
 export const DEFAULT_LIMIT_SMALL = 5
-export const DEFAULT_RADIUS = 5000
 export const DEFAULT_SYNC_MINUTES = 30
 
 // 防抖延迟 (ms)

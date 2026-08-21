@@ -20,7 +20,7 @@ public class AICacheManager {
     // 缓存键前缀
     private static final String AI_QA_PREFIX = "ai:qa";
     private static final String AI_RECOMMEND_PREFIX = "ai:recommend";
-    private static final String AI_ITINERARY_PREFIX = "ai:itinerary";
+    private static final String AI_ITINERARY_PREFIX = "ai:itinerary:v2";
     private static final String AI_ATTRACTION_PREFIX = "ai:attraction";
     private static final String AI_IMAGE_PREFIX = "ai:image";
 
@@ -89,10 +89,12 @@ public class AICacheManager {
     /**
      * 获取或设置行程缓存
      */
-    public String getOrSetItineraryCache(String destination, int days, String preferences,
+    public String getOrSetItineraryCache(String destination, int days, String preferences, String budget,
                                          java.util.function.Supplier<String> loader) {
         String cacheKey = CacheUtil.generateKey(AI_ITINERARY_PREFIX,
-                destination, days, preferences.hashCode());
+                destination, days,
+                preferences != null ? preferences.hashCode() : 0,
+                budget != null ? budget.hashCode() : 0);
 
         String cached = cacheUtil.get(cacheKey, String.class);
         if (cached != null) {

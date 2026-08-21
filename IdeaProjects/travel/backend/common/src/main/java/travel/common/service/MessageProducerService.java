@@ -68,6 +68,10 @@ public class MessageProducerService {
      * 发送通知消息
      */
     public void sendNotification(Integer userId, String type, String title, String content) {
+        if (!reliableNotificationProducerEnabled) {
+            log.debug("可靠通知生产者未启用，跳过通知发布: userId={}, type={}", userId, type);
+            return;
+        }
         try {
             NotificationMessageVO message = new NotificationMessageVO(
                     userId,
@@ -77,14 +81,11 @@ public class MessageProducerService {
                     Map.of(),
                     System.currentTimeMillis()
             );
-            String exchange = reliableNotificationProducerEnabled
-                    ? RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE
-                    : RabbitMQConfig.NOTIFICATION_EXCHANGE;
-            String routingKey = reliableNotificationProducerEnabled
-                    ? RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY
-                    : RabbitMQConfig.NOTIFICATION_ROUTING_KEY;
-            String messageId = sendMessage(exchange, routingKey, message,
-                    reliableNotificationProducerEnabled);
+            String messageId = sendMessage(
+                    RabbitMQConfig.RELIABLE_NOTIFICATION_EXCHANGE,
+                    RabbitMQConfig.RELIABLE_NOTIFICATION_ROUTING_KEY,
+                    message,
+                    true);
             log.info("发送通知消息已提交，等待 broker confirm: messageId={}, userId={}, type={}",
                     messageId, userId, type);
         } catch (Exception e) {

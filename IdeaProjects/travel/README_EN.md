@@ -1,316 +1,293 @@
-# Smart Travel System
+# Smart Travel Engineering Showcase
 
 English | [中文](README.md)
 
-Built on Spring Cloud Alibaba microservices + React, this **enterprise-grade smart travel platform** covers the full chain of *AI travel assistant → route planning → real-time data → user community*: 6 microservices + genetic-algorithm route optimization + multimodal AI + reliable messaging, with out-of-the-box Docker Compose deployment.
+A full-stack project for **graduate recruitment interviews and technical knowledge sharing in companies and schools**. It focuses on Spring Boot microservices, JWT security, HTTP idempotency, concurrent consistency, real AMap traffic data, reliable RabbitMQ notifications, and reproducible JMeter tests. It is not presented as an already commercialized travel platform, so verified, conditional, unavailable, and out-of-scope capabilities are documented separately.
 
 [![CI/CD Pipeline](https://github.com/888newstep/travel-website/actions/workflows/ci.yml/badge.svg)](https://github.com/888newstep/travel-website/actions/workflows/ci.yml)
 [![JDK 17](https://img.shields.io/badge/JDK-17-blue.svg)](https://adoptium.net/)
-[![Spring Boot 3](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
-[![Spring Cloud Alibaba](https://img.shields.io/badge/Spring%20Cloud%20Alibaba-2023.0.3-red.svg)](https://github.com/alibaba/spring-cloud-alibaba)
+[![Spring Boot 3.3.5](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg)](LICENSE)
 
-An enterprise-grade **Smart Travel Platform** built on **Spring Cloud Alibaba microservices + React**, featuring a genetic-algorithm TSP route optimizer, a multimodal AI agent matrix (Qwen / Baidu AI / AMap), and production-grade reliable messaging (RabbitMQ + outbox + idempotent retry) — with one-command Docker Compose deployment.
+> **Scope**: no Milvus; no SMS billing, balance, or invoice features; route traffic accepts only configured AMap API results; RabbitMQ is external/cloud-hosted, while MySQL, Redis, and JMeter run locally on Windows 11.
 
-## Why Smart Travel System?
+## Verification Snapshot
 
-Compared with plain CRUD demos, monolithic travel sites, and common AI chat apps, this project's unique combination is **microservices + AI agents + algorithm engineering + reliable messaging**:
+| Item | Result |
+|------|--------|
+| Backend test suite | 245 tests, 0 failures, 0 errors, 3 skipped |
+| Route collection idempotency | 100 concurrent requests caused one business execution and one final row |
+| Attraction review UPSERT | 100 successful responses converged to one review ID and one row |
+| Route comment likes | 100 users produced 100 durable actions and a final like count of 100 |
+| Route optimization | 100 distinct idempotency keys, one actual change, one history record |
+| Redis outage | Idempotent writes failed closed with HTTP 503 and created no duplicate row |
+| Real AMap call | Code and local HTTP stubs verified; a real `AMAP_API_KEY` is still required |
+| Cloud RabbitMQ | Topology and tests are ready; live broker credentials are still required |
 
-| Compared with | Differentiated advantage |
-|---------------|--------------------------|
-| Plain monolith / CRUD demo | Spring Cloud Alibaba microservices, OpenFeign orchestration, Nacos registry & config center |
-| Ordinary travel website | TSP genetic-algorithm route optimization + AI personalized itinerary + real-time crowd status |
-| Common AI chat app | Multimodal (text/image) Q&A, smart itinerary, budget estimation, image-recognition closed-loop AI matrix |
-| Simple MQ integration | Reliable messaging (outbox + scheduled retry + Redis idempotency) and production-grade RabbitMQ config |
+See the [evidence index](backend/docs/showcase/EVIDENCE_INDEX.md) for metrics, logs, and limitations.
 
-> **🎯 Target audience**
-> - Job seekers preparing for big-tech Java / AI interviews (covers high-frequency topics: microservices, algorithms, message queues)
-> - SMBs or indie developers needing a deployable travel / mobility platform prototype
-> - Tech enthusiasts wanting to learn Spring Cloud Alibaba microservices + AI integration end-to-end
-> - Product developers needing a frontend-backend separated + Docker one-click deployment template
-
----
-
-## Architecture Overview
-
-```
-                    ┌──────────────────────────────────────────────┐
-                    │              Frontend React 19               │
-                    │         (React Router + Vite + Tailwind)     │
-                    └──────────────────────┬───────────────────────┘
-                                   HTTP /api (Vite Proxy)
-                    ┌──────────────────────▼───────────────────────┐
-                    │   Gateway (port 8090, Spring Cloud Gateway    │
-                    │   + Sentinel + JWT auth)                      │
-                    └──────────────────────┬───────────────────────┘
-        ┌───────────────┬──────────────────┼───────────────────┬───────────────┐
-        ▼               ▼                  ▼                   ▼               ▼
- ┌─────────────┐ ┌─────────────┐ ┌──────────────────┐ ┌──────────────┐ ┌─────────────┐
- │ User Service│ │ Attraction  │ │   Route Service  │ │  Collection  │ │ File Service│
- │ (8091)      │ │ (8092)      │ │   (8093)         │ │  (8094)      │ │ (8095)      │
- │ Login/JWT   │ │ Attractions │ │ Routes/TSP-GA    │ │ Travelogues  │ │ Files/Tags  │
- │             │ │ Cities/Food │ │ AI Agent/Multi-M │ │ Fav/Share    │ │ Resources   │
- └──────┬──────┘ └────┬────────┘ └────────┬─────────┘ └──────┬───────┘ └──────┬──────┘
-        │             │                   │                  │                │
-        └─────────────┴───────┐           │                  │                │
-                              ▼           ▼                                    │
-                    ┌──────────────────────┐        ┌──────────────────────────┘
-                    │  Nacos registry/config │        │
-                    │ (8848)               │        │
-                    └──────────────────────┘        │
-        ┌───────────────────────────────────────────▼──────────────────────────┐
-        │  Infrastructure: MySQL 8 · Redis (Redisson distributed lock/cache/    │
-        │  rate limiting) · RabbitMQ (reliable messaging) · XXL-Job (scheduled │
-        │  tasks) · AMap / Baidu AI / Qwen                                     │
-        └───────────────────────────────────────────────────────────────────────┘
-```
-
-**Core flow**: User requests go through the **Gateway (Sentinel rate limiting + JWT auth)** to each microservice → the Route Service uses AMap data and the **genetic-algorithm TSP** to generate/optimize routes, or the **AI agent** (Qwen) handles conversation, itinerary generation, image recognition, and budget estimation → data persists to MySQL via MyBatis-Plus, hot data is cached in Redis, and cross-service calls are decoupled via Redisson distributed locks and RabbitMQ **reliable messaging**.
-
-### Architecture Diagram (Mermaid)
+## Architecture
 
 ```mermaid
 flowchart LR
-    Client[Frontend React] -->|HTTP /api| GW[Gateway 8090]
-    GW --> US[User 8091]
-    GW --> AS[Attraction 8092]
-    GW --> RS[Route 8093]
-    GW --> CS[Collection 8094]
-    GW --> FS[File 8095]
-    RS -->|Feign| AS
-    CS -->|Feign| RS & US
-    US & AS & RS & CS & FS --> N[Nacos 8848]
-    US & AS & RS & CS & FS --> DB[(MySQL 8)]
-    US & AS & RS & CS & FS --> R[(Redis)]
-    RS --> MQ[(RabbitMQ)]
-    RS --> AI[Qwen/Baidu AI/AMap]
-    RS --> JOB[XXL-Job]
+    Browser[React 19 + Vite] -->|HTTP /api| Gateway[Spring Cloud Gateway :8090]
+
+    Gateway --> User[user-service :8091]
+    Gateway --> Attraction[attraction-service :8092]
+    Gateway --> Route[route-service :8093]
+    Gateway --> Collection[collection-service :8094]
+    Gateway --> File[file-service :8095]
+
+    User --> MySQL[(MySQL 8)]
+    Attraction --> MySQL
+    Route --> MySQL
+    Collection --> MySQL
+    File --> MySQL
+
+    User --> Redis[(Redis)]
+    Attraction --> Redis
+    Route --> Redis
+    Collection --> Redis
+    File --> Redis
+
+    User -.reliable notification.-> Rabbit[(Cloud RabbitMQ)]
+    Rabbit -.consume and persist.-> Collection
+    Route -.route and traffic.-> AMap[AMap Open Platform]
+    Route -.conditional.-> Qwen[Qwen]
+    Route -.conditional.-> Baidu[Baidu AI]
+
+    Nacos[Nacos: local mode only] -.service discovery.-> Gateway
+    Nacos -.service discovery.-> User
+    Nacos -.service discovery.-> Attraction
+    Nacos -.service discovery.-> Route
+    Nacos -.service discovery.-> Collection
+    Nacos -.service discovery.-> File
 ```
 
----
+### Runtime Services
 
-## Features
+| Module | Port | Responsibility |
+|--------|------|----------------|
+| Gateway | 8090 | Routing, JWT verification, trusted identity headers, entry governance |
+| User Service | 8091 | Registration, login, tokens, profiles, passwords |
+| Attraction Service | 8092 | Cities, attractions, restaurants, reviews, latest status snapshots |
+| Route Service | 8093 | Routes, schedules, optimization, AMap traffic, conditional AI APIs |
+| Collection Service | 8094 | Collections, comments, notes, sharing, notifications, feedback |
+| File Service | 8095 | Files, categories, tags, versions |
+| `common` | Library | Entities, mappers, security, idempotency, Redis, RabbitMQ, external clients |
 
-- **Microservice architecture** — 6 services split by business domain (user / attraction / route / collection / file / gateway), Nacos registry & config center
-- **AI agent matrix** — smart dialog, itinerary generation, smart Q&A, attraction intros, personalized recommendations, budget estimation, travel guide generation (Qwen)
-- **Multimodal AI** — text + image joint Q&A and search, Baidu AI image recognition (type / tag / description / similar attractions)
-- **Route planning & optimization** — `RoutePlanAlgorithm` hybrid planning + **genetic-algorithm TSP** (population 100 / 200 generations convergence), multi-objective optimization (distance / time / cost / balance), AI constraint injection (preferences + time windows)
-- **Real-time data** — attraction real-time status, crowd monitoring and alerts
-- **User community** — travelogues, route collection / share / comment, points, like notifications
-- **Reliable messaging** — RabbitMQ outbox + scheduled retry + Redis idempotency, loss-proof and duplicate-proof
-- **Security & governance** — Spring Security + JWT gateway auth, Sentinel rate limiting / circuit breaking, Redis rate limiting, Druid monitoring, unified exceptions and `Result<T>` response
-- **Resource & file management** — file upload / tagging / multi-format support, independent `file-service`
-- **One-click deployment** — Docker Compose orchestrates MySQL + Redis + RabbitMQ + 6 microservices + Nginx frontend; `start-all.bat` for local one-click start
+### Deployment Modes
 
----
+| Mode | Discovery | MySQL/Redis | RabbitMQ | Primary Use |
+|------|-----------|-------------|----------|-------------|
+| Windows local scripts | Bundled Nacos | Local services | Cloud broker | Development and JMeter verification |
+| Docker Compose | Nacos disabled; static container DNS | Compose containers | External cloud broker | Containerized showcase |
 
-## Tech Stack
+Docker Compose starts neither Nacos nor a local RabbitMQ broker.
 
-Full-stack overview (full backend stack in [backend/README.md](backend/README.md), frontend in [frontend/README.md](frontend/README.md)):
+## Engineering Highlights
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Spring Boot 3.3.5 · Spring Cloud 2023.0.3 · Spring Cloud Alibaba 2023.0.3.2 · Java 17 · MyBatis-Plus 3.5.8 · Druid 1.2.23 |
-| Frontend | React 19 · TypeScript · Vite 6 · React Router 7 · Axios · Tailwind CSS 4 |
-| Infrastructure | MySQL 8.0 · Redis (Redisson 3.37) · RabbitMQ (reliable messaging) · Nacos · XXL-Job 2.4.1 |
-| AI | DashScope (Qwen) 2.14 · Baidu AI SDK · AMap · OkHttp |
-| Security & governance | Spring Security + JWT (jjwt 0.12.5) · Sentinel · Knife4j 4.5 / OpenAPI 3.0 |
-| Algorithms | JTS 1.19 geometry · in-house genetic-algorithm TSP |
-| Deployment | Docker · Docker Compose · Nginx |
+### Authentication and Authorization
 
----
+- The Gateway removes spoofed `X-User-*` headers, validates JWTs, and injects trusted identity headers.
+- Each servlet service parses the Bearer token again, checks the Redis logout blacklist, and builds the Spring Security context.
+- Protected writes enforce roles or object ownership.
+- The Gateway refuses to start when `JWT_SECRET` is blank or shorter than 32 UTF-8 bytes.
+
+### HTTP Idempotency
+
+- Authenticated writes may carry `Idempotency-Key`; the frontend creates one automatically and preserves it across retries.
+- Redis Lua scripts atomically manage `PROCESSING` and `COMPLETED` states and store the first HTTP response.
+- In-progress requests return 409, a reused key with a different request returns 409, and completed requests replay with `Idempotency-Replayed: true`.
+- Redis failure returns 503 before business execution; endpoint-specific MySQL unique keys remain the final safety net.
+
+### Concurrent Route Optimization
+
+- A Redisson lock serializes the route across instances, while `SELECT ... FOR UPDATE` protects the complete schedule inside the transaction.
+- Existing positions are first moved to `-id`, then rewritten to `1..N`, avoiding temporary unique-key conflicts during swaps.
+- `uk_route_day_visit_order(route_id, day_number, visit_order)` enforces one position per route day.
+- No-op requests do not update rows or append history; history is written to Redis only after commit.
+- The current `/route-optimization/apply` path uses a complete explicit order or per-day nearest-neighbor ordering. `GeneticAlgorithmTSP` remains an algorithm experiment and is not claimed as this endpoint's production optimizer.
+
+### Reliable RabbitMQ Notifications
+
+- Publisher confirms, mandatory returns, manual ACK, 5/30/120-second TTL retry queues, and a DLQ.
+- Redis provides the fast idempotency path; `notification.source_message_id` provides the database uniqueness fallback.
+- The consumer ACKs the original only after a retry or dead-letter publish is confirmed and not returned.
+- The message status table provides persistence and compensation-claim primitives, but there is currently no wired scheduled compensation scanner. This project does not claim a complete automatic Outbox republisher.
+
+### Trusted Data Boundaries
+
+- Route distance, duration, and congestion come from real AMap driving responses; failures return `dataAvailable=false`.
+- Historical crowd endpoints return unavailable when no history table exists instead of generating random trends.
+- Budget, safety score, and advanced guide endpoints return unavailable without trustworthy sources.
+- LLM output is assistant text, not a source of truth for traffic, prices, opening hours, or safety.
+
+See the [core sequence diagrams](backend/docs/showcase/ARCHITECTURE_SEQUENCE_DIAGRAMS.md) for the four end-to-end flows.
+
+## Capability Boundaries
+
+### Verified and Suitable for the Main Demo
+
+- JWT login, roles, and object ownership checks.
+- Attraction/city/restaurant queries and atomic attraction-review UPSERT.
+- Route CRUD, collections, comments, sharing, and route optimization consistency.
+- HTTP response replay, Redis fail-closed behavior, and database uniqueness fallbacks.
+- Reliable-notification code, local tests, and reproducible JMeter assets.
+
+### Requires External Configuration
+
+- AMap route and traffic data requires a real `AMAP_API_KEY`.
+- Cloud RabbitMQ requires broker credentials and explicit reliable-notification feature flags.
+- Qwen text generation requires `QWEN_API_KEY`.
+- Baidu URL image recognition requires `BAIDU_*` and an explicit remote-image host allowlist.
+
+### Unavailable, Legacy, or Out of Scope
+
+- Advanced guides, budgets, safety scores, and recommendations without a data source are not presented as completed features.
+- Upload-based image analysis, similar-attraction results, and multimodal recommendation/search still contain legacy placeholders and are excluded from the demo.
+- Milvus/RAG, SMS billing, payments, inventory, and historical crowd prediction are out of scope.
+
+See the detailed [capability boundary matrix](backend/docs/showcase/CAPABILITY_BOUNDARIES.md).
 
 ## Quick Start
 
-> See [STARTUP_GUIDE.md](STARTUP_GUIDE.md) for detailed steps. This project targets a **Windows local + Linux VM production** dual-track deployment.
-
 ### Prerequisites
 
-- JDK 17+, Maven 3.8+
-- MySQL 8.0 (port 3306), Redis (port 6379)
-- Node.js 18+ (frontend, optional)
-- Docker & Docker Compose (optional, for containerized one-click deployment)
+- JDK 17, Maven 3.8+, Node.js 18+
+- MySQL 8 and Redis 6+
+- Bundled Nacos for Windows local mode
+- Docker Desktop and cloud RabbitMQ connection values for Compose mode
 
-### Option 1: One-click start (Windows)
+### Option 1: Windows Local Mode
+
+Set database, Redis, JWT, and optional external-service variables in the current PowerShell session. `deploy/.env` is for Compose only; `start-all.bat` does not load it automatically.
 
 ```powershell
-# 1. Configure env vars such as the DB password
-Copy-Item deploy\.env.example deploy\.env
+$env:JWT_SECRET = '<at least 32 bytes>'
+$env:DB_HOST = '127.0.0.1'
+$env:DB_PORT = '3306'
+$env:DB_NAME = 'travel_website'
+$env:DB_USERNAME = 'root'
+$env:DB_PASSWORD = '<local MySQL password>'
+$env:REDIS_HOST = '127.0.0.1'
+$env:REDIS_PORT = '6379'
+$env:REDIS_PASSWORD = '<local Redis password>'
 
-# 2. One-click start (auto starts Nacos, builds and starts the 6 microservices)
 .\start-all.bat
+npm --prefix frontend install
+npm --prefix frontend run dev
 ```
 
-### Option 2: Manual start
+- Frontend: `http://localhost:3000`
+- Gateway: `http://localhost:8090`
+- Nacos: `http://localhost:8848/nacos`
 
-```bash
-# 1. Start Nacos (http://localhost:8848/nacos, default nacos/nacos)
-cd backend/nacos/nacos
-bin/startup.cmd -m standalone
+See [STARTUP_GUIDE.md](STARTUP_GUIDE.md) for detailed troubleshooting.
 
-# 2. Build the backend
-cd backend
-mvn clean package -DskipTests
+### Option 2: Docker Compose
 
-# 3. Start the 6 microservices in turn (commands & ports in backend/README.md "启动服务")
-
-# 4. Start frontend (optional, or use Nginx to serve dist)
-cd frontend
-npm install
-npm run dev                                                       # http://localhost:3000
-```
-
-### Option 3: Docker Compose one-click
-
-```bash
+```powershell
 Copy-Item deploy\.env.example deploy\.env
-docker compose -f deploy/docker-compose.yml up --build -d
+# Edit passwords, JWT_SECRET, and cloud RabbitMQ values.
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up --build -d
 ```
 
-Brings up **MySQL + Redis + RabbitMQ + all microservices + Nginx frontend**, with health checks and dependency orchestration. Visit `http://localhost:8080`; API via gateway `http://localhost:8090`.
+- Web: `http://localhost:8080`
+- Gateway: `http://localhost:8090`
+- Compose starts MySQL, Redis, five business services, Gateway, and Web.
+- Nacos, Sentinel, and Seata are disabled in this profile; Gateway uses static container routes.
+- RabbitMQ values must point to an external broker. Reliable-notification feature flags remain `false` by default.
 
-### Environment Variables
+## Key Environment Variables
 
-Copy `deploy/.env.example` to `deploy/.env` and fill in: `DB_PASSWORD`, `REDIS_PASSWORD`, `RABBITMQ_*`, `JWT_SECRET`, `DRUID_*`; AI keys (`AMAP_API_KEY`, `BAIDU_*`, `QWEN_API_KEY`) as needed — if omitted, the corresponding capability degrades gracefully.
+| Variable | Purpose | Default / Requirement |
+|----------|---------|-----------------------|
+| `JWT_SECRET` | JWT signing | Required, at least 32 bytes |
+| `DB_*` | MySQL | Local default `127.0.0.1:3306/travel_website` |
+| `REDIS_*` | Cache, locks, idempotency | Local default `127.0.0.1:6379` |
+| `RABBITMQ_*` | Cloud RabbitMQ | Required for live MQ verification |
+| `MQ_RELIABLE_NOTIFICATION_*_ENABLED` | Topology, producer, consumer flags | `false` by default |
+| `MQ_STATUS_PERSISTENCE_ENABLED` | Message status table | `false` by default |
+| `AMAP_API_KEY` | AMap Web service | Required for real traffic |
+| `QWEN_API_KEY` | Qwen | Optional text AI |
+| `BAIDU_*` | Baidu AI | Optional image recognition |
+| `CAPTCHA_DEMO_MODE` | Local captcha display | `false`; never enable publicly |
 
----
+See [deploy/.env.example](deploy/.env.example).
 
-## API Examples
+## API Example
 
-Unified response structure: `{ "code": 200, "message": "...", "data": {...}, "timestamp": 1704067200000, "success": true }`.
+All APIs are exposed through `http://localhost:8090/api/**` and use the common `Result<T>` envelope.
 
-All requests go through the gateway `http://localhost:8090/api/**`. Full API table in [backend/README.md](backend/README.md#主要-api); below are representative examples:
+```powershell
+$baseUrl = 'http://127.0.0.1:8090/api'
 
-### User login
+# Public attraction query
+Invoke-RestMethod "$baseUrl/attractions"
 
-```bash
-curl -X POST http://localhost:8090/api/users/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"123456"}'
-# Returns a token; subsequent requests carry Authorization: Bearer <token>
+# Login
+$login = Invoke-RestMethod -Method Post `
+  -Uri "$baseUrl/users/login" `
+  -ContentType 'application/json' `
+  -Body (@{ username = '<username>'; password = '<password>' } | ConvertTo-Json)
+
+$headers = @{ Authorization = "Bearer $($login.data.token)" }
+Invoke-RestMethod -Headers $headers "$baseUrl/routes/my"
 ```
 
-### AI chat
+See the [five-minute demo script](backend/docs/showcase/DEMO_SCRIPT_5_MINUTES.md) for idempotent replay, route optimization, AMap, and RabbitMQ commands.
 
-```bash
-curl -X POST http://localhost:8090/api/ai/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message":"Recommend a 3-day 2-night family trip route in Hangzhou"}'
+## Validation
+
+```powershell
+# Backend
+.\mvnw.cmd -q -f backend\pom.xml clean test
+
+# Frontend
+npm --prefix frontend run lint
+npm --prefix frontend run build
+
+# 100-thread scenarios
+.\ops\jmeter\run-idempotency-test.ps1 -Threads 100
+.\ops\jmeter\run-attraction-review-upsert-test.ps1 -Threads 100
+.\ops\jmeter\run-route-comment-like-test.ps1 -Threads 100
+.\ops\jmeter\run-route-optimization-test.ps1 -Threads 100
 ```
 
-### AI itinerary generation
+## Repository Layout
 
-```bash
-curl -X POST http://localhost:8090/api/ai/itinerary/generate \
-  -H "Content-Type: application/json" \
-  -d '{"destination":"Hangzhou","days":3,"preferences":{"theme":"family","budget":"economy"}}'
-```
-
-### Smart route planning (constraints + preferences)
-
-```bash
-curl -X POST http://localhost:8090/api/ai/advanced/plan \
-  -H "Content-Type: application/json" \
-  -d '{"preferences":{"startCityId":1,"days":3,"theme":"nature"},"constraints":{"maxTravelTimePerDay":6,"preferedStartTime":"09:00"}}'
-```
-
-### Image analysis (multimodal)
-
-```bash
-curl -X POST http://localhost:8090/api/ai/image-analysis \
-  -H "Content-Type: application/json" \
-  -d '{"imageUrl":"https://example.com/photo.jpg","analysisType":"attraction-recognition"}'
-```
-
-### Route optimization (genetic algorithm)
-
-```bash
-curl -X GET "http://localhost:8090/api/routes/smart/list?cityId=1&optimizationType=distance&limit=5"
-```
-
-### File upload
-
-```bash
-curl -X POST -F "file=@guide.pdf" http://localhost:8090/api/file/upload
-```
-
----
-
-## Project Structure
-
-```
+```text
 travel/
-├── backend/            # Spring Cloud multi-module backend (common / gateway / user-service / attraction-service /
-│                       #   route-service / collection-service / file-service)
-│                       #   ※ Tech stack, module structure, startup & API: see backend/README.md
-├── frontend/           # React 19 + Vite + TypeScript (see frontend/README.md)
-├── deploy/             # Docker Compose / Dockerfile / Nginx / env templates
-├── docs/               # Internship guide, database experiment report
-├── ops/scripts/        # Ops scripts (health check, etc.)
-├── scripts/            # Dev scripts (API smoke test)
-├── start-all.bat / stop-all.bat   # Windows one-click start / stop
-└── STARTUP_GUIDE.md    # Detailed startup guide
+├── backend/                 # Maven multi-module backend
+├── frontend/                # React 19 + TypeScript + Vite
+├── deploy/                  # Compose, Dockerfiles, Nginx, env template
+├── ops/                     # JMeter, AMap, RabbitMQ, operations scripts
+├── run-logs/                # Locally generated verification evidence
+├── start-all.bat
+└── STARTUP_GUIDE.md
 ```
 
----
+## Showcase Documents
 
-## Service Ports
+- [Core sequence diagrams](backend/docs/showcase/ARCHITECTURE_SEQUENCE_DIAGRAMS.md)
+- [Capability boundaries](backend/docs/showcase/CAPABILITY_BOUNDARIES.md)
+- [Five-minute demo script](backend/docs/showcase/DEMO_SCRIPT_5_MINUTES.md)
+- [Evidence index](backend/docs/showcase/EVIDENCE_INDEX.md)
+- [Hardening plan](backend/docs/PROJECT_HARDENING_PLAN.md)
+- [Cloud RabbitMQ configuration](backend/docs/infrastructure/RABBITMQ_CLOUD_CONFIGURATION.md)
+- [Backend documentation](backend/README.md)
+- [Frontend documentation](frontend/README.md)
 
-| Service | Port | Description |
-|---------|------|-------------|
-| Gateway | 8090 | API gateway (auth + rate limiting) |
-| User Service | 8091 | Users & authentication |
-| Attraction Service | 8092 | Attractions / cities / food / real-time |
-| Route Service | 8093 | Routes / algorithms / AI agents |
-| Collection Service | 8094 | Community / favorites / comments / notifications |
-| File Service | 8095 | File management |
-| Nacos | 8848 | Registry & config center |
-| MySQL | 3306 | Database |
-| Redis | 6379 | Cache / lock / rate limiting |
-| RabbitMQ | 5672 / 15672 | Reliable messaging |
-| Frontend | 3000 | Frontend dev server |
-| Nginx (container) | 8080 | Frontend production hosting |
+## Interview Topics
 
----
-
-## Interview Value
-
-This project applies to the following interview scenarios:
-
-### Java Backend
-
-| Topic | Project embodiment |
-|-------|--------------------|
-| Microservice architecture | Full Spring Cloud Alibaba stack, 6 services split by business domain, OpenFeign orchestration |
-| Gateway | Gateway routing, JWT global auth, Sentinel rate limiting & circuit breaking |
-| Message queue | RabbitMQ reliable delivery: outbox + scheduled retry + Redis idempotency |
-| Distributed lock | Redisson distributed lock, cache consistency |
-| Database optimization | 20-table design, Druid pool, index & logical-delete conventions |
-| Security | Spring Security + JWT, API auth |
-
-### AI Application
-
-| Topic | Project embodiment |
-|-------|--------------------|
-| AI Agent integration | DashScope / Qwen: dialog / itinerary / guide / budget estimation |
-| Multimodal | Text + image joint Q&A, Baidu AI image recognition |
-| Smart recommendation | Personalized recommendation, similar attractions, real-time adjustment |
-| Path algorithms | Genetic-algorithm TSP, multi-objective optimization (distance / time / cost) |
-
----
-
-## Contributors
-
-Thanks to the people who have contributed to this project:
-
-<a href="https://github.com/888newstep">
-  <img src="https://github.com/888newstep.png" width="40px" alt="888newstep" />
-</a>
-
-> Want to contribute? See [CONTRIBUTING.md](CONTRIBUTING.md). All contributions are welcome!
-
----
+- Combining API idempotency state, business locks, and database unique constraints.
+- Coordinating distributed locks, row locks, transaction boundaries, and uniqueness constraints.
+- Publisher confirms, returns, manual ACK, TTL retries, DLQ, and consumer idempotency.
+- Timeouts, bounded response bodies, bulkheads, secret redaction, and explicit degradation for external APIs.
+- Returning unavailable instead of inventing unverifiable data.
+- Building an evidence chain from unit tests, live services, JMeter metrics, and final database state.
 
 ## License
 

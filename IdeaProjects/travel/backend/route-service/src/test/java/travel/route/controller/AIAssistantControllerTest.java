@@ -9,14 +9,20 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.validation.beanvalidation.LocalValidatorFactoryBean;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
+import travel.common.exception.GlobalExceptionHandler;
 import travel.route.dto.ai.AIAskQuestionResponse;
 import travel.route.dto.ai.AIOptimizeRouteResponse;
 import travel.route.dto.ai.AIOptimizeSuggestion;
 import travel.route.service.AIAssistantService;
 import travel.route.service.QwenService;
+import travel.route.service.RouteService;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,6 +48,9 @@ class AIAssistantControllerTest {
     @Mock
     private AIAssistantService aiAssistantService;
 
+    @Mock
+    private RouteService routeService;
+
     @InjectMocks
     private AIAssistantController controller;
 
@@ -49,13 +58,17 @@ class AIAssistantControllerTest {
     void setUp() {
         validator = new LocalValidatorFactoryBean();
         validator.afterPropertiesSet();
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(7L, null, List.of()));
         mockMvc = MockMvcBuilders.standaloneSetup(controller)
                 .setValidator(validator)
+                .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }
 
     @AfterEach
     void tearDown() {
+        SecurityContextHolder.clearContext();
         validator.close();
     }
 
@@ -64,9 +77,9 @@ class AIAssistantControllerTest {
         AIAskQuestionResponse response = AIAskQuestionResponse.builder()
                 .question("How long should I stay?")
                 .answer("Three days is a reasonable starting point.")
-                .confidence(0.95)
+                .confidence(null)
                 .timestamp(LocalDateTime.of(2026, 8, 11, 10, 0))
-                .source("fallback")
+                .source("qwen")
                 .build();
         when(aiAssistantService.askQuestion("How long should I stay?", 7)).thenReturn(response);
 
@@ -78,8 +91,7 @@ class AIAssistantControllerTest {
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.question").value("How long should I stay?"))
                 .andExpect(jsonPath("$.data.answer").value("Three days is a reasonable starting point."))
-                .andExpect(jsonPath("$.data.confidence").value(0.95))
-                .andExpect(jsonPath("$.data.source").value("fallback"));
+                .andExpect(jsonPath("$.data.source").value("qwen"));
 
         verify(aiAssistantService).askQuestion(eq("How long should I stay?"), eq(7));
     }
@@ -95,13 +107,26 @@ class AIAssistantControllerTest {
     }
 
     @Test
+    void shouldReturnServiceUnavailableWhenAssistantProviderFails() throws Exception {
+        when(aiAssistantService.askQuestion("provider failure", 7))
+                .thenThrow(new BusinessException(ErrorCodeEnum.SYSTEM_DEPENDENCY_ERROR));
+
+        mockMvc.perform(post("/ai/assistant/ask")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(new ObjectMapper().writeValueAsString(
+                                new AskRequest("provider failure", 7))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.code").value(5006));
+    }
+
+    @Test
     void shouldKeepLegacyPostOptimizeRouteAndNewAlias() throws Exception {
         AIOptimizeRouteResponse response = AIOptimizeRouteResponse.builder()
                 .success(true)
                 .routeId(12)
                 .suggestions(List.of(new AIOptimizeSuggestion("transport", "Use metro")))
-                .optimizedScore(88)
-                .source("fallback")
+                .optimizedScore(null)
+                .source("qwen")
                 .build();
         when(aiAssistantService.optimizeRouteByAI(12)).thenReturn(response);
 
@@ -109,7 +134,7 @@ class AIAssistantControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.routeId").value(12))
                 .andExpect(jsonPath("$.data.suggestions[0].type").value("transport"))
-                .andExpect(jsonPath("$.data.optimizedScore").value(88));
+                .andExpect(jsonPath("$.data.source").value("qwen"));
 
         mockMvc.perform(get("/ai/assistant/optimize-route/12"))
                 .andExpect(status().isOk())

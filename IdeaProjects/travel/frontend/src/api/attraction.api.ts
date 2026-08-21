@@ -1,5 +1,5 @@
 import apiClient from '../utils/api';
-import { DEFAULT_LIMIT_SMALL, DEFAULT_RADIUS } from '../constants';
+import { DEFAULT_LIMIT_SMALL } from '../constants';
 
 export interface Attraction {
     id?: number;
@@ -78,13 +78,11 @@ export const attractionApi = {
         });
     },
 
-    getAttractionNearby(id: number, radius: number = DEFAULT_RADIUS) {
-        return apiClient.get<any[]>(`/attractions/${id}/nearby`, {
-            params: { radius },
-        });
+    getAttractionNearby(id: number) {
+        return apiClient.get<any[]>(`/attractions/${id}/nearby`);
     },
 
-    submitReview(attractionId: number, rating: number, content: string, userId?: number) {
-        return apiClient.post<any>(`/attractions/${attractionId}/review`, { rating, content, userId });
+    submitReview(attractionId: number, rating: number, content: string) {
+        return apiClient.post<any>(`/attractions/${attractionId}/review`, { rating, content });
     },
 };

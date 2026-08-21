@@ -1,5 +1,7 @@
 package travel.file.controller;
 
+import travel.common.exception.ExceptionPropagation;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import travel.common.entity.travel_recommendation.FileTag;
@@ -79,7 +81,7 @@ public class ResourceFileController {
             return Result.success("获取详情成功", file);
         } catch (Exception e) {
             log.error("获取资源文件详情失败: id={}, error={}", id, e.getMessage());
-            return Result.error("获取详情失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -114,7 +116,7 @@ public class ResourceFileController {
             return Result.success("删除成功", result);
         } catch (Exception e) {
             log.error("删除资源文件失败: id={}, error={}", id, e.getMessage());
-            return Result.error("删除失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -130,7 +132,7 @@ public class ResourceFileController {
             return Result.success("更新成功", result);
         } catch (Exception e) {
             log.error("更新资源文件信息失败: id={}, error={}", id, e.getMessage());
-            return Result.error("更新失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -148,7 +150,7 @@ public class ResourceFileController {
             return Result.success("获取列表成功", files);
         } catch (Exception e) {
             log.error("获取资源文件列表失败: error={}", e.getMessage());
-            return Result.error("获取列表失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -166,7 +168,7 @@ public class ResourceFileController {
             return Result.success("搜索成功", files);
         } catch (Exception e) {
             log.error("搜索资源文件失败: keyword={}, error={}", keyword, e.getMessage());
-            return Result.error("搜索失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -182,7 +184,7 @@ public class ResourceFileController {
             return Result.success("获取预览链接成功", previewUrl);
         } catch (Exception e) {
             log.error("获取文件预览链接失败: id={}, error={}", id, e.getMessage());
-            return Result.error("获取预览链接失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -198,7 +200,7 @@ public class ResourceFileController {
             return Result.success("获取统计信息成功", statistics);
         } catch (Exception e) {
             log.error("获取文件统计信息失败: error={}", e.getMessage());
-            return Result.error("获取统计信息失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -214,7 +216,7 @@ public class ResourceFileController {
             return Result.success("批量删除成功", count);
         } catch (Exception e) {
             log.error("批量删除资源文件失败: error={}", e.getMessage());
-            return Result.error("批量删除失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -230,7 +232,7 @@ public class ResourceFileController {
             return Result.success("获取类型统计成功", statistics);
         } catch (Exception e) {
             log.error("获取文件类型统计失败: error={}", e.getMessage());
-            return Result.error("获取类型统计失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -246,7 +248,7 @@ public class ResourceFileController {
             return Result.success("移动成功", result);
         } catch (Exception e) {
             log.error("移动文件到其他分类失败: error={}", e.getMessage());
-            return Result.error("移动失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -260,7 +262,7 @@ public class ResourceFileController {
             return Result.success("创建分类成功", result);
         } catch (Exception e) {
             log.error("创建文件分类失败: error={}", e.getMessage());
-            return Result.error("创建分类失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -272,7 +274,7 @@ public class ResourceFileController {
             return Result.success("更新分类成功", result);
         } catch (Exception e) {
             log.error("更新文件分类失败: id={}, error={}", id, e.getMessage());
-            return Result.error("更新分类失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -284,7 +286,7 @@ public class ResourceFileController {
             return Result.success("删除分类成功", result);
         } catch (Exception e) {
             log.error("删除文件分类失败: id={}, error={}", id, e.getMessage());
-            return Result.error("删除分类失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -296,7 +298,7 @@ public class ResourceFileController {
             return Result.success("获取分类详情成功", category);
         } catch (Exception e) {
             log.error("获取文件分类详情失败: id={}, error={}", id, e.getMessage());
-            return Result.error("获取分类详情失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -308,7 +310,7 @@ public class ResourceFileController {
             return Result.success("获取分类列表成功", categories);
         } catch (Exception e) {
             log.error("获取所有分类失败: error={}", e.getMessage());
-            return Result.error("获取分类列表失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -320,7 +322,7 @@ public class ResourceFileController {
             return Result.success("获取分类树成功", tree);
         } catch (Exception e) {
             log.error("获取分类树失败: error={}", e.getMessage());
-            return Result.error("获取分类树失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -339,7 +341,7 @@ public class ResourceFileController {
             return Result.success("获取版本列表成功", versions);
         } catch (Exception e) {
             log.error("获取文件版本列表失败: fileId={}, error={}", fileId, e.getMessage());
-            return Result.error("获取版本列表失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -351,7 +353,7 @@ public class ResourceFileController {
             return Result.success("恢复版本成功", result);
         } catch (Exception e) {
             log.error("恢复到指定版本失败: error={}", e.getMessage());
-            return Result.error("恢复版本失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -363,7 +365,7 @@ public class ResourceFileController {
             return Result.success("比较版本成功", comparison);
         } catch (Exception e) {
             log.error("比较两个版本失败: error={}", e.getMessage());
-            return Result.error("比较版本失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 
@@ -377,7 +379,7 @@ public class ResourceFileController {
             return Result.success("获取版本历史成功", history);
         } catch (Exception e) {
             log.error("获取版本历史失败: fileId={}, error={}", fileId, e.getMessage());
-            return Result.error("获取版本历史失败: " + e.getMessage());
+            throw ExceptionPropagation.propagate(e);
         }
     }
 }

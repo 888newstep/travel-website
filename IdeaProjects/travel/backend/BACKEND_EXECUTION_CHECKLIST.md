@@ -1,5 +1,7 @@
 # Backend 濠电儑绲藉畷顒傗偓鍨叀楠炲秷顦舵い銏″灥閵嗘帡宕ㄩ鐐殿槹
 
+> 2026-08-20 状态说明：本文档为历史执行记录，其中 `AIMultimodalController` 等伪多模态设计已删除；当前能力边界以 `docs/showcase/CAPABILITY_BOUNDARIES.md` 为准。
+
 闂佸搫娲ら悺銊╁蓟婵犲洤绫嶉柕澶涢檮閸╁倿鏌?026-08-09
 
 ## 1. 闂佸搫鍊稿ú锕傚Υ閸岀偞鍎庢い鏃傛櫕閸?
@@ -1586,7 +1588,7 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 - 能力边界：`constraints` 已接入确定性约束调度器；`AISmartItinerary` 已完成稳定结果 DTO 化，真实地图距离、交通方式和路径搜索仍未接入。
 - 本轮混合基础设施配置验证：五个业务服务和 common 的 MySQL/Redis 地址均支持 `DB_HOST/DB_PORT/DB_NAME`、`REDIS_HOST/REDIS_PORT/REDIS_DB` 覆盖；默认值对应 Win11 本机 MySQL 和 Redis。
 - 本机 TCP 预检：`127.0.0.1:3306` MySQL 和 `127.0.0.1:6379` Redis 均可达；云端 RabbitMQ 继续沿用既有 `<CLOUD_HOST_PLACEHOLDER>:5672` TCP 可达证据，未新增 AMQP 认证或消费成功声明。
-- Milvus 边界确认：旅游后端无 Milvus 依赖和运行时配置，云端 Milvus 仅服务 `newagent`/`novel_agent`，本项目后续若接入必须新增独立适配器、配置和集成测试。
+- 基础设施边界确认：本项目不使用向量数据库，不纳入架构、测试或交付范围。
 - 全仓 `mvn -q test` 当前受既有多模块测试类路径/Mockito 隔离问题影响，后续在 P8.7 统一治理，不将该失败归因于本轮路线约束改造。
 
 ### 8.3 本轮验证结果（2026-08-16）
@@ -1596,7 +1598,6 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 - MySQL `127.0.0.1:3306` — TCP ✅；认证跳过（应用层由 Spring Boot 环境变量注入密码连接）。
 - Redis `127.0.0.1:6379` — TCP ✅；服务器端启用 requirepass，应用层由 Spring Boot 环境变量注入密码连接。
 - RabbitMQ `<CLOUD_HOST_PLACEHOLDER>:5672` — AMQP TCP ✅；Management `15672` HTTP ✅ → **API 响应 200，节点 `rabbit@***`**。云端 RabbitMQ 生产凭据已配置到 `deploy/.env`（用户名与密码均通过环境变量注入，不落 Git），经 Management API Basic Auth 认证成功。PowerShell 无 PSCloudAMQP 模块，无法做底层 AMQP 握手测试；应用层由 Spring Boot 读取 `RABBITMQ_USERNAME/PASSWORD`，后续需部署服务后以真实业务消息验证 publisher confirm/consumption/DLQ 链路。
-- Milvus `<CLOUD_HOST_PLACEHOLDER>:19530` — gRPC TCP ✅；本项目无依赖确认。
 - Nacos `localhost:8848` — TCP ❌（本机未启动）。
 - common 模块编译 + 测试：48 个测试全部通过，BUILD SUCCESS。
 - attraction-service、route-service、collection-service、file-service 全部静默编译通过（无报错退出）。
@@ -1650,9 +1651,9 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 - [x] 新增路线推荐每日计划、周末客流预测和空浏览量兜底断言；全量 route-service 回归报告为99个测试，失败0、错误0、跳过0。
 - [x] `/route-optimization/apply` 同时兼容前端 `routeId/suggestionId/suggestion` 与旧版 `optimizationType/parameters` 请求字段；`parameters` 和 `suggestion` 统一为 `Map<String, JsonNode>`，避免 JSON 数值和嵌套结构退化为无约束对象。
 - [x] 为 `routeId`、可选 `suggestionId` 增加正数校验，未知顶层字段收口到最多20项 `JsonNode extensions`；新增 `RouteOptimizationControllerTest` 6 个契约断言，覆盖前端字段、旧字段、扩展保留、非法 ID 和扩展超限。
-- [x] 按混合基础设施拓扑统一参数化五个业务服务和 common 的 MySQL/Redis 地址：Win11 本机默认 `127.0.0.1:3306`、`127.0.0.1:6379/0`，可通过 `DB_*`、`REDIS_*` 覆盖；不再把数据库主机和 Redis DB 固定写死在各服务配置中。
-- [x] 明确 Milvus 能力边界：旅游后端当前没有 Milvus SDK、Client 或集合配置，云端 Milvus 仅属于 `newagent`/`novel_agent` 的外部 AI 基础设施，不能计入旅游项目已交付能力。
-- [ ] `applyOptimization` 当前仍是确认式占位逻辑，仅记录请求并返回 `true`，尚未根据 suggestion/optimizationType 修改路线数据；真实应用需要补充权限、幂等、事务和路线变更策略后单独验收。
+- [x] 按混合基础设施拓扑统一参数化五个业务服务和 common 的 MySQL/Redis 地址：Win11 本机默认 `127.0.0.1:3306`、`127.0.0.1:6379/3`，可通过 `DB_*`、`REDIS_*` 覆盖；不再把数据库主机和 Redis DB 固定写死在各服务配置中。
+- [x] 明确基础设施边界：本项目不使用向量数据库，不纳入架构、测试或交付范围。
+- [x] `applyOptimization` 已实现路线所有权校验、按日景点顺序优化、显式顺序校验、分布式锁、锁内事务、重复请求无重复写入，以及最近 20 条 Redis 优化历史。
 - [ ] `MultiDayRouteResult.userPreferences` 和 `generateMultiDayRoute` 仍保留旧 `Map<String, Object>` 兼容边界，需单独评估调用方和 JSON 兼容策略后再迁移。
 - [ ] 继续处理其余 AI 请求、路线优化结果和 Controller 返回中的 Map，逐条确认是否属于动态扩展或稳定业务结构；本轮已完成 `/route-optimization/apply` 请求契约收口，但未宣称业务应用动作完成。
 
@@ -1660,11 +1661,11 @@ SP 闂傚倸鐗勯崹濂告儊椤栫偛鍗抽悗闈涙啞缁犳瑩姊洪幓鎺�
 
 本轮增量完成：
 
-- [x] 新增 `docs/performance/README.md`，明确 Win11 本机 MySQL/Redis、云端 RabbitMQ/Milvus 的测试边界、前置条件和结果采集要求。
+- [x] 新增 `docs/performance/README.md`，明确 Win11 本机 MySQL/Redis、云端 RabbitMQ 的测试边界、前置条件和结果采集要求。
 - [x] 新增 `attraction-normal-read.jmx`、`attraction-hotspot-burst.jmx`、`attraction-cursor-deep-page.jmx` 三套 JMeter 5.6.3 非 GUI 场景，支持 `-Jhost`、`-Jport`、`-Jthreads`、`-JdurationSeconds` 参数覆盖。
 - [x] 游标深分页场景通过 JSON PostProcessor 提取 `data.lastRating` 和 `data.lastId`，动态构造下一页 `rating:id` 游标，避免硬编码分页游标。
 - [x] 新增 `RESULT_TEMPLATE.md` 和 `data/cursor-samples.csv`，并将实际结果与原始 `.jtl`、HTML 报告统一归档到 `docs/performance/results/formal-20260812/`。
-- [x] 2026-08-12 本机预检：MySQL `127.0.0.1:3306`、Redis `127.0.0.1:6379` 和 JMeter 5.6.3 可用；云端 RabbitMQ `<CLOUD_HOST_PLACEHOLDER>:5672/15672`、Milvus `<CLOUD_HOST_PLACEHOLDER>:19530` 可达，但均不纳入本轮读接口请求链路。
+- [x] 2026-08-12 本机预检：MySQL `127.0.0.1:3306`、Redis `127.0.0.1:6379` 和 JMeter 5.6.3 可用；云端 RabbitMQ `<CLOUD_HOST_PLACEHOLDER>:5672/15672` 可达，但不纳入本轮读接口请求链路。
 - [x] attraction-service 正式执行 `normal-read`、`hotspot-burst`、`cursor-deep-page` 三个场景各 3 轮，共 9 轮；HTTP/业务断言错误率均为 0%。
 - [x] 建立迁移前正式基线：normal-read 吞吐 `2889.72~3665.22/s`、平均 RT `2.55~3.24ms`；hotspot-burst 吞吐 `19.35~39.94/s`、平均 RT `1215.18~2493.65ms`；cursor-deep-page 吞吐 `3001.71~3747.51/s`、平均 RT `2.66~4.45ms`。
 - [x] 发现并记录热点突发瓶颈：50 并发下出现秒级延迟，P95 `2304~4595ms`、P99 `2504.5~5983.22ms`，不得包装为性能达标。

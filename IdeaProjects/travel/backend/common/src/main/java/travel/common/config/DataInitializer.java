@@ -232,18 +232,6 @@ public class DataInitializer implements CommandLineRunner {
         insertDict("nav_menu", "/feedback",   "/feedback",   "反馈",   10);
         insertDict("nav_menu", "/ai-chat",    "/ai-chat",    "AI",     11);
 
-        // AI功能Tab
-        insertDict("ai_tabs", "chat",       "chat",       "AI 对话",     1);
-        insertDict("ai_tabs", "recommend",  "recommend",  "AI 旅行推荐",  2);
-        insertDict("ai_tabs", "itinerary",  "itinerary",  "AI 行程生成",  3);
-        insertDict("ai_tabs", "image",      "image",      "图像分析",     4);
-        insertDict("ai_tabs", "multimodal", "multimodal", "多模态",       5);
-        insertDict("ai_tabs", "budget",     "budget",     "预算助手",     6);
-        insertDict("ai_tabs", "assistant",  "assistant",  "AI 智能助手",  7);
-        insertDict("ai_tabs", "plan",       "plan",       "智能规划",     8);
-        insertDict("ai_tabs", "safety",     "safety",     "安全建议",     9);
-        insertDict("ai_tabs", "voice",      "voice",      "语音助手",     10);
-
         // 路线Tab
         insertDict("route_tabs", "all",      "all",      "全部路线", 1);
         insertDict("route_tabs", "popular",  "popular",  "热门路线", 2);

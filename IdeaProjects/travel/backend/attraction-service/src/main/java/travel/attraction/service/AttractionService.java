@@ -29,10 +29,11 @@ public interface AttractionService extends IService<Attraction> {
 
     boolean removeById(Integer id);
 
+    boolean incrementViewCount(Integer id);
+
     CursorPageResult<Attraction> getByCursor(Integer cityId, String cursor, int size);
 
     CursorPageResult<Attraction> getAllByCursor(String cursor, int size);
 
     Map<String, Object> comparePagination(Integer cityId, int page, int size);
 }
-
