@@ -34,14 +34,6 @@ export const realtimeApi = {
         return apiClient.post<AttractionRealtimeStatus[]>('/realtime-status/batch', attractionIds);
     },
 
-    updateRealtimeStatus(status: AttractionRealtimeStatus) {
-        return apiClient.post<boolean>('/realtime-status/update', status);
-    },
-
-    batchUpdateRealtimeStatus(statusList: AttractionRealtimeStatus[]) {
-        return apiClient.post<boolean>('/realtime-status/batch-update', statusList);
-    },
-
     getNeedSyncStatus(minutes: number = DEFAULT_SYNC_MINUTES) {
         return apiClient.get<AttractionRealtimeStatus[]>('/realtime-status/need-sync', {
             params: { minutes },
@@ -50,10 +42,6 @@ export const realtimeApi = {
 
     getActiveWarns() {
         return apiClient.get<AttractionWarning[]>('/realtime-status/warns');
-    },
-
-    batchUpdateSyncTime(attractionIds: number[]) {
-        return apiClient.post<number>('/realtime-status/sync-time', attractionIds);
     },
 
     getCrowdedAttractions(minCrowdLevel: number) {

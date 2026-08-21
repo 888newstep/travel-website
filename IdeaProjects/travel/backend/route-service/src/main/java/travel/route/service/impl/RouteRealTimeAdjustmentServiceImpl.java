@@ -184,15 +184,6 @@ public class RouteRealTimeAdjustmentServiceImpl implements RouteRealTimeAdjustme
         return statusMap;
     }
 
-    private List<Long> extractAttractionIds(List<RouteAttraction> routeAttractions) {
-        return routeAttractions.stream()
-                .map(RouteAttraction::getAttractionId)
-                .filter(Objects::nonNull)
-                .map(Integer::longValue)
-                .distinct()
-                .toList();
-    }
-
     private List<RouteAttraction> loadOrderedRouteAttractions(Long routeId) {
         return routeAttractionMapper.selectList(
                 new LambdaQueryWrapper<RouteAttraction>()

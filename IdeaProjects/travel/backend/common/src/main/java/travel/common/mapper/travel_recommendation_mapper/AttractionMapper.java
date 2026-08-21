@@ -1,8 +1,6 @@
 package travel.common.mapper.travel_recommendation_mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 import travel.common.entity.travel_recommendation.Attraction;
@@ -13,14 +11,6 @@ import java.util.List;
 
 @Repository
 public interface AttractionMapper extends BaseMapper<Attraction> {
-
-    List<Attraction> selectEnableAndSyncOpenAttractions();
-
-    IPage<Attraction> selectAttractionPage(
-            @Param("page") Page<Attraction> page,
-            @Param("cityId") Long cityId,
-            @Param("type") String type
-    );
 
     Attraction selectLatLngById(@Param("attractionId") Long attractionId);
 
@@ -39,11 +29,6 @@ public interface AttractionMapper extends BaseMapper<Attraction> {
 
     List<Attraction> selectByOffset(
             @Param("cityId") Integer cityId,
-            @Param("offset") int offset,
-            @Param("size") int size
-    );
-
-    List<Attraction> selectAllByOffset(
             @Param("offset") int offset,
             @Param("size") int size
     );

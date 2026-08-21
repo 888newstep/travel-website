@@ -91,47 +91,6 @@ public class AIPlanConstraintScheduler {
         return new AIDailyPlan(day, "第" + day + "天行程", activities);
     }
 
-    /**
-     * 以当前游标的副本预演“可选活动 + 本日剩余必游景点”。
-     * 预演失败时跳过可选活动，避免贪心地消费容量后再错误地判定必游景点无法安排。
-     */
-    private boolean canScheduleRemainingMustVisits(int templateIndex,
-                                                    ActivityTemplate optionalTemplate,
-                                                    int usedMinutes,
-                                                    DailyScheduleCursor cursor,
-                                                    int nextMustVisitIndex,
-                                                    ConstraintContext context) {
-        int projectedUsedMinutes = usedMinutes;
-        if (projectedUsedMinutes + optionalTemplate.durationMinutes() > context.maxDailyMinutes()) {
-            return false;
-        }
-
-        DailyScheduleCursor projectedCursor = cursor.copy();
-        if (projectedCursor.next(optionalTemplate.durationMinutes(), optionalTemplate.defaultTime()) == null) {
-            return false;
-        }
-        projectedUsedMinutes += optionalTemplate.durationMinutes();
-
-        int projectedMustVisitIndex = nextMustVisitIndex;
-        for (int i = templateIndex + 1;
-             i < ACTIVITY_TEMPLATES.size() && projectedMustVisitIndex < context.mustVisitAttractions().size();
-             i++) {
-            ActivityTemplate candidate = ACTIVITY_TEMPLATES.get(i);
-            if (!"attraction".equals(candidate.type())) {
-                continue;
-            }
-            if (projectedUsedMinutes + candidate.durationMinutes() > context.maxDailyMinutes()) {
-                return false;
-            }
-            if (projectedCursor.next(candidate.durationMinutes(), candidate.defaultTime()) == null) {
-                return false;
-            }
-            projectedUsedMinutes += candidate.durationMinutes();
-            projectedMustVisitIndex++;
-        }
-        return projectedMustVisitIndex >= context.mustVisitAttractions().size();
-    }
-
     private void validateConflicts(ConstraintContext context) {
         for (String mustVisit : context.mustVisitAttractions()) {
             if (isAvoided(mustVisit, context.avoidAttractions())) {
@@ -249,16 +208,6 @@ public class AIPlanConstraintScheduler {
 
         private DailyScheduleCursor(List<TimeRange> timeWindows) {
             this.timeWindows = timeWindows;
-        }
-
-        private DailyScheduleCursor(DailyScheduleCursor source) {
-            this.timeWindows = source.timeWindows;
-            this.windowIndex = source.windowIndex;
-            this.cursorMinute = source.cursorMinute;
-        }
-
-        private DailyScheduleCursor copy() {
-            return new DailyScheduleCursor(this);
         }
 
         private String next(int durationMinutes, String defaultTime) {

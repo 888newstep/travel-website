@@ -25,10 +25,6 @@ export const fileApi = {
         });
     },
 
-    getFile(id: number) {
-        return apiClient.get<ResourceFile>(`/resource-file/${id}`);
-    },
-
     deleteFile(id: number) {
         return apiClient.delete<boolean>(`/resource-file/delete/${id}`);
     },
@@ -63,35 +59,9 @@ export const fileApi = {
         return apiClient.get<any[]>(`/resource-file/version/list/${fileId}`);
     },
 
-    getVersionHistory(fileId: string, page = 0, size = 10) {
-        return apiClient.get<any[]>(`/resource-file/version/history/${fileId}`, { params: { page, size } });
-    },
-
     compareVersions(version1Id: string, version2Id: string) {
         return apiClient.post<any>('/resource-file/version/compare', null, {
             params: { version1Id, version2Id },
         });
-    },
-};
-
-export const fileCategoryApi = {
-    createCategory(category: Partial<FileCategory>) {
-        return apiClient.post<FileCategory>('/resource-file/category/create', category);
-    },
-
-    getCategoryList() {
-        return apiClient.get<FileCategory[]>('/resource-file/category/list');
-    },
-
-    getCategoryTree() {
-        return apiClient.get<FileCategory[]>('/resource-file/category/tree');
-    },
-
-    updateCategory(id: number, category: Partial<FileCategory>) {
-        return apiClient.put<FileCategory>(`/resource-file/category/update/${id}`, category);
-    },
-
-    deleteCategory(id: number) {
-        return apiClient.delete<boolean>(`/resource-file/category/delete/${id}`);
     },
 };

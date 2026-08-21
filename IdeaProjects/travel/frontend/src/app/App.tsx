@@ -1,6 +1,5 @@
 import { AppHeader } from '../components/layout/AppHeader'
 import { AppFooter } from '../components/layout/AppFooter'
-import { ToastContainer } from '../components/common/ToastContainer'
 import { AppRouter } from './router'
 
 export function App() {
@@ -15,7 +14,6 @@ export function App() {
         <AppRouter />
       </main>
       <AppFooter />
-      <ToastContainer />
     </div>
   )
 }

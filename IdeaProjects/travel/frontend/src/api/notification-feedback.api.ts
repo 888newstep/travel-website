@@ -40,14 +40,6 @@ export const notificationApi = {
         return apiClient.put<boolean>(`/v1/notifications/${notificationId}/read`);
     },
 
-    deleteNotification(notificationId: number) {
-        return apiClient.delete<boolean>(`/v1/notifications/${notificationId}`);
-    },
-
-    getUnreadCount() {
-        return apiClient.get<number>('/v1/notifications/unread-count');
-    },
-
     markAllAsRead() {
         return apiClient.put<boolean>('/v1/notifications/read-all');
     },

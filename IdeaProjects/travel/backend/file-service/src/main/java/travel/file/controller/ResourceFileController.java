@@ -314,18 +314,6 @@ public class ResourceFileController {
         }
     }
 
-    @GetMapping("/category/tree")
-    public Result<List<Map<String, Object>>> getCategoryTree() {
-        try {
-            log.info("获取分类树请求");
-            List<Map<String, Object>> tree = fileTagService.getCategoryTree();
-            return Result.success("获取分类树成功", tree);
-        } catch (Exception e) {
-            log.error("获取分类树失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
-    }
-
     // ==================== 文件版本管理 ====================
 
     @GetMapping("/version/list/{fileId}")

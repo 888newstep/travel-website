@@ -22,13 +22,8 @@ public class UserStatisticsServiceImpl implements UserStatisticsService {
     private final RouteShareService routeShareService;
 
     @Override
-    public Map<String, Object> getUserStats(Integer userId) {
-        userId = AuthenticatedUserSupport.requireIntegerUserId();
-        if (userId == null || userId <= 0) {
-            log.warn("无效的用户ID: {}", userId);
-            return new HashMap<>();
-        }
-
+    public Map<String, Object> getCurrentUserStats() {
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
         Map<String, Object> stats = new HashMap<>();
 
         try {

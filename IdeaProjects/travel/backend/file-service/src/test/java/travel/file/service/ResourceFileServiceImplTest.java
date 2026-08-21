@@ -7,9 +7,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import travel.common.entity.travel_recommendation.ResourceFile;
 import travel.common.exception.BusinessException;
-import travel.common.mapper.travel_recommendation_mapper.ResourceFileMapper;
-import travel.common.mapper.user_community_mapper.FileCommentMapper;
-import travel.common.mapper.user_community_mapper.FileTagMapper;
 import travel.file.service.impl.ResourceFileServiceImpl;
 import travel.file.storage.FileStoragePolicy;
 
@@ -18,12 +15,11 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class ResourceFileServiceImplTest {
@@ -41,7 +37,7 @@ class ResourceFileServiceImplTest {
         when(storagePolicy.store(upload)).thenReturn(new FileStoragePolicy.StoredFile(
                 Path.of("photo.jpg"), "photo.jpg", "stored.jpg", 1L, "jpg"));
         when(storagePolicy.toPublicPath("stored.jpg")).thenReturn("/uploads/stored.jpg");
-        ResourceFileServiceImpl service = spy(createService(storagePolicy, mock(ResourceFileMapper.class)));
+        ResourceFileServiceImpl service = spy(createService(storagePolicy));
         doReturn(true).when(service).save(any(ResourceFile.class));
 
         ResourceFile result = service.uploadResourceFile(upload, "image", "test");
@@ -56,30 +52,28 @@ class ResourceFileServiceImplTest {
         ResourceFile anotherUsersFile = new ResourceFile();
         anotherUsersFile.setId(8);
         anotherUsersFile.setUploadUserId(7);
-        ResourceFileServiceImpl service = spy(createService(
-                mock(FileStoragePolicy.class), mock(ResourceFileMapper.class)));
+        ResourceFileServiceImpl service = spy(createService(mock(FileStoragePolicy.class)));
         doReturn(anotherUsersFile).when(service).getById(8);
 
-        BusinessException exception = assertThrows(BusinessException.class, () -> service.deleteFile(8));
+        BusinessException exception = assertThrows(BusinessException.class, () -> service.deleteResourceFile(8L));
 
         assertEquals(9009, exception.getCode());
     }
 
     @Test
-    void shouldIgnoreRequestedUserIdWhenListingFiles() {
+    void shouldReturnOwnedFile() {
         authenticate(42L);
-        ResourceFileMapper mapper = mock(ResourceFileMapper.class);
-        when(mapper.selectByUserId(42)).thenReturn(List.of());
-        ResourceFileServiceImpl service = createService(mock(FileStoragePolicy.class), mapper);
+        ResourceFile ownedFile = new ResourceFile();
+        ownedFile.setId(8);
+        ownedFile.setUploadUserId(42);
+        ResourceFileServiceImpl service = spy(createService(mock(FileStoragePolicy.class)));
+        doReturn(ownedFile).when(service).getById(8);
 
-        assertTrue(service.getByUserId(7).isEmpty());
-
-        verify(mapper).selectByUserId(42);
+        assertSame(ownedFile, service.getResourceFile(8L));
     }
 
-    private ResourceFileServiceImpl createService(FileStoragePolicy storagePolicy, ResourceFileMapper mapper) {
-        return new ResourceFileServiceImpl(
-                mapper, mock(FileTagMapper.class), mock(FileCommentMapper.class), storagePolicy);
+    private ResourceFileServiceImpl createService(FileStoragePolicy storagePolicy) {
+        return new ResourceFileServiceImpl(storagePolicy);
     }
 
     private void authenticate(Long userId) {

@@ -42,46 +42,11 @@
         LIMIT #{offset}, #{size}
     </select>
 
-    <!-- 偏移分页：全局查询（用于对比实验） -->
-    <select id="selectAllByOffset" resultType="travel.common.entity.travel_recommendation.Attraction">
-        SELECT id, name, city_id, address, description, ticket_price,
-               opening_hours, latitude, longitude, images, rating, view_count,
-               created_at, updated_at
-        FROM attraction
-        ORDER BY rating DESC, id DESC
-        LIMIT #{offset}, #{size}
-    </select>
-
-    <!-- 查询启用且开启同步的景点（同步任务核心方法） -->
-    <select id="selectEnableAndSyncOpenAttractions" resultType="travel.common.entity.travel_recommendation.Attraction">
-        SELECT id, name, city_id, latitude, longitude
-        FROM attraction
-        WHERE rating > 0
-        ORDER BY id
-    </select>
-
     <!-- 查询景点经纬度（仅同步任务需要的字段，优化性能） -->
     <select id="selectLatLngById" resultType="travel.common.entity.travel_recommendation.Attraction">
         SELECT id, latitude, longitude
         FROM attraction
         WHERE id = #{attractionId}
-    </select>
-
-    <!-- 分页查询景点（后台管理） -->
-    <select id="selectAttractionPage" resultType="travel.common.entity.travel_recommendation.Attraction">
-        SELECT id, name, city_id, address, description, ticket_price,
-               opening_hours, latitude, longitude, images, rating, view_count,
-               created_at, updated_at
-        FROM attraction
-        <where>
-            <if test="cityId != null">
-                AND city_id = #{cityId}
-            </if>
-            <if test="type != null and type != ''">
-                AND address LIKE CONCAT('%', #{type}, '%')
-            </if>
-        </where>
-        ORDER BY rating DESC, id DESC
     </select>
 
 </mapper>
