@@ -1,0 +1,134 @@
+server:
+  port: 8095
+
+mq:
+  status-persistence:
+    enabled: ${MQ_STATUS_PERSISTENCE_ENABLED:false}
+
+spring:
+  servlet:
+    multipart:
+      max-file-size: ${FILE_STORAGE_MAX_FILE_SIZE:10MB}
+      max-request-size: ${FILE_STORAGE_MAX_REQUEST_SIZE:50MB}
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:travel_website}?serverTimezone=Asia/Shanghai&useUnicode=true&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    type: com.alibaba.druid.pool.DruidDataSource
+    druid:
+      initial-size: 5
+      min-idle: 5
+      max-active: 20
+      max-wait: 30000
+      time-between-eviction-runs-millis: 60000
+      min-evictable-idle-time-millis: 300000
+      validation-query: SELECT 1
+      test-while-idle: true
+      test-on-borrow: false
+      test-on-return: false
+      filter:
+        stat:
+          enabled: true
+          db-type: mysql
+          log-slow-sql: true
+          slow-sql-millis: 2000
+          merge-sql: true
+        wall:
+          enabled: true
+          db-type: mysql
+          config:
+            delete-allow: true
+            drop-table-allow: false
+        slf4j:
+          enabled: true
+          statement-executable-sql-log-enable: true
+      web-stat-filter:
+        enabled: true
+        url-pattern: /*
+        exclusions: /druid/*,*.js,*.gif,*.jpg,*.png,*.css,*.ico
+        session-stat-enable: true
+        profile-enable: true
+      stat-view-servlet:
+        enabled: true
+        url-pattern: /druid/*
+        login-username: ${DRUID_USERNAME:}
+        login-password: ${DRUID_PASSWORD:}
+        reset-enable: false
+        allow: 127.0.0.1
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DB:3}
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: 3000ms
+        shutdown-timeout: 100ms
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    connection-timeout: 5s
+    requested-heartbeat: 30s
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        concurrency: 3
+        max-concurrency: 10
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000
+        max-attempts: 3
+        max-interval: 5000ms
+        multiplier: 2
+      mandatory: true
+
+mybatis-plus:
+  mapper-locations: classpath:mappers/**/*.xml
+  type-aliases-package: travel.entity
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    travel: debug
+    org.springframework.web: debug
+    travel.exception: debug
+
+
+seata:
+  enabled: false
+  tx-service-group: travel-seata-group
+  service:
+    vgroup-mapping:
+      travel-seata-group: default
+  registry:
+    type: nacos
+    nacos:
+      server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
+      namespace: ${NACOS_NAMESPACE:public}
+      group: SEATA_GROUP
+
+file:
+  storage:
+    # 不再把 Windows 本地目录硬编码到业务代码，部署时可通过 FILE_STORAGE_ROOT_DIR 覆盖。
+    root-dir: ${FILE_STORAGE_ROOT_DIR:${user.home}/travel-resources}
+    public-path: ${FILE_STORAGE_PUBLIC_PATH:/resources/}
+    max-file-size-bytes: ${FILE_STORAGE_MAX_FILE_SIZE_BYTES:10485760}
+    max-batch-files: ${FILE_STORAGE_MAX_BATCH_FILES:10}
+    max-filename-length: ${FILE_STORAGE_MAX_FILENAME_LENGTH:255}

@@ -1,0 +1,29 @@
+{
+  "name": "travel-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/vite-dev.mjs",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "powershell -NoProfile -Command \"Remove-Item dist -Recurse -Force -ErrorAction SilentlyContinue\"",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "axios": "^1.19.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.18.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.2.4",
+    "typescript": "~5.8.2",
+    "vite": "^6.4.3"
+  }
+}

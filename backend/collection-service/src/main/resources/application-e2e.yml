@@ -1,0 +1,28 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+    discovery:
+      client:
+        simple:
+          instances:
+            route-service:
+              - uri: http://127.0.0.1:8093
+            user-service:
+              - uri: http://127.0.0.1:8091
+    sentinel:
+      eager: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

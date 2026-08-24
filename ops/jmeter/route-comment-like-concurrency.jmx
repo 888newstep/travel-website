@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Route comment like concurrency" enabled="true">
+      <stringProp name="TestPlan.comments">Each thread uses a different authenticated user and idempotency key to exercise the database unique action row and atomic like counter.</stringProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.tearDown_on_shutdown">true</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Test variables" enabled="true">
+        <collectionProp name="Arguments.arguments">
+          <elementProp name="service_host" elementType="Argument">
+            <stringProp name="Argument.name">service_host</stringProp>
+            <stringProp name="Argument.value">${__P(service_host,127.0.0.1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="service_port" elementType="Argument">
+            <stringProp name="Argument.name">service_port</stringProp>
+            <stringProp name="Argument.value">${__P(service_port,18094)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="service_context_path" elementType="Argument">
+            <stringProp name="Argument.name">service_context_path</stringProp>
+            <stringProp name="Argument.value">${__P(service_context_path,/api)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="comment_id" elementType="Argument">
+            <stringProp name="Argument.name">comment_id</stringProp>
+            <stringProp name="Argument.value">${__P(comment_id,1)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="threads" elementType="Argument">
+            <stringProp name="Argument.name">threads</stringProp>
+            <stringProp name="Argument.value">${__P(threads,100)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="user_csv" elementType="Argument">
+            <stringProp name="Argument.name">user_csv</stringProp>
+            <stringProp name="Argument.value">${__P(user_csv,)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="connect_timeout_ms" elementType="Argument">
+            <stringProp name="Argument.name">connect_timeout_ms</stringProp>
+            <stringProp name="Argument.value">${__P(connect_timeout_ms,5000)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+          <elementProp name="response_timeout_ms" elementType="Argument">
+            <stringProp name="Argument.name">response_timeout_ms</stringProp>
+            <stringProp name="Argument.value">${__P(response_timeout_ms,30000)}</stringProp>
+            <stringProp name="Argument.metadata">=</stringProp>
+          </elementProp>
+        </collectionProp>
+      </elementProp>
+    </TestPlan>
+    <hashTree>
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP defaults" enabled="true">
+        <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+          <collectionProp name="Arguments.arguments"/>
+        </elementProp>
+        <stringProp name="HTTPSampler.domain">${service_host}</stringProp>
+        <stringProp name="HTTPSampler.port">${service_port}</stringProp>
+        <stringProp name="HTTPSampler.protocol">http</stringProp>
+        <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+        <stringProp name="HTTPSampler.concurrentPool">20</stringProp>
+        <stringProp name="HTTPSampler.connect_timeout">${connect_timeout_ms}</stringProp>
+        <stringProp name="HTTPSampler.response_timeout">${response_timeout_ms}</stringProp>
+      </ConfigTestElement>
+      <hashTree/>
+
+      <SetupThreadGroup guiclass="SetupThreadGroupGui" testclass="SetupThreadGroup" testname="Setup" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">stoptest</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+      </SetupThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="setup:init" enabled="true">
+          <stringProp name="cacheKey">route-comment-like-init-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicInteger
+
+def expectedThreads = vars.get('threads')
+def commentId = vars.get('comment_id')
+def userCsv = vars.get('user_csv')
+if (!(expectedThreads ==~ /[1-9]\d*/)) {
+    throw new IllegalArgumentException('threads must be a positive integer')
+}
+if (!(commentId ==~ /[1-9]\d*/)) {
+    throw new IllegalArgumentException('comment_id must be a positive integer')
+}
+if (!userCsv || !new File(userCsv).isFile()) {
+    throw new IllegalArgumentException('user_csv must reference an existing file')
+}
+
+def runId = UUID.randomUUID().toString().replace('-', '')
+props.setProperty('travel.comment.like.run_id', runId)
+props.setProperty('travel.comment.like.expected_threads', expectedThreads)
+props.put('travel.comment.like.successes', new AtomicInteger())
+props.put('travel.comment.like.failures', new ConcurrentLinkedQueue())
+props.put('travel.comment.like.users', ConcurrentHashMap.newKeySet())
+
+SampleResult.setResponseCode('200')
+SampleResult.setResponseMessage("runId=${runId};threads=${expectedThreads};commentId=${commentId}")
+SampleResult.setResponseData("{\"runId\":\"${runId}\",\"threads\":${expectedThreads},\"commentId\":${commentId}}", 'UTF-8')
+SampleResult.setDataType('text')
+SampleResult.setSuccessful(true)
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Concurrent comment likers" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">${threads}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+      </ThreadGroup>
+      <hashTree>
+        <CSVDataSet guiclass="TestBeanGUI" testclass="CSVDataSet" testname="Unique user tokens" enabled="true">
+          <stringProp name="delimiter">,</stringProp>
+          <stringProp name="fileEncoding">UTF-8</stringProp>
+          <stringProp name="filename">${user_csv}</stringProp>
+          <boolProp name="ignoreFirstLine">false</boolProp>
+          <boolProp name="quotedData">false</boolProp>
+          <boolProp name="recycle">false</boolProp>
+          <stringProp name="shareMode">shareMode.all</stringProp>
+          <boolProp name="stopThread">true</boolProp>
+          <stringProp name="variableNames">user_id,token</stringProp>
+        </CSVDataSet>
+        <hashTree/>
+
+        <SyncTimer guiclass="TestBeanGUI" testclass="SyncTimer" testname="Synchronize all likers" enabled="true">
+          <intProp name="groupSize">0</intProp>
+          <longProp name="timeoutInMs">30000</longProp>
+        </SyncTimer>
+        <hashTree/>
+
+        <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Build unique like request" enabled="true">
+          <stringProp name="cacheKey">route-comment-like-request-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+def runId = props.getProperty('travel.comment.like.run_id')
+def userId = vars.get('user_id')
+def token = vars.get('token')
+if (!(userId ==~ /[1-9]\d*/) || !token) {
+    throw new IllegalStateException('CSV row does not contain a valid user_id and token')
+}
+vars.put('like_idempotency_key', "comment-like-${runId}-${userId}")
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223PreProcessor>
+        <hashTree/>
+
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="comment-like:toggle" enabled="true">
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
+            <collectionProp name="Arguments.arguments"/>
+          </elementProp>
+          <stringProp name="HTTPSampler.path">${service_context_path}/route-comments/${comment_id}/toggle-like</stringProp>
+          <stringProp name="HTTPSampler.method">POST</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">false</boolProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="Like headers" enabled="true">
+            <collectionProp name="HeaderManager.headers">
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Authorization</stringProp>
+                <stringProp name="Header.value">Bearer ${token}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Idempotency-Key</stringProp>
+                <stringProp name="Header.value">${like_idempotency_key}</stringProp>
+              </elementProp>
+              <elementProp name="" elementType="Header">
+                <stringProp name="Header.name">Accept</stringProp>
+                <stringProp name="Header.value">application/json</stringProp>
+              </elementProp>
+            </collectionProp>
+          </HeaderManager>
+          <hashTree/>
+
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Validate like response" enabled="true">
+            <stringProp name="cacheKey">route-comment-like-validate-v1</stringProp>
+            <stringProp name="filename"/>
+            <stringProp name="parameters"/>
+            <stringProp name="script"><![CDATA[
+import groovy.json.JsonSlurper
+
+def successes = props.get('travel.comment.like.successes')
+def failures = props.get('travel.comment.like.failures')
+def users = props.get('travel.comment.like.users')
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (prev.getResponseCode() != '200' || body?.success != true || body?.code != 200 || body?.data?.liked != true || !(body?.data?.likeCount instanceof Number)) {
+        throw new IllegalStateException("http=${prev.getResponseCode()},body=${prev.getResponseDataAsString()}")
+    }
+    successes.incrementAndGet()
+    users.add(vars.get('user_id'))
+} catch (Exception exception) {
+    failures.add("userId=${vars.get('user_id')},${exception.message}")
+    prev.setSuccessful(false)
+    prev.setResponseMessage(exception.message)
+}
+]]></stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223PostProcessor>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+
+      <PostThreadGroup guiclass="PostThreadGroupGui" testclass="PostThreadGroup" testname="Teardown" enabled="true">
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop Controller" enabled="true">
+          <boolProp name="LoopController.continue_forever">false</boolProp>
+          <stringProp name="LoopController.loops">1</stringProp>
+        </elementProp>
+        <stringProp name="ThreadGroup.num_threads">1</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">0</stringProp>
+        <boolProp name="ThreadGroup.scheduler">false</boolProp>
+      </PostThreadGroup>
+      <hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="teardown:assert" enabled="true">
+          <stringProp name="cacheKey">route-comment-like-assert-v1</stringProp>
+          <stringProp name="filename"/>
+          <stringProp name="parameters"/>
+          <stringProp name="script"><![CDATA[
+import groovy.json.JsonOutput
+
+def expected = props.getProperty('travel.comment.like.expected_threads') as int
+def successCount = props.get('travel.comment.like.successes').get()
+def failures = props.get('travel.comment.like.failures')
+def users = props.get('travel.comment.like.users')
+def summary = [
+        expected: expected,
+        successes: successCount,
+        failures: failures.size(),
+        distinctUsers: users.size()
+]
+SampleResult.setResponseCode('200')
+SampleResult.setResponseData(JsonOutput.toJson(summary), 'UTF-8')
+SampleResult.setDataType('text')
+if (successCount != expected || !failures.isEmpty() || users.size() != expected) {
+    SampleResult.setSuccessful(false)
+    SampleResult.setResponseMessage("comment like verification failed: ${JsonOutput.toJson(summary)};details=${failures}")
+} else {
+    SampleResult.setSuccessful(true)
+    SampleResult.setResponseMessage("comment like verification passed: ${JsonOutput.toJson(summary)}")
+}
+]]></stringProp>
+          <stringProp name="scriptLanguage">groovy</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

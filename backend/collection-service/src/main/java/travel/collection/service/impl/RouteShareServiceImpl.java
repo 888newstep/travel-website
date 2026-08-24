@@ -1,0 +1,626 @@
+package travel.collection.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.RequiredArgsConstructor;
+import travel.common.entity.route_planning.Route;
+import travel.common.entity.user_community.RouteShare;
+import travel.common.entity.user_community.User;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
+import travel.common.mapper.route_planning_mapper.RouteShareMapper;
+import travel.common.mapper.user_community_mapper.TravelNoteMapper;
+import travel.common.mapper.travel_recommendation_mapper.ResourceFileMapper;
+import travel.collection.service.RouteService;
+import travel.collection.service.RouteShareService;
+import travel.collection.service.UserService;
+import travel.collection.dto.SharedRouteAccessResponse;
+import travel.collection.dto.ShareStatisticsResponse;
+import travel.common.utils.CacheUtil;
+import travel.common.utils.PasswordEncoderUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+
+
+/**
+ * 路线分享服务实现类
+ */
+@Service
+@RequiredArgsConstructor
+public class RouteShareServiceImpl extends ServiceImpl<RouteShareMapper, RouteShare> implements RouteShareService {
+
+    private static final Logger log = LoggerFactory.getLogger(RouteShareServiceImpl.class);
+
+    private final RouteService routeService;
+    private final UserService userService;
+    private final CacheUtil cacheUtil;
+    private final TravelNoteMapper travelNoteMapper;
+    private final ResourceFileMapper resourceFileMapper;
+
+    private static final String SHARE_CODE_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    private static final int SHARE_CODE_LENGTH = 16;
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    @Override
+    public RouteShare createShare(Integer routeId, Integer userId, String shareTitle, String shareDescription, Integer expireDays) {
+        // 1. 参数校验
+        if (routeId == null || userId == null || shareTitle == null || shareTitle.isBlank()) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        // 2. 校验路线是否存在
+        Route route = routeService.getById(routeId.longValue());
+        if (route == null) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+        }
+        if (!userId.equals(route.getUserId())) {
+            throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+        }
+
+        // 3. 校验用户是否存在
+        User user = userService.getById(userId.longValue());
+        if (user == null) {
+            throw new BusinessException(ErrorCodeEnum.USER_NOT_EXIST);
+        }
+
+        // 4. 生成唯一分享码
+        String shareCode = generateUniqueShareCode();
+
+        // 5. 创建分享记录
+        RouteShare routeShare = new RouteShare();
+        routeShare.setRouteId(routeId);
+        routeShare.setUserId(userId);
+        routeShare.setShareCode(shareCode);
+        routeShare.setShareTitle(shareTitle);
+        routeShare.setShareDescription(shareDescription != null ? shareDescription : route.getDescription());
+        
+        // 6. 设置过期时间
+        if (expireDays != null && expireDays > 0) {
+            routeShare.setExpireTime(LocalDateTime.now().plusDays(expireDays));
+        }
+
+        // 7. 保存到数据库
+        save(routeShare);
+
+        log.info("创建路线分享成功: routeId={}, userId={}, shareCode={}", routeId, userId, shareCode);
+        return routeShare;
+    }
+
+    @Override
+    public List<Map<String, Object>> getRouteShares(Integer routeId, int page, int size) {
+        if (routeId == null || routeId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        log.info("获取路线分享列表: routeId={}, page={}, size={}", routeId, page, size);
+
+        // 从数据库获取
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getRouteId, routeId)
+                .eq(RouteShare::getIsActive, true)
+                .orderByDesc(RouteShare::getCreatedAt);
+
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<RouteShare> pageResult =
+                new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<RouteShare> result = page(pageResult, queryWrapper);
+
+        // 转换为 Map 格式返回
+        List<Map<String, Object>> shareList = new ArrayList<>();
+        for (RouteShare share : result.getRecords()) {
+            Map<String, Object> shareMap = new HashMap<>();
+            shareMap.put("id", share.getId());
+            shareMap.put("routeId", share.getRouteId());
+            shareMap.put("userId", share.getUserId());
+            shareMap.put("shareCode", share.getShareCode());
+            shareMap.put("shareTitle", share.getShareTitle());
+            shareMap.put("shareDescription", share.getShareDescription());
+            shareMap.put("shareCount", share.getShareCount());
+            shareMap.put("visitCount", share.getVisitCount());
+            shareMap.put("expireTime", share.getExpireTime());
+            shareMap.put("isActive", share.getIsActive());
+            shareMap.put("createdAt", share.getCreatedAt());
+
+            // 检查是否过期
+            shareMap.put("isExpired", !isShareValid(share));
+
+            shareList.add(shareMap);
+        }
+
+        log.info("获取路线分享列表成功: routeId={}, count={}", routeId, shareList.size());
+        return shareList;
+    }
+
+    @Override
+    public RouteShare shareRoute(Integer routeId, Integer userId, String platform, String shareContent) {
+        log.info("分享路线: routeId={}, userId={}, platform={}", routeId, userId, platform);
+
+        // 参数校验
+        if (routeId == null || userId == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        // 校验路线是否存在
+        Route route = routeService.getById(routeId.longValue());
+        if (route == null) {
+            throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+        }
+        if (!userId.equals(route.getUserId())) {
+            throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+        }
+
+        // 创建分享记录
+        RouteShare routeShare = new RouteShare();
+        routeShare.setRouteId(routeId);
+        routeShare.setUserId(userId);
+        routeShare.setShareCode(generateUniqueShareCode());
+        routeShare.setShareTitle(route.getTitle() + " - 分享");
+        routeShare.setShareDescription(shareContent != null ? shareContent : route.getDescription());
+        routeShare.setShareCount(1);
+        routeShare.setVisitCount(0);
+        routeShare.setIsActive(true);
+        routeShare.setCreatedAt(LocalDateTime.now());
+
+        // 保存到数据库
+        save(routeShare);
+
+        log.info("路线分享成功: routeId={}, userId={}, shareCode={}", routeId, userId, routeShare.getShareCode());
+        return routeShare;
+    }
+
+    @Override
+    public RouteShare getByShareCode(String shareCode) {
+        if (shareCode == null || shareCode.isBlank()) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        // 尝试从缓存获取
+        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "code", shareCode);
+        Object cachedObj = cacheUtil.get(cacheKey, RouteShare.class);
+        if (cachedObj instanceof RouteShare) {
+            RouteShare routeShare = (RouteShare) cachedObj;
+            // 检查是否过期
+            if (isShareValid(routeShare)) {
+                return routeShare;
+            }
+        }
+
+        // 从数据库获取
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getShareCode, shareCode)
+                .eq(RouteShare::getIsActive, true);
+
+        RouteShare routeShare = getOne(queryWrapper);
+        if (routeShare == null) {
+            throw new BusinessException(ErrorCodeEnum.SHARE_NOT_EXIST);
+        }
+
+        // 检查是否过期
+        if (!isShareValid(routeShare)) {
+            // 标记为无效
+            routeShare.setIsActive(false);
+            updateById(routeShare);
+            throw new BusinessException(ErrorCodeEnum.SHARE_EXPIRED);
+        }
+
+        // 缓存结果
+        cacheUtil.set(cacheKey, routeShare, 24, TimeUnit.HOURS);
+
+        return routeShare;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public boolean incrementVisitCount(Integer shareId) {
+        if (shareId == null || shareId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        RouteShare routeShare = getById(shareId);
+        if (routeShare == null) {
+            throw new BusinessException(ErrorCodeEnum.SHARE_NOT_EXIST);
+        }
+
+        // 使用数据库原子递增，避免并发访问覆盖彼此的计数。
+        boolean result = baseMapper.incrementVisitCount(shareId) == 1;
+
+        if (result) {
+            // 清除缓存
+            String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "code", routeShare.getShareCode());
+            cacheUtil.delete(cacheKey);
+            String statsCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "stats", shareId);
+            cacheUtil.delete(statsCacheKey);
+            log.info("增加分享访问次数成功: shareId={}", shareId);
+        }
+
+        return result;
+    }
+
+    @Override
+    public List<RouteShare> getUserShares(Integer userId) {
+        if (userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        // 尝试从缓存获取
+        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "user", userId);
+        Object cachedObj = cacheUtil.get(cacheKey, List.class);
+        if (cachedObj instanceof List) {
+            List<?> cachedList = (List<?>) cachedObj;
+            List<RouteShare> cachedShares = new ArrayList<>();
+            for (Object item : cachedList) {
+                if (item instanceof RouteShare) {
+                    cachedShares.add((RouteShare) item);
+                }
+            }
+            if (!cachedShares.isEmpty()) {
+                return cachedShares;
+            }
+        }
+
+        // 从数据库获取
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getUserId, userId)
+                .orderByDesc(RouteShare::getCreatedAt);
+
+        List<RouteShare> shares = list(queryWrapper);
+
+        // 缓存结果
+        cacheUtil.set(cacheKey, shares, 30, TimeUnit.MINUTES);
+
+        return shares;
+    }
+
+    @Override
+    public boolean cancelShare(Integer shareId, Integer userId) {
+        if (shareId == null || shareId <= 0 || userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        RouteShare routeShare = getById(shareId);
+        if (routeShare == null) {
+            throw new BusinessException(ErrorCodeEnum.SHARE_NOT_EXIST);
+        }
+
+        // 校验归属
+        if (!userId.equals(routeShare.getUserId())) {
+            throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+        }
+
+        // 标记为无效
+        routeShare.setIsActive(false);
+        boolean result = updateById(routeShare);
+
+        if (result) {
+            // 清除缓存
+            String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "code", routeShare.getShareCode());
+            cacheUtil.delete(cacheKey);
+            String userCacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "user", userId);
+            cacheUtil.delete(userCacheKey);
+            log.info("取消分享成功: shareId={}, userId={}", shareId, userId);
+        }
+
+        return result;
+    }
+
+    @Override
+    public boolean increaseVisitCount(String shareCode) {
+        log.info("增加访问次数: shareCode={}", shareCode);
+        RouteShare share = getByShareCode(shareCode);
+        if (share == null) {
+            return false;
+        }
+        return incrementVisitCount(share.getId());
+    }
+
+    @Override
+    public long countByUserId(Integer userId) {
+        if (userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getUserId, userId);
+        return count(queryWrapper);
+    }
+
+    @Override
+    public ShareStatisticsResponse getShareStatistics(Long shareId, Integer userId) {
+        if (shareId == null || shareId <= 0 || userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+
+        RouteShare routeShare = getById(shareId);
+        if (routeShare == null) {
+            throw new BusinessException(ErrorCodeEnum.SHARE_NOT_EXIST);
+        }
+        if (!userId.equals(routeShare.getUserId())) {
+            throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+        }
+
+        // 尝试从缓存获取
+        String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "stats", shareId);
+        ShareStatisticsResponse cached = cacheUtil.get(cacheKey, ShareStatisticsResponse.class);
+        if (cached != null) {
+            return cached;
+        }
+
+        ShareStatisticsResponse statistics = new ShareStatisticsResponse(
+                shareId,
+                routeShare.getShareCode(),
+                routeShare.getShareTitle(),
+                routeShare.getShareCount(),
+                routeShare.getVisitCount(),
+                routeShare.getCreatedAt(),
+                routeShare.getExpireTime(),
+                routeShare.getIsActive(),
+                !isShareValid(routeShare));
+
+        // 缓存结果
+        cacheUtil.set(cacheKey, statistics, 1, TimeUnit.HOURS);
+
+        return statistics;
+    }
+
+    @Override
+    public int cleanExpiredShares() {
+        LocalDateTime now = LocalDateTime.now();
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.le(RouteShare::getExpireTime, now)
+                .eq(RouteShare::getIsActive, true);
+
+        List<RouteShare> expiredShares = list(queryWrapper);
+        int count = 0;
+
+        for (RouteShare share : expiredShares) {
+            share.setIsActive(false);
+            if (updateById(share)) {
+                count++;
+                // 清除缓存
+                String cacheKey = CacheUtil.generateKey(CacheUtil.ROUTE_SHARE_KEY_PREFIX, "code", share.getShareCode());
+                cacheUtil.delete(cacheKey);
+            }
+        }
+
+        log.info("清理过期分享成功: 清理数量={}", count);
+        return count;
+    }
+
+    /**
+     * 生成唯一分享码
+     */
+    private String generateUniqueShareCode() {
+        String shareCode;
+        boolean exists;
+
+        do {
+            StringBuilder sb = new StringBuilder(SHARE_CODE_LENGTH);
+            for (int i = 0; i < SHARE_CODE_LENGTH; i++) {
+                int index = SECURE_RANDOM.nextInt(SHARE_CODE_CHARS.length());
+                sb.append(SHARE_CODE_CHARS.charAt(index));
+            }
+            shareCode = sb.toString();
+
+            // 检查是否已存在
+            LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(RouteShare::getShareCode, shareCode);
+            exists = count(queryWrapper) > 0;
+        } while (exists);
+
+        return shareCode;
+    }
+
+    /**
+     * 检查分享是否有效
+     */
+    private boolean isShareValid(RouteShare routeShare) {
+        if (!routeShare.getIsActive()) {
+            return false;
+        }
+
+        LocalDateTime expireTime = routeShare.getExpireTime();
+        return expireTime == null || expireTime.isAfter(LocalDateTime.now());
+    }
+
+    // 以下是Controller中使用的方法实现
+
+    @Override
+    public RouteShare createRouteShare(RouteShare routeShare) {
+        log.info("创建路线分享: {}", routeShare);
+        routeShare.setShareCode(generateUniqueShareCode());
+        routeShare.setIsActive(true);
+        routeShare.setCreatedAt(LocalDateTime.now());
+        save(routeShare);
+        return routeShare;
+    }
+
+    @Override
+    public RouteShare getShareInfo(String shareCode) {
+        log.info("获取分享信息: shareCode={}", shareCode);
+        return getByShareCode(shareCode);
+    }
+
+    @Override
+    public String accessShareFile(String shareCode, String password) {
+        log.info("访问分享文件: shareCode={}", shareCode);
+        RouteShare share = getByShareCode(shareCode);
+        if (share == null || !isShareValid(share)) {
+            return null;
+        }
+        if (share.getPassword() != null
+                && !PasswordEncoderUtil.matches(password == null ? "" : password, share.getPassword())) {
+            return null;
+        }
+        incrementVisitCount(share.getId());
+        return "/access/" + shareCode;
+    }
+
+    @Override
+    public List<RouteShare> getUserShares(Integer userId, int page, int size) {
+        log.info("获取用户分享列表: userId={}, page={}, size={}", userId, page, size);
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getUserId, userId);
+        queryWrapper.orderByDesc(RouteShare::getCreatedAt);
+        com.baomidou.mybatisplus.extension.plugins.pagination.Page<RouteShare> pageResult = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+        return page(pageResult, queryWrapper).getRecords();
+    }
+
+    @Override
+    public boolean updateShareSettings(Long id, Integer userId, Map<String, Object> settings) {
+        if (id == null || userId == null || userId <= 0 || settings == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        log.info("更新分享设置: id={}", id);
+        RouteShare share = getById(id.intValue());
+        if (share == null) {
+            return false;
+        }
+        if (!userId.equals(share.getUserId())) {
+            throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+        }
+        if (settings.containsKey("shareTitle")) {
+            share.setShareTitle((String) settings.get("shareTitle"));
+        }
+        if (settings.containsKey("shareDescription")) {
+            share.setShareDescription((String) settings.get("shareDescription"));
+        }
+        if (settings.containsKey("password")) {
+            String password = settings.get("password") == null
+                    ? null : settings.get("password").toString().trim();
+            share.setPassword(password == null || password.isBlank()
+                    ? null : PasswordEncoderUtil.encode(password));
+        }
+        boolean updated = updateById(share);
+        if (updated) {
+            cacheUtil.delete(CacheUtil.generateKey(
+                    CacheUtil.ROUTE_SHARE_KEY_PREFIX, "code", share.getShareCode()));
+            cacheUtil.delete(CacheUtil.generateKey(
+                    CacheUtil.ROUTE_SHARE_KEY_PREFIX, "user", userId));
+            cacheUtil.delete(CacheUtil.generateKey(
+                    CacheUtil.ROUTE_SHARE_KEY_PREFIX, "stats", id));
+        }
+        return updated;
+    }
+
+    @Override
+    public int batchCancelShares(List<Long> ids, Integer userId) {
+        if (ids == null || ids.isEmpty()) {
+            return 0;
+        }
+        log.info("批量取消分享: count={}", ids.size());
+        int count = 0;
+        for (Long id : ids) {
+            if (cancelShare(id.intValue(), userId)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    @Override
+    public List<RouteShare> getPopularShares(int limit) {
+        int normalizedLimit = Math.max(1, Math.min(limit, 50));
+        log.info("获取热门分享: limit={}", normalizedLimit);
+        LambdaQueryWrapper<RouteShare> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(RouteShare::getIsActive, true);
+        queryWrapper.orderByDesc(RouteShare::getVisitCount);
+        queryWrapper.last("LIMIT " + normalizedLimit);
+        return list(queryWrapper);
+    }
+
+    @Override
+    public SharedRouteAccessResponse accessShareRoute(String shareCode) {
+        log.info("访问分享路线: shareCode={}", shareCode);
+        RouteShare share = getByShareCode(shareCode);
+        if (share == null) {
+            throw new BusinessException(ErrorCodeEnum.SHARE_NOT_EXIST);
+        }
+        if (!isShareValid(share)) {
+            throw new BusinessException(ErrorCodeEnum.SHARE_EXPIRED);
+        }
+        incrementVisitCount(share.getId());
+        return new SharedRouteAccessResponse(
+                share.getRouteId(), share.getShareTitle(), share.getShareDescription());
+    }
+
+    @Override
+    public RouteShare generateShareCode(RouteShare share) {
+        log.info("生成分享码: itemId={}, itemType={}", share.getItemId(), share.getItemType());
+
+        if (share.getItemId() == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "项目ID不能为空");
+        }
+        if (share.getUserId() == null) {
+            throw new BusinessException(ErrorCodeEnum.UNAUTHORIZED);
+        }
+        if ("route".equals(share.getItemType())) {
+            Integer routeId = share.getRouteId() != null ? share.getRouteId() : share.getItemId();
+            Route route = routeService.getById(routeId.longValue());
+            if (route == null) {
+                throw new BusinessException(ErrorCodeEnum.ROUTE_NOT_EXIST);
+            }
+            if (!share.getUserId().equals(route.getUserId())) {
+                throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+            }
+            share.setRouteId(routeId);
+            share.setItemId(routeId);
+        } else if ("note".equals(share.getItemType())) {
+            var travelNote = travelNoteMapper.selectById(share.getItemId());
+            if (travelNote == null) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "游记不存在");
+            }
+            if (!share.getUserId().equals(travelNote.getUserId())) {
+                throw new BusinessException(ErrorCodeEnum.NO_PERMISSION);
+            }
+        } else if ("file".equals(share.getItemType())) {
+            var resourceFile = resourceFileMapper.selectById(share.getItemId());
+            if (resourceFile == null) {
+                throw new BusinessException(ErrorCodeEnum.FILE_NOT_EXIST);
+            }
+            if (!share.getUserId().equals(resourceFile.getUploadUserId())) {
+                throw new BusinessException(ErrorCodeEnum.FILE_PERMISSION_ERROR);
+            }
+            share.setFileName(resourceFile.getFileName());
+        } else {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "不支持的分享类型");
+        }
+
+        String shareCode = generateUniqueShareCode();
+        share.setShareCode(shareCode);
+        share.setIsActive(true);
+        share.setCreatedAt(LocalDateTime.now());
+        share.setShareCount(0);
+        share.setVisitCount(0);
+
+        if (share.getExpireTime() == null) {
+            share.setExpireTime(LocalDateTime.now().plusDays(7));
+        }
+
+        save(share);
+        log.info("生成分享码成功: shareCode={}, itemId={}", shareCode, share.getItemId());
+        return share;
+    }
+
+    @Override
+    public boolean validateShareCode(String shareCode) {
+        log.info("验证分享码: shareCode={}", shareCode);
+
+        if (shareCode == null || shareCode.isBlank()) {
+            return false;
+        }
+
+        try {
+            RouteShare share = getByShareCode(shareCode);
+            return share != null && isShareValid(share);
+        } catch (Exception e) {
+            log.error("验证分享码失败: shareCode={}, error={}", shareCode, e.getMessage());
+            return false;
+        }
+    }
+}

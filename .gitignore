@@ -1,0 +1,67 @@
+# ========== 敏感环境变量（本地配置，禁止提交） ==========
+deploy/.env
+deploy/backups/
+.env
+!*.env.example
+backend/node_modules/
+
+# ========== 本地运行产物 ==========
+run-logs/
+jmeter.log
+stderr.txt
+
+# ========== Java 后端忽略 ==========
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### STS ###
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
+### NetBeans ###
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+build/
+
+### VS Code ###
+.vscode/
+
+# ========== Vue 前端忽略 ==========
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.DS_Store
+*.log
+
+# 前端构建产物由部署流程生成，不提交到仓库
+dist/
+dist-ssr/
+*.local
+backend/nacos/nacos/data/
+backend/nacos/nacos/logs/
+query
+
+# ========== AI 协作工具本地配置（不提交） ==========
+.claude/
+.serena/
+.trae/
+.feisuan/
+.fastRequest/

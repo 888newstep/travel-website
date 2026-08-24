@@ -1,0 +1,45 @@
+spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
+        import-check:
+          enabled: false
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        - id: user-service-e2e
+          uri: http://127.0.0.1:8091
+          predicates:
+            - Path=/api/users/**
+        - id: attraction-service-e2e
+          uri: http://127.0.0.1:8092
+          predicates:
+            - Path=/api/attractions/**, /api/cities/**, /api/restaurants/**, /api/realtime-status/**
+        - id: route-service-e2e
+          uri: http://127.0.0.1:8093
+          predicates:
+            - Path=/api/routes/**, /api/route-optimization/**, /api/ai/**
+        - id: collection-service-e2e
+          uri: http://127.0.0.1:8094
+          predicates:
+            - Path=/api/v1/route-collections/**, /api/route-comments/**, /api/travel-notes/**, /api/feedback/**, /api/v1/notifications/**, /api/v1/user/stats/**, /api/route-share/**
+        - id: file-service-e2e
+          uri: http://127.0.0.1:8095
+          predicates:
+            - Path=/api/file/**, /api/resource/**, /api/resource-file/**
+    sentinel:
+      eager: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

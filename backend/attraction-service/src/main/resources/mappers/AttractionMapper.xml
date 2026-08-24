@@ -1,0 +1,52 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="travel.common.mapper.travel_recommendation_mapper.AttractionMapper">
+
+    <!-- 游标分页：按城市查询，按评分降序 + ID 降序 -->
+    <select id="selectByCursor" resultType="travel.common.entity.travel_recommendation.Attraction">
+        SELECT id, name, city_id, address, description, ticket_price,
+               opening_hours, latitude, longitude, images, rating, view_count,
+               created_at, updated_at
+        FROM attraction
+        WHERE city_id = #{cityId}
+        <if test="lastRating != null and lastId != null">
+            AND (rating &lt; #{lastRating} OR (rating = #{lastRating} AND id &lt; #{lastId}))
+        </if>
+        ORDER BY rating DESC, id DESC
+        LIMIT #{size}
+    </select>
+
+    <!-- 游标分页：全局查询，按评分降序 + ID 降序 -->
+    <select id="selectAllByCursor" resultType="travel.common.entity.travel_recommendation.Attraction">
+        SELECT id, name, city_id, address, description, ticket_price,
+               opening_hours, latitude, longitude, images, rating, view_count,
+               created_at, updated_at
+        FROM attraction
+        <where>
+            <if test="lastRating != null and lastId != null">
+                AND (rating &lt; #{lastRating} OR (rating = #{lastRating} AND id &lt; #{lastId}))
+            </if>
+        </where>
+        ORDER BY rating DESC, id DESC
+        LIMIT #{size}
+    </select>
+
+    <!-- 偏移分页：按城市查询（用于对比实验） -->
+    <select id="selectByOffset" resultType="travel.common.entity.travel_recommendation.Attraction">
+        SELECT id, name, city_id, address, description, ticket_price,
+               opening_hours, latitude, longitude, images, rating, view_count,
+               created_at, updated_at
+        FROM attraction
+        WHERE city_id = #{cityId}
+        ORDER BY rating DESC, id DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <!-- 查询景点经纬度（仅同步任务需要的字段，优化性能） -->
+    <select id="selectLatLngById" resultType="travel.common.entity.travel_recommendation.Attraction">
+        SELECT id, latitude, longitude
+        FROM attraction
+        WHERE id = #{attractionId}
+    </select>
+
+</mapper>

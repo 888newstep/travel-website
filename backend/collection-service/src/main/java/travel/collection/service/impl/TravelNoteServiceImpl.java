@@ -1,0 +1,565 @@
+package travel.collection.service.impl;
+
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import lombok.RequiredArgsConstructor;
+import travel.common.entity.user_community.TravelNote;
+import travel.common.entity.user_community.TravelNoteCollection;
+import travel.common.entity.user_community.TravelNoteTag;
+import travel.common.mapper.user_community_mapper.TravelNoteCollectionMapper;
+import travel.common.mapper.user_community_mapper.TravelNoteMapper;
+import travel.common.mapper.user_community_mapper.TravelNoteTagMapper;
+import travel.common.enums.ErrorCodeEnum;
+import travel.common.exception.BusinessException;
+import travel.collection.service.TravelNoteService;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.*;
+import java.time.LocalDateTime;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+public class TravelNoteServiceImpl extends ServiceImpl<TravelNoteMapper, TravelNote> implements TravelNoteService {
+
+    private static final Logger log = LoggerFactory.getLogger(TravelNoteServiceImpl.class);
+
+    private final TravelNoteTagMapper travelNoteTagMapper;
+    private final TravelNoteCollectionMapper travelNoteCollectionMapper;
+    @Override
+    @Transactional
+    public TravelNote createTravelNote(Integer userId, TravelNote travelNote, List<String> tags) {
+        if (userId == null || travelNote == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        try {
+            travelNote.setId(null);
+            travelNote.setUserId(userId);
+            travelNote.setViewsCount(0);
+            travelNote.setLikesCount(0);
+            travelNote.setCommentsCount(0);
+            travelNote.setIsPublic(travelNote.getIsPublic() == null || travelNote.getIsPublic());
+            travelNote.setCreatedAt(LocalDateTime.now());
+            travelNote.setUpdatedAt(LocalDateTime.now());
+            if (!save(travelNote)) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+            }
+
+            if (tags != null && !tags.isEmpty()) {
+                List<TravelNoteTag> noteTags = tags.stream()
+                        .map(tag -> {
+                            TravelNoteTag noteTag = new TravelNoteTag();
+                            noteTag.setNoteId(travelNote.getId());
+                            noteTag.setTagName(tag);
+                            return noteTag;
+                        })
+                        .collect(Collectors.toList());
+                noteTags.forEach(this::saveTag);
+            }
+
+            log.info("创建游记成功: id={}, userId={}, title={}", travelNote.getId(), travelNote.getUserId(), travelNote.getTitle());
+            return travelNote;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("创建游记失败: userId={}, title={}", travelNote.getUserId(), travelNote.getTitle(), e);
+            throw new RuntimeException("创建游记失败", e);
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> getHotTravelNotes(int limit) {
+        try {
+            limit = Math.min(Math.max(limit, 1), 100);
+            QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("is_public", true);
+            queryWrapper.orderByDesc("views_count", "likes_count");
+            queryWrapper.last("LIMIT " + limit);
+
+            List<TravelNote> travelNotes = list(queryWrapper);
+
+            return travelNotes.stream()
+                    .map(note -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("travelNote", note);
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("获取热门游记失败: limit={}", limit, e);
+            throw new RuntimeException("获取热门游记失败", e);
+        }
+    }
+    @Override
+    @Transactional
+    public TravelNote updateTravelNote(Integer id, Integer userId, TravelNote travelNote, List<String> tags) {
+        if (id == null || userId == null || travelNote == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        try {
+            TravelNote existingNote = getById(id);
+            if (existingNote == null) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "游记不存在");
+            }
+            if (!userId.equals(existingNote.getUserId())) {
+                throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
+            }
+
+            existingNote.setTitle(travelNote.getTitle());
+            existingNote.setContent(travelNote.getContent());
+            existingNote.setCoverImage(travelNote.getCoverImage());
+            existingNote.setImages(travelNote.getImages());
+            existingNote.setCityId(travelNote.getCityId());
+            existingNote.setIsPublic(travelNote.getIsPublic());
+            existingNote.setUpdatedAt(LocalDateTime.now());
+            if (!updateById(existingNote)) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+            }
+
+            if (tags != null) {
+                deleteTagsByNoteId(id);
+                List<TravelNoteTag> noteTags = tags.stream()
+                        .map(tag -> {
+                            TravelNoteTag noteTag = new TravelNoteTag();
+                            noteTag.setNoteId(id);
+                            noteTag.setTagName(tag);
+                            return noteTag;
+                        })
+                        .collect(Collectors.toList());
+                noteTags.forEach(this::saveTag);
+            }
+
+            log.info("更新游记成功: id={}, userId={}, title={}", id, userId, existingNote.getTitle());
+            return existingNote;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("更新游记失败: id={}, userId={}, title={}", id, userId, travelNote.getTitle(), e);
+            throw new RuntimeException("更新游记失败", e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteTravelNote(Integer id, Integer userId) {
+        if (id == null || userId == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        try {
+            // 检查游记是否存在
+            TravelNote travelNote = getById(id);
+            if (travelNote == null) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "游记不存在");
+            }
+            
+            // 检查权限
+            if (!travelNote.getUserId().equals(userId)) {
+                throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
+            }
+            
+            // 删除标签
+            deleteTagsByNoteId(id);
+            
+            // 删除游记
+            boolean result = removeById(id);
+            
+            if (result) {
+                log.info("删除游记成功: id={}, userId={}", id, userId);
+            }
+            
+            return result;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("删除游记失败: id={}, userId={}", id, userId, e);
+            throw new RuntimeException("删除游记失败", e);
+        }
+    }
+
+    @Override
+    public Map<String, Object> getTravelNoteDetail(Integer id, Integer currentUserId) {
+        try {
+            if (id == null || id <= 0) {
+                throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+            }
+            // 获取游记
+            TravelNote travelNote = getById(id);
+            if (travelNote == null) {
+                throw new RuntimeException("游记不存在");
+            }
+            if (!Boolean.TRUE.equals(travelNote.getIsPublic())
+                    && !Objects.equals(travelNote.getUserId(), currentUserId)) {
+                throw new BusinessException(ErrorCodeEnum.PERMISSION_DENIED);
+            }
+            
+            // 构建返回结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("travelNote", travelNote);
+            // 这里可以添加用户信息、标签信息等
+            
+            return result;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("获取游记详情失败: id={}", id, e);
+            throw new RuntimeException("获取游记详情失败", e);
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> getTravelNotes(int page, int size, Map<String, Object> filters) {
+        try {
+            page = Math.max(page, 1);
+            size = Math.min(Math.max(size, 1), 100);
+            // 构建查询条件
+            QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("is_public", true);
+            
+            // 应用过滤条件
+            if (filters != null) {
+                if (filters.containsKey("cityId")) {
+                    queryWrapper.eq("city_id", filters.get("cityId"));
+                }
+                if (filters.containsKey("userId")) {
+                    queryWrapper.eq("user_id", filters.get("userId"));
+                }
+            }
+            
+            // 排序
+            queryWrapper.orderByDesc("created_at");
+            
+            // 分页查询
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<TravelNote> pageInfo = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+            page(pageInfo, queryWrapper);
+            
+            // 构建返回结果
+            return pageInfo.getRecords().stream()
+                    .map(note -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("travelNote", note);
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("获取游记列表失败: page={}, size={}, filters={}", page, size, filters, e);
+            throw new RuntimeException("获取游记列表失败", e);
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> getUserTravelNotes(Integer userId, Integer currentUserId, int page, int size) {
+        try {
+            page = Math.max(page, 1);
+            size = Math.min(Math.max(size, 1), 100);
+            // 构建查询条件
+            QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("user_id", userId);
+            if (!Objects.equals(userId, currentUserId)) {
+                queryWrapper.eq("is_public", true);
+            }
+            queryWrapper.orderByDesc("created_at");
+            
+            // 分页查询
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<TravelNote> pageInfo = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+            page(pageInfo, queryWrapper);
+            
+            // 构建返回结果
+            return pageInfo.getRecords().stream()
+                    .map(note -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("travelNote", note);
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("获取用户游记列表失败: userId={}, page={}, size={}", userId, page, size, e);
+            throw new RuntimeException("获取用户游记列表失败", e);
+        }
+    }
+
+    @Override
+    @Transactional
+    public boolean likeTravelNote(Integer id, Integer userId) {
+        validateActionArguments(id, userId);
+        lockNote(id);
+        if (hasLikeRecord(id, userId)) {
+            return true;
+        }
+        if (travelNoteCollectionMapper.insert(buildAction(id, userId, "like")) != 1
+                || baseMapper.incrementLikeCount(id) != 1) {
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+        }
+        log.info("点赞游记成功: id={}, userId={}", id, userId);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean unlikeTravelNote(Integer id, Integer userId) {
+        validateActionArguments(id, userId);
+        lockNote(id);
+        if (deleteLikeRecord(id, userId) == 0) {
+            return false;
+        }
+        if (baseMapper.decrementLikeCount(id) != 1) {
+            throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+        }
+        log.info("取消游记点赞成功: id={}, userId={}", id, userId);
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> toggleLikeTravelNote(Integer id, Integer userId) {
+        validateActionArguments(id, userId);
+        TravelNote note = lockNote(id);
+        Map<String, Object> result = new HashMap<>();
+        if (hasLikeRecord(id, userId)) {
+            if (deleteLikeRecord(id, userId) != 1 || baseMapper.decrementLikeCount(id) != 1) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+            }
+            result.put("liked", false);
+            result.put("likeCount", Math.max(0, Optional.ofNullable(note.getLikesCount()).orElse(0) - 1));
+        } else {
+            if (travelNoteCollectionMapper.insert(buildAction(id, userId, "like")) != 1
+                    || baseMapper.incrementLikeCount(id) != 1) {
+                throw new BusinessException(ErrorCodeEnum.SYSTEM_DATABASE_ERROR);
+            }
+            result.put("liked", true);
+            result.put("likeCount", Optional.ofNullable(note.getLikesCount()).orElse(0) + 1);
+        }
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public boolean incrementViews(Integer id) {
+        if (id == null || id <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+        if (baseMapper.incrementViewCount(id) != 1) {
+            log.warn("游记不存在或浏览数更新失败: id={}", id);
+            return false;
+        }
+        return true;
+    }
+
+    private void validateActionArguments(Integer id, Integer userId) {
+        if (id == null || id <= 0 || userId == null || userId <= 0) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR);
+        }
+    }
+
+    private TravelNote lockNote(Integer id) {
+        TravelNote note = baseMapper.selectByIdForUpdate(id);
+        if (note == null) {
+            throw new BusinessException(ErrorCodeEnum.PARAM_ERROR.getCode(), "游记不存在");
+        }
+        return note;
+    }
+
+    private boolean hasLikeRecord(Integer noteId, Integer userId) {
+        return travelNoteCollectionMapper.selectCount(new LambdaQueryWrapper<TravelNoteCollection>()
+                .eq(TravelNoteCollection::getNoteId, noteId)
+                .eq(TravelNoteCollection::getUserId, userId)
+                .eq(TravelNoteCollection::getItemType, "travel_note")
+                .eq(TravelNoteCollection::getType, "like")) > 0;
+    }
+
+    private int deleteLikeRecord(Integer noteId, Integer userId) {
+        return travelNoteCollectionMapper.delete(new LambdaQueryWrapper<TravelNoteCollection>()
+                .eq(TravelNoteCollection::getNoteId, noteId)
+                .eq(TravelNoteCollection::getUserId, userId)
+                .eq(TravelNoteCollection::getItemType, "travel_note")
+                .eq(TravelNoteCollection::getType, "like"));
+    }
+
+    private TravelNoteCollection buildAction(Integer noteId, Integer userId, String type) {
+        TravelNoteCollection action = new TravelNoteCollection();
+        action.setNoteId(noteId);
+        action.setUserId(userId);
+        action.setItemType("travel_note");
+        action.setType(type);
+        action.setCreatedAt(LocalDateTime.now());
+        return action;
+    }
+
+    @Override
+    public List<Map<String, Object>> searchTravelNotes(String keyword, int page, int size) {
+        try {
+            page = Math.max(page, 1);
+            size = Math.min(Math.max(size, 1), 100);
+            // 构建查询条件
+            QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("is_public", true);
+            queryWrapper.and(wrapper -> wrapper.like("title", keyword).or().like("content", keyword));
+            queryWrapper.orderByDesc("created_at");
+            
+            // 分页查询
+            com.baomidou.mybatisplus.extension.plugins.pagination.Page<TravelNote> pageInfo = new com.baomidou.mybatisplus.extension.plugins.pagination.Page<>(page, size);
+            page(pageInfo, queryWrapper);
+            
+            // 构建返回结果
+            return pageInfo.getRecords().stream()
+                    .map(note -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("travelNote", note);
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("搜索游记失败: keyword={}, page={}, size={}", keyword, page, size, e);
+            throw new RuntimeException("搜索游记失败", e);
+        }
+    }
+
+    @Override
+    public List<Map<String, Object>> getLatestTravelNotes(int limit) {
+        try {
+            QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+            queryWrapper.eq("is_public", true);
+            queryWrapper.orderByDesc("created_at");
+            queryWrapper.last("LIMIT " + limit);
+
+            List<TravelNote> travelNotes = list(queryWrapper);
+
+            return travelNotes.stream()
+                    .map(note -> {
+                        Map<String, Object> map = new HashMap<>();
+                        map.put("travelNote", note);
+                        return map;
+                    })
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.error("获取最新游记失败: limit={}", limit, e);
+            throw new RuntimeException("获取最新游记失败", e);
+        }
+    }
+
+    @Override
+    public int countByUserId(Integer userId) {
+        if (userId == null || userId <= 0) {
+            return 0;
+        }
+
+        QueryWrapper<TravelNote> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("user_id", userId);
+        return Math.toIntExact(count(queryWrapper));
+    }
+
+    @Override
+    @Transactional
+    public boolean collectNote(Integer noteId, Integer userId) {
+        try {
+            if (noteId == null || userId == null) {
+                throw new RuntimeException("参数不能为空");
+            }
+
+            TravelNote note = getById(noteId);
+            if (note == null) {
+                throw new RuntimeException("游记不存在");
+            }
+
+            TravelNoteCollection collection = new TravelNoteCollection();
+            collection.setNoteId(noteId);
+            collection.setUserId(userId);
+            collection.setItemType("travel_note");
+            collection.setType("collect");
+            collection.setCreatedAt(java.time.LocalDateTime.now());
+            travelNoteCollectionMapper.insert(collection);
+
+            log.info("收藏游记成功: noteId={}, userId={}", noteId, userId);
+            return true;
+        } catch (Exception e) {
+            if (e.getMessage() != null && e.getMessage().contains("Duplicate")) {
+                throw new RuntimeException("已经收藏过该游记");
+            }
+            log.error("收藏游记失败: noteId={}, userId={}", noteId, userId, e);
+            throw new RuntimeException("收藏失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public boolean uncollectNote(Integer noteId, Integer userId) {
+        try {
+            if (noteId == null || userId == null) {
+                throw new RuntimeException("参数不能为空");
+            }
+
+            LambdaQueryWrapper<TravelNoteCollection> queryWrapper = new LambdaQueryWrapper<>();
+            queryWrapper.eq(TravelNoteCollection::getNoteId, noteId)
+                    .eq(TravelNoteCollection::getUserId, userId)
+                    .eq(TravelNoteCollection::getItemType, "travel_note")
+                    .eq(TravelNoteCollection::getType, "collect");
+            int rows = travelNoteCollectionMapper.delete(queryWrapper);
+
+            if (rows == 0) {
+                throw new RuntimeException("未找到收藏记录");
+            }
+
+            log.info("取消收藏游记成功: noteId={}, userId={}", noteId, userId);
+            return true;
+        } catch (Exception e) {
+            log.error("取消收藏游记失败: noteId={}, userId={}", noteId, userId, e);
+            throw new RuntimeException("取消收藏失败: " + e.getMessage());
+        }
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> toggleCollectNote(Integer noteId, Integer userId) {
+        try {
+            if (noteId == null || userId == null) {
+                throw new RuntimeException("参数不能为空");
+            }
+
+            boolean alreadyCollected = travelNoteCollectionMapper.selectCount(
+                    new LambdaQueryWrapper<TravelNoteCollection>()
+                            .eq(TravelNoteCollection::getNoteId, noteId)
+                            .eq(TravelNoteCollection::getUserId, userId)
+                            .eq(TravelNoteCollection::getItemType, "travel_note")
+                            .eq(TravelNoteCollection::getType, "collect")
+            ) > 0;
+
+            Map<String, Object> result = new HashMap<>();
+            if (alreadyCollected) {
+                travelNoteCollectionMapper.delete(new LambdaQueryWrapper<TravelNoteCollection>()
+                        .eq(TravelNoteCollection::getNoteId, noteId)
+                        .eq(TravelNoteCollection::getUserId, userId)
+                        .eq(TravelNoteCollection::getItemType, "travel_note")
+                        .eq(TravelNoteCollection::getType, "collect"));
+                log.info("取消收藏游记成功: noteId={}, userId={}", noteId, userId);
+                result.put("collected", false);
+            } else {
+                TravelNoteCollection collection = new TravelNoteCollection();
+                collection.setNoteId(noteId);
+                collection.setUserId(userId);
+                collection.setItemType("travel_note");
+                collection.setType("collect");
+                collection.setCreatedAt(java.time.LocalDateTime.now());
+                travelNoteCollectionMapper.insert(collection);
+                log.info("收藏游记成功: noteId={}, userId={}", noteId, userId);
+                result.put("collected", true);
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("切换游记收藏状态失败: noteId={}, userId={}", noteId, userId, e);
+            throw new RuntimeException("操作失败: " + e.getMessage());
+        }
+    }
+
+    private void saveTag(TravelNoteTag tag) {
+        travelNoteTagMapper.insert(tag);
+    }
+
+    private void deleteTagsByNoteId(Integer noteId) {
+        LambdaQueryWrapper<TravelNoteTag> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(TravelNoteTag::getNoteId, noteId);
+        travelNoteTagMapper.delete(queryWrapper);
+    }
+}

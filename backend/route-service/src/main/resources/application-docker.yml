@@ -1,0 +1,12 @@
+spring:
+  cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            "attraction-service":
+              - uri: http://attraction-service:8092
+
+xxl:
+  job:
+    enabled: false

@@ -1,0 +1,53 @@
+server:
+  port: 8090
+
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+      routes:
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+        - id: attraction-service
+          uri: lb://attraction-service
+          predicates:
+            - Path=/api/attractions/**, /api/cities/**, /api/restaurants/**, /api/realtime-status/**
+        - id: route-service
+          uri: lb://route-service
+          predicates:
+            - Path=/api/routes/**, /api/route-optimization/**, /api/ai/**
+        - id: collection-service
+          uri: lb://collection-service
+          predicates:
+            - Path=/api/v1/route-collections/**, /api/route-comments/**, /api/travel-notes/**, /api/feedback/**, /api/v1/notifications/**, /api/v1/user/stats/**, /api/route-share/**
+        - id: file-service
+          uri: lb://file-service
+          predicates:
+            - Path=/api/file/**, /api/resource/**, /api/resource-file/**
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Origin
+
+    # Sentinel
+    sentinel:
+      transport:
+        dashboard: localhost:8080
+      eager: true
+      scg:
+        fallback:
+          mode: response
+          response-status: 429
+          response-body: '{"code":429,"message":"璇锋眰杩囦簬棰戠箒锛岃绋嶅悗鍐嶈瘯"}'
+
+logging:
+  level:
+    travel.gateway: debug
+
+jwt:
+  secret: ${JWT_SECRET:}
+
+
