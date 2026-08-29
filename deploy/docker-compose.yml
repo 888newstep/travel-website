@@ -45,8 +45,8 @@ services:
       MYSQL_DATABASE: ${DB_NAME:-travel_website}
       MYSQL_CHARSET: utf8mb4
       MYSQL_COLLATION: utf8mb4_unicode_ci
-    ports:
-      - "3306:3306"
+    expose:
+      - "3306"
     volumes:
       - mysql_data:/var/lib/mysql
       - ../backend/attraction-service/src/main/resources/db/init_complete.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
@@ -62,8 +62,8 @@ services:
     image: redis:7-alpine
     container_name: travel-redis
     command: redis-server --requirepass ${REDIS_PASSWORD:-change-me}
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -90,8 +90,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "8091:8091"
+    expose:
+      - "8091"
     restart: unless-stopped
     networks:
       - travel-network
@@ -112,8 +112,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "8092:8092"
+    expose:
+      - "8092"
     restart: unless-stopped
     networks:
       - travel-network
@@ -137,8 +137,8 @@ services:
         condition: service_healthy
       attraction-service:
         condition: service_healthy
-    ports:
-      - "8093:8093"
+    expose:
+      - "8093"
     restart: unless-stopped
     networks:
       - travel-network
@@ -163,8 +163,8 @@ services:
         condition: service_healthy
       route-service:
         condition: service_healthy
-    ports:
-      - "8094:8094"
+    expose:
+      - "8094"
     restart: unless-stopped
     networks:
       - travel-network
@@ -185,8 +185,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "8095:8095"
+    expose:
+      - "8095"
     restart: unless-stopped
     networks:
       - travel-network

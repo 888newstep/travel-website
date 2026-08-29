@@ -124,9 +124,6 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         if (HttpMethod.OPTIONS.equals(method)) {
             return true;
         }
-        if (path.equals("/api/ai") || path.startsWith("/api/ai/")) {
-            return true;
-        }
         if (HttpMethod.POST.equals(method) && PUBLIC_POST_PATHS.contains(path)) {
             return true;
         }

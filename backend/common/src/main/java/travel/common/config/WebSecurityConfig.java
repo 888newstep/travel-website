@@ -23,7 +23,7 @@ import travel.common.performance.PerformanceStageRecorder;
  * 原则：只读公开，写入需认证
  * - 公开接口：登录注册、静态资源、Swagger、只读浏览（GET）
  * - 认证接口：所有写操作（POST/PUT/DELETE）、用户数据、收藏评论等
- * - AI 对话接口公开（前端核心功能）
+ * - AI 生成接口统一要求认证，避免匿名成本滥用
  */
 @Configuration
 @EnableWebSecurity
@@ -97,14 +97,10 @@ public class WebSecurityConfig {
                                 "/realtime-status/sync-time",
                                 "/realtime-status/traffic-update",
                                 "/realtime-status/traffic-batch").hasRole("ADMIN");
-                        authorize.requestMatchers(HttpMethod.GET, "/ai/advanced/recommendations").authenticated();
-                        authorize.requestMatchers(
-                                "/ai/smart-itinerary/optimize",
-                                "/ai/assistant/optimize/**",
-                                "/ai/assistant/optimize-route/**").authenticated();
-
-                        // ===== AI 服务公开（前端核心交互入口） =====
-                        authorize.requestMatchers("/ai/**").permitAll();
+                        // ===== AI 生成服务 =====
+                        // 统一要求登录，避免匿名调用外部模型造成费用、配额和线程资源滥用。
+                        // 具体接口的用户数据访问仍必须在 Service 层执行对象所有权校验。
+                        authorize.requestMatchers("/ai/**").authenticated();
 
                         // ===== 其余所有请求需要认证 =====
                         authorize.anyRequest().authenticated();

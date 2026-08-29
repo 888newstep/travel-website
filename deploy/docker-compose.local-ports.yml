@@ -1,0 +1,33 @@
+# 仅用于本机调试：显式加载后，将内部组件绑定到 127.0.0.1。
+# 默认 docker-compose.yml 不发布这些端口，生产环境不要加载本文件。
+#
+# 用法：
+# docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.local-ports.yml up -d
+services:
+  mysql:
+    ports:
+      - "127.0.0.1:3306:3306"
+
+  redis:
+    ports:
+      - "127.0.0.1:6379:6379"
+
+  user-service:
+    ports:
+      - "127.0.0.1:8091:8091"
+
+  attraction-service:
+    ports:
+      - "127.0.0.1:8092:8092"
+
+  route-service:
+    ports:
+      - "127.0.0.1:8093:8093"
+
+  collection-service:
+    ports:
+      - "127.0.0.1:8094:8094"
+
+  file-service:
+    ports:
+      - "127.0.0.1:8095:8095"

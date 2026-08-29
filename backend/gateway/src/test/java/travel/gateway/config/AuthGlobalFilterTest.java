@@ -84,7 +84,7 @@ class AuthGlobalFilterTest {
     void shouldRemoveSpoofedIdentityHeadersFromPublicRequests() {
         AuthGlobalFilter filter = configuredFilter();
         ServerWebExchange exchange = MockServerWebExchange.from(
-                get("/api/ai/chat")
+                get("/api/routes/42")
                         .header("X-User-Id", "999")
                         .header("X-User-Type", "9")
                         .header("X-User-Role", "ROLE_ADMIN")
@@ -101,6 +101,30 @@ class AuthGlobalFilterTest {
         assertFalse(forwarded.get().getRequest().getHeaders().containsKey("X-User-Type"));
         assertFalse(forwarded.get().getRequest().getHeaders().containsKey("X-User-Role"));
         assertEquals("unknown", forwarded.get().getRequest().getHeaders().getFirst("X-Client-IP"));
+    }
+
+    @Test
+    void shouldRejectAiEndpointsWithoutToken() {
+        AuthGlobalFilter filter = configuredFilter();
+
+        for (String path : new String[]{
+                "/api/ai/chat",
+                "/api/ai/qa",
+                "/api/ai/itinerary/generate",
+                "/api/ai/assistant/optimize/1",
+                "/api/ai/image-analysis"
+        }) {
+            ServerWebExchange exchange = MockServerWebExchange.from(post(path).build());
+            AtomicBoolean chainCalled = new AtomicBoolean();
+
+            filter.filter(exchange, currentExchange -> {
+                chainCalled.set(true);
+                return Mono.empty();
+            }).block();
+
+            assertFalse(chainCalled.get(), path);
+            assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode(), path);
+        }
     }
 
     @Test
