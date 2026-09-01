@@ -1,6 +1,5 @@
 package travel.collection.controller;
 
-import travel.common.exception.ExceptionPropagation;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -75,15 +74,10 @@ public class TravelNoteController {
      */
     @GetMapping("/{id}")
     public Result<Map<String, Object>> getTravelNoteDetail(@PathVariable Integer id) {
-        try {
-            log.info("获取游记详情请求: id={}", id);
-            Integer currentUserId = AuthenticatedUserSupport.getIntegerUserIdOrNull();
-            Map<String, Object> detail = travelNoteService.getTravelNoteDetail(id, currentUserId);
-            return Result.success("获取游记详情成功", detail);
-        } catch (Exception e) {
-            log.error("获取游记详情失败: id={}, error={}", id, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取游记详情请求: id={}", id);
+        Integer currentUserId = AuthenticatedUserSupport.getIntegerUserIdOrNull();
+        Map<String, Object> detail = travelNoteService.getTravelNoteDetail(id, currentUserId);
+        return Result.success("获取游记详情成功", detail);
     }
 
     /**
@@ -95,14 +89,9 @@ public class TravelNoteController {
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) Map<String, Object> filters) {
-        try {
-            log.info("分页获取游记列表请求: page={}, size={}", page, size);
-            List<Map<String, Object>> notes = travelNoteService.getTravelNotes(page, size, filters);
-            return Result.success("获取游记列表成功", notes);
-        } catch (Exception e) {
-            log.error("获取游记列表失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("分页获取游记列表请求: page={}, size={}", page, size);
+        List<Map<String, Object>> notes = travelNoteService.getTravelNotes(page, size, filters);
+        return Result.success("获取游记列表成功", notes);
     }
 
     /**
@@ -114,15 +103,10 @@ public class TravelNoteController {
             @PathVariable Integer userId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        try {
-            log.info("获取用户游记列表请求: userId={}", userId);
-            Integer currentUserId = AuthenticatedUserSupport.getIntegerUserIdOrNull();
-            List<Map<String, Object>> notes = travelNoteService.getUserTravelNotes(userId, currentUserId, page, size);
-            return Result.success("获取用户游记列表成功", notes);
-        } catch (Exception e) {
-            log.error("获取用户游记列表失败: userId={}, error={}", userId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取用户游记列表请求: userId={}", userId);
+        Integer currentUserId = AuthenticatedUserSupport.getIntegerUserIdOrNull();
+        List<Map<String, Object>> notes = travelNoteService.getUserTravelNotes(userId, currentUserId, page, size);
+        return Result.success("获取用户游记列表成功", notes);
     }
 
     /**
@@ -131,15 +115,10 @@ public class TravelNoteController {
      */
     @PostMapping("/{id}/toggle-like")
     public Result<Map<String, Object>> toggleLikeTravelNote(@PathVariable Integer id) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("切换游记点赞状态: id={}, userId={}", id, userId);
-            Map<String, Object> result = travelNoteService.toggleLikeTravelNote(id, userId);
-            return Result.success(result.get("liked").equals(true) ? "点赞成功" : "取消点赞成功", result);
-        } catch (Exception e) {
-            log.error("切换游记点赞状态失败: id={}, error={}", id, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("切换游记点赞状态: id={}, userId={}", id, userId);
+        Map<String, Object> result = travelNoteService.toggleLikeTravelNote(id, userId);
+        return Result.success(result.get("liked").equals(true) ? "点赞成功" : "取消点赞成功", result);
     }
 
     /**
@@ -148,14 +127,9 @@ public class TravelNoteController {
      */
     @PostMapping("/{id}/view")
     public Result<Boolean> incrementViews(@PathVariable Integer id) {
-        try {
-            log.info("增加游记浏览数请求: id={}", id);
-            boolean result = travelNoteService.incrementViews(id);
-            return Result.success("增加游记浏览数成功", result);
-        } catch (Exception e) {
-            log.error("增加游记浏览数失败: id={}, error={}", id, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("增加游记浏览数请求: id={}", id);
+        boolean result = travelNoteService.incrementViews(id);
+        return Result.success("增加游记浏览数成功", result);
     }
 
     /**
@@ -167,14 +141,9 @@ public class TravelNoteController {
             @RequestParam String keyword,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        try {
-            log.info("搜索游记请求: keyword={}, page={}, size={}", keyword, page, size);
-            List<Map<String, Object>> notes = travelNoteService.searchTravelNotes(keyword, page, size);
-            return Result.success("搜索游记成功", notes);
-        } catch (Exception e) {
-            log.error("搜索游记失败: keyword={}, error={}", keyword, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("搜索游记请求: keyword={}, page={}, size={}", keyword, page, size);
+        List<Map<String, Object>> notes = travelNoteService.searchTravelNotes(keyword, page, size);
+        return Result.success("搜索游记成功", notes);
     }
 
     /**
@@ -184,14 +153,9 @@ public class TravelNoteController {
     @GetMapping("/hot")
     public Result<List<Map<String, Object>>> getHotTravelNotes(
             @RequestParam(defaultValue = "10") int limit) {
-        try {
-            log.info("获取热门游记请求: limit={}", limit);
-            List<Map<String, Object>> notes = travelNoteService.getHotTravelNotes(limit);
-            return Result.success("获取热门游记成功", notes);
-        } catch (Exception e) {
-            log.error("获取热门游记失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取热门游记请求: limit={}", limit);
+        List<Map<String, Object>> notes = travelNoteService.getHotTravelNotes(limit);
+        return Result.success("获取热门游记成功", notes);
     }
 
     /**
@@ -201,14 +165,9 @@ public class TravelNoteController {
     @GetMapping("/latest")
     public Result<List<Map<String, Object>>> getLatestTravelNotes(
             @RequestParam(defaultValue = "10") int limit) {
-        try {
-            log.info("获取最新游记请求: limit={}", limit);
-            List<Map<String, Object>> notes = travelNoteService.getLatestTravelNotes(limit);
-            return Result.success("获取最新游记成功", notes);
-        } catch (Exception e) {
-            log.error("获取最新游记失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取最新游记请求: limit={}", limit);
+        List<Map<String, Object>> notes = travelNoteService.getLatestTravelNotes(limit);
+        return Result.success("获取最新游记成功", notes);
     }
 
     // ==================== 收藏功能 ====================
@@ -216,14 +175,9 @@ public class TravelNoteController {
     @PostMapping("/{noteId}/toggle-collect")
     @Operation(summary = "切换游记收藏状态（合并 collect/uncollect）")
     public Result<Map<String, Object>> toggleCollectNote(@PathVariable Integer noteId) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("切换游记收藏状态: noteId={}, userId={}", noteId, userId);
-            Map<String, Object> result = travelNoteService.toggleCollectNote(noteId, userId);
-            return Result.success(result.get("collected").equals(true) ? "收藏成功" : "取消收藏成功", result);
-        } catch (Exception e) {
-            log.error("切换游记收藏状态失败: noteId={}, error={}", noteId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("切换游记收藏状态: noteId={}, userId={}", noteId, userId);
+        Map<String, Object> result = travelNoteService.toggleCollectNote(noteId, userId);
+        return Result.success(result.get("collected").equals(true) ? "收藏成功" : "取消收藏成功", result);
     }
 }

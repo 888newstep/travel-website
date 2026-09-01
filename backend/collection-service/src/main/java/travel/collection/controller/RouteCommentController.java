@@ -1,6 +1,5 @@
 package travel.collection.controller;
 
-import travel.common.exception.ExceptionPropagation;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,24 +31,19 @@ public class RouteCommentController {
      */
     @PostMapping
     public Result<RouteComment> createComment(@RequestBody RouteComment comment) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("创建路线评价请求: routeId={}, userId={}, rating={}",
-                    comment.getRouteId(), userId, comment.getRating());
-            RouteComment created = routeCommentService.createComment(
-                    comment.getRouteId(),
-                    userId,
-                    comment.getRating(),
-                    comment.getContent(),
-                    comment.getImages(),
-                    comment.getIsAnonymous(),
-                    comment.getReplyTo()
-            );
-            return Result.success("创建路线评价成功", created);
-        } catch (Exception e) {
-            log.error("创建路线评价失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("创建路线评价请求: routeId={}, userId={}, rating={}",
+                comment.getRouteId(), userId, comment.getRating());
+        RouteComment created = routeCommentService.createComment(
+                comment.getRouteId(),
+                userId,
+                comment.getRating(),
+                comment.getContent(),
+                comment.getImages(),
+                comment.getIsAnonymous(),
+                comment.getReplyTo()
+        );
+        return Result.success("创建路线评价成功", created);
     }
 
     /**
@@ -61,14 +55,9 @@ public class RouteCommentController {
             @PathVariable Integer routeId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        try {
-            log.info("获取路线评论列表请求: routeId={}, page={}, size={}", routeId, page, size);
-            List<RouteComment> comments = routeCommentService.getRouteComments(routeId, page, size);
-            return Result.success("获取路线评论列表成功", comments);
-        } catch (Exception e) {
-            log.error("获取路线评论列表失败: routeId={}, error={}", routeId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取路线评论列表请求: routeId={}, page={}, size={}", routeId, page, size);
+        List<RouteComment> comments = routeCommentService.getRouteComments(routeId, page, size);
+        return Result.success("获取路线评论列表成功", comments);
     }
 
     /**
@@ -80,14 +69,9 @@ public class RouteCommentController {
             @PathVariable Integer userId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        try {
-            log.info("获取用户评论列表请求: userId={}, page={}, size={}", userId, page, size);
-            List<RouteComment> comments = routeCommentService.getUserComments(userId, page, size);
-            return Result.success("获取用户评论列表成功", comments);
-        } catch (Exception e) {
-            log.error("获取用户评论列表失败: userId={}, error={}", userId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取用户评论列表请求: userId={}, page={}, size={}", userId, page, size);
+        List<RouteComment> comments = routeCommentService.getUserComments(userId, page, size);
+        return Result.success("获取用户评论列表成功", comments);
     }
 
     /**
@@ -97,15 +81,10 @@ public class RouteCommentController {
      */
     @PostMapping("/{commentId}/toggle-like")
     public Result<CommentLikeToggleResponse> toggleLikeComment(@PathVariable Integer commentId) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("切换评论点赞状态: commentId={}, userId={}", commentId, userId);
-            CommentLikeToggleResponse result = routeCommentService.toggleLikeComment(commentId, userId);
-            return Result.success(result.liked() ? "点赞成功" : "取消点赞成功", result);
-        } catch (Exception e) {
-            log.error("切换评论点赞状态失败: commentId={}, error={}", commentId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("切换评论点赞状态: commentId={}, userId={}", commentId, userId);
+        CommentLikeToggleResponse result = routeCommentService.toggleLikeComment(commentId, userId);
+        return Result.success(result.liked() ? "点赞成功" : "取消点赞成功", result);
     }
 
     /**
@@ -114,18 +93,13 @@ public class RouteCommentController {
      */
     @DeleteMapping("/{commentId}")
     public Result<Boolean> deleteComment(@PathVariable Integer commentId) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("删除评论请求: commentId={}, userId={}", commentId, userId);
-            boolean result = routeCommentService.deleteComment(commentId, userId);
-            if (result) {
-                return Result.success("删除评论成功", true);
-            }
-            return Result.error("删除评论失败");
-        } catch (Exception e) {
-            log.error("删除评论失败: commentId={}, error={}", commentId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("删除评论请求: commentId={}, userId={}", commentId, userId);
+        boolean result = routeCommentService.deleteComment(commentId, userId);
+        if (result) {
+            return Result.success("删除评论成功", true);
         }
+        return Result.error("删除评论失败");
     }
 
     /**
@@ -134,14 +108,9 @@ public class RouteCommentController {
      */
     @GetMapping("/statistics/{routeId}")
     public Result<Map<String, Object>> getCommentStatistics(@PathVariable Integer routeId) {
-        try {
-            log.info("获取评论统计信息请求: routeId={}", routeId);
-            Map<String, Object> statistics = routeCommentService.getCommentStatistics(routeId);
-            return Result.success("获取评论统计信息成功", statistics);
-        } catch (Exception e) {
-            log.error("获取评论统计信息失败: routeId={}, error={}", routeId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取评论统计信息请求: routeId={}", routeId);
+        Map<String, Object> statistics = routeCommentService.getCommentStatistics(routeId);
+        return Result.success("获取评论统计信息成功", statistics);
     }
 
     /**
@@ -153,14 +122,9 @@ public class RouteCommentController {
             @PathVariable Integer commentId,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        try {
-            log.info("获取评论回复列表请求: commentId={}, page={}, size={}", commentId, page, size);
-            List<RouteComment> replies = routeCommentService.getCommentReplies(commentId, page, size);
-            return Result.success("获取评论回复列表成功", replies);
-        } catch (Exception e) {
-            log.error("获取评论回复列表失败: commentId={}, error={}", commentId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取评论回复列表请求: commentId={}, page={}, size={}", commentId, page, size);
+        List<RouteComment> replies = routeCommentService.getCommentReplies(commentId, page, size);
+        return Result.success("获取评论回复列表成功", replies);
     }
 
     /**
@@ -169,14 +133,9 @@ public class RouteCommentController {
      */
     @PostMapping("/batch")
     public Result<List<RouteComment>> getBatchComments(@RequestBody List<Integer> commentIds) {
-        try {
-            log.info("批量获取评论请求: count={}", commentIds.size());
-            List<RouteComment> comments = routeCommentService.listByIds(commentIds);
-            return Result.success("批量获取评论成功", comments);
-        } catch (Exception e) {
-            log.error("批量获取评论失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("批量获取评论请求: count={}", commentIds.size());
+        List<RouteComment> comments = routeCommentService.listByIds(commentIds);
+        return Result.success("批量获取评论成功", comments);
     }
 
     /**
@@ -187,20 +146,15 @@ public class RouteCommentController {
     public Result<List<RouteComment>> getHotComments(
             @PathVariable Integer routeId,
             @RequestParam(defaultValue = "5") int limit) {
-        try {
-            log.info("获取热门评论请求: routeId={}, limit={}", routeId, limit);
-            // 获取路线的所有评论并按点赞数排序
-            List<RouteComment> allComments = routeCommentService.getRouteComments(routeId, 1, 100);
-            // 按点赞数降序排序，取前limit个
-            List<RouteComment> hotComments = allComments.stream()
-                    .sorted((c1, c2) -> Integer.compare(c2.getLikeCount(), c1.getLikeCount()))
-                    .limit(limit)
-                    .toList();
-            return Result.success("获取热门评论成功", hotComments);
-        } catch (Exception e) {
-            log.error("获取热门评论失败: routeId={}, error={}", routeId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取热门评论请求: routeId={}, limit={}", routeId, limit);
+        // 获取路线的所有评论并按点赞数排序
+        List<RouteComment> allComments = routeCommentService.getRouteComments(routeId, 1, 100);
+        // 按点赞数降序排序，取前limit个
+        List<RouteComment> hotComments = allComments.stream()
+                .sorted((c1, c2) -> Integer.compare(c2.getLikeCount(), c1.getLikeCount()))
+                .limit(limit)
+                .toList();
+        return Result.success("获取热门评论成功", hotComments);
     }
 
     /**
@@ -211,15 +165,10 @@ public class RouteCommentController {
     public Result<List<RouteComment>> getLatestComments(
             @PathVariable Integer routeId,
             @RequestParam(defaultValue = "5") int limit) {
-        try {
-            log.info("获取最新评论请求: routeId={}, limit={}", routeId, limit);
-            // 获取路线的最新评论
-            List<RouteComment> latestComments = routeCommentService.getRouteComments(routeId, 1, limit);
-            return Result.success("获取最新评论成功", latestComments);
-        } catch (Exception e) {
-            log.error("获取最新评论失败: routeId={}, error={}", routeId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取最新评论请求: routeId={}, limit={}", routeId, limit);
+        // 获取路线的最新评论
+        List<RouteComment> latestComments = routeCommentService.getRouteComments(routeId, 1, limit);
+        return Result.success("获取最新评论成功", latestComments);
     }
 
     /**
@@ -232,20 +181,15 @@ public class RouteCommentController {
             @RequestParam String keyword,
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int size) {
-        try {
-            log.info("搜索评论请求: routeId={}, keyword={}", routeId, keyword);
-            // 获取路线的所有评论
-            List<RouteComment> allComments = routeCommentService.getRouteComments(routeId, 1, 1000);
-            // 过滤包含关键词的评论
-            List<RouteComment> filteredComments = allComments.stream()
-                    .filter(comment -> comment.getContent() != null &&
-                            comment.getContent().contains(keyword))
-                    .toList();
-            return Result.success("搜索评论成功", filteredComments);
-        } catch (Exception e) {
-            log.error("搜索评论失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("搜索评论请求: routeId={}, keyword={}", routeId, keyword);
+        // 获取路线的所有评论
+        List<RouteComment> allComments = routeCommentService.getRouteComments(routeId, 1, 1000);
+        // 过滤包含关键词的评论
+        List<RouteComment> filteredComments = allComments.stream()
+                .filter(comment -> comment.getContent() != null &&
+                        comment.getContent().contains(keyword))
+                .toList();
+        return Result.success("搜索评论成功", filteredComments);
     }
 
     /**
@@ -257,19 +201,14 @@ public class RouteCommentController {
             @PathVariable Integer routeId,
             @RequestParam(defaultValue = "4.0") double minRating,
             @RequestParam(defaultValue = "5") int limit) {
-        try {
-            log.info("获取高评分评论请求: routeId={}, minRating={}", routeId, minRating);
-            // 获取路线的所有评论
-            List<RouteComment> allComments = routeCommentService.getRouteComments(routeId, 1, 1000);
-            // 过滤评分高于minRating的评论
-            List<RouteComment> highRatingComments = allComments.stream()
-                    .filter(comment -> comment.getRating() != null && comment.getRating() >= minRating)
-                    .limit(limit)
-                    .toList();
-            return Result.success("获取高评分评论成功", highRatingComments);
-        } catch (Exception e) {
-            log.error("获取高评分评论失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取高评分评论请求: routeId={}, minRating={}", routeId, minRating);
+        // 获取路线的所有评论
+        List<RouteComment> allComments = routeCommentService.getRouteComments(routeId, 1, 1000);
+        // 过滤评分高于minRating的评论
+        List<RouteComment> highRatingComments = allComments.stream()
+                .filter(comment -> comment.getRating() != null && comment.getRating() >= minRating)
+                .limit(limit)
+                .toList();
+        return Result.success("获取高评分评论成功", highRatingComments);
     }
 }

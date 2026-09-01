@@ -1,6 +1,5 @@
 package travel.collection.controller;
 
-import travel.common.exception.ExceptionPropagation;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,14 +29,9 @@ public class FeedbackController {
      */
     @PostMapping("/submit")
     public Result<Feedback> submitFeedback(@RequestBody Feedback feedback) {
-        try {
-            log.info("提交反馈请求: userId={}, type={}", feedback.getUserId(), feedback.getType());
-            Feedback result = feedbackService.submitFeedback(feedback);
-            return Result.success("反馈提交成功", result);
-        } catch (Exception e) {
-            log.error("提交反馈失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("提交反馈请求: userId={}, type={}", feedback.getUserId(), feedback.getType());
+        Feedback result = feedbackService.submitFeedback(feedback);
+        return Result.success("反馈提交成功", result);
     }
 
     /**
@@ -48,14 +42,9 @@ public class FeedbackController {
     public Result<List<Feedback>> getUserFeedbackList(@PathVariable Integer userId,
                                                       @RequestParam(defaultValue = "0") int page,
                                                       @RequestParam(defaultValue = "10") int size) {
-        try {
-            log.info("查询用户反馈列表请求: userId={}, page={}, size={}", userId, page, size);
-            List<Feedback> feedbackList = feedbackService.getCurrentUserFeedbacks(page, size);
-            return Result.success("查询反馈列表成功", feedbackList);
-        } catch (Exception e) {
-            log.error("查询用户反馈列表失败: userId={}, error={}", userId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("查询用户反馈列表请求: userId={}, page={}, size={}", userId, page, size);
+        List<Feedback> feedbackList = feedbackService.getCurrentUserFeedbacks(page, size);
+        return Result.success("查询反馈列表成功", feedbackList);
     }
 
     /**
@@ -64,14 +53,9 @@ public class FeedbackController {
      */
     @GetMapping("/detail/{id}")
     public Result<Feedback> getFeedbackDetail(@PathVariable Long id) {
-        try {
-            log.info("获取反馈详情请求: id={}", id);
-            Feedback feedback = feedbackService.getFeedbackDetail(id);
-            return Result.success("获取反馈详情成功", feedback);
-        } catch (Exception e) {
-            log.error("获取反馈详情失败: id={}, error={}", id, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取反馈详情请求: id={}", id);
+        Feedback feedback = feedbackService.getFeedbackDetail(id);
+        return Result.success("获取反馈详情成功", feedback);
     }
 
     /**
@@ -80,15 +64,10 @@ public class FeedbackController {
      */
     @PostMapping("/reply/{id}")
     public Result<Boolean> replyFeedback(@PathVariable Long id, @RequestBody Map<String, String> replyData) {
-        try {
-            log.info("回复反馈请求: id={}", id);
-            String replyContent = replyData.get("replyContent");
-            boolean result = feedbackService.replyFeedback(id, replyContent);
-            return Result.success("回复反馈成功", result);
-        } catch (Exception e) {
-            log.error("回复反馈失败: id={}, error={}", id, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("回复反馈请求: id={}", id);
+        String replyContent = replyData.get("replyContent");
+        boolean result = feedbackService.replyFeedback(id, replyContent);
+        return Result.success("回复反馈成功", result);
     }
 
     /**
@@ -97,14 +76,9 @@ public class FeedbackController {
      */
     @PutMapping("/process/{id}")
     public Result<Boolean> markAsProcessed(@PathVariable Long id) {
-        try {
-            log.info("标记反馈为已处理请求: id={}", id);
-            boolean result = feedbackService.markAsProcessed(id);
-            return Result.success("标记成功", result);
-        } catch (Exception e) {
-            log.error("标记反馈失败: id={}, error={}", id, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("标记反馈为已处理请求: id={}", id);
+        boolean result = feedbackService.markAsProcessed(id);
+        return Result.success("标记成功", result);
     }
 
     /**
@@ -113,14 +87,9 @@ public class FeedbackController {
      */
     @DeleteMapping("/delete/{id}")
     public Result<Boolean> deleteFeedback(@PathVariable Long id) {
-        try {
-            log.info("删除反馈请求: id={}", id);
-            boolean result = feedbackService.deleteFeedback(id);
-            return Result.success("删除反馈成功", result);
-        } catch (Exception e) {
-            log.error("删除反馈失败: id={}, error={}", id, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("删除反馈请求: id={}", id);
+        boolean result = feedbackService.deleteFeedback(id);
+        return Result.success("删除反馈成功", result);
     }
 
     /**
@@ -129,14 +98,9 @@ public class FeedbackController {
      */
     @GetMapping("/statistics")
     public Result<Map<String, Object>> getFeedbackStatistics() {
-        try {
-            log.info("获取反馈统计信息请求");
-            Map<String, Object> statistics = feedbackService.getFeedbackStatistics();
-            return Result.success("获取统计信息成功", statistics);
-        } catch (Exception e) {
-            log.error("获取反馈统计信息失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取反馈统计信息请求");
+        Map<String, Object> statistics = feedbackService.getFeedbackStatistics();
+        return Result.success("获取统计信息成功", statistics);
     }
 
     /**
@@ -145,14 +109,9 @@ public class FeedbackController {
      */
     @GetMapping("/types")
     public Result<List<Map<String, String>>> getFeedbackTypes() {
-        try {
-            log.info("获取反馈类型列表请求");
-            List<Map<String, String>> types = feedbackService.getFeedbackTypes();
-            return Result.success("获取反馈类型成功", types);
-        } catch (Exception e) {
-            log.error("获取反馈类型失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取反馈类型列表请求");
+        List<Map<String, String>> types = feedbackService.getFeedbackTypes();
+        return Result.success("获取反馈类型成功", types);
     }
 
     /**
@@ -163,13 +122,8 @@ public class FeedbackController {
     public Result<List<Feedback>> getFeedbackByType(@PathVariable String type,
                                                    @RequestParam(defaultValue = "0") int page,
                                                    @RequestParam(defaultValue = "10") int size) {
-        try {
-            log.info("按类型查询反馈请求: type={}, page={}, size={}", type, page, size);
-            List<Feedback> feedbackList = feedbackService.getFeedbackByType(type, page, size);
-            return Result.success("查询成功", feedbackList);
-        } catch (Exception e) {
-            log.error("按类型查询反馈失败: type={}, error={}", type, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("按类型查询反馈请求: type={}, page={}, size={}", type, page, size);
+        List<Feedback> feedbackList = feedbackService.getFeedbackByType(type, page, size);
+        return Result.success("查询成功", feedbackList);
     }
 }

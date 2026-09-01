@@ -3,7 +3,6 @@ package travel.collection.controller;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
-import travel.common.exception.ExceptionPropagation;
 
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -29,16 +28,11 @@ public class RouteCollectionController {
 
     @PostMapping("/toggle")
     public Result<CollectionToggleResponse> toggleCollection(@Valid @RequestBody CollectRequest request) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("切换路线收藏状态: routeId={}, userId={}", request.getRouteId(), userId);
-            boolean collected = routeCollectionService.toggleCollection(request.getRouteId(), userId);
-            return Result.success(collected ? "收藏成功" : "取消收藏成功",
-                    new CollectionToggleResponse(collected));
-        } catch (Exception e) {
-            log.error("切换路线收藏状态失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("切换路线收藏状态: routeId={}, userId={}", request.getRouteId(), userId);
+        boolean collected = routeCollectionService.toggleCollection(request.getRouteId(), userId);
+        return Result.success(collected ? "收藏成功" : "取消收藏成功",
+                new CollectionToggleResponse(collected));
     }
 
     @DeleteMapping("/remove")
@@ -52,83 +46,53 @@ public class RouteCollectionController {
     public Result<List<RouteCollectionVO>> getUserCollections(@PathVariable Integer userId,
                                                               @RequestParam(defaultValue = "1") int page,
                                                               @RequestParam(defaultValue = "10") int size) {
-        try {
-            Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("查询用户收藏列表请求: userId={}, page={}, size={}", currentUserId, page, size);
-            List<RouteCollectionVO> collections = routeCollectionService.getUserCollections(currentUserId, page, size);
-            return Result.success("查询成功", collections);
-        } catch (Exception e) {
-            log.error("查询用户收藏列表失败: userId={}, error={}", userId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("查询用户收藏列表请求: userId={}, page={}, size={}", currentUserId, page, size);
+        List<RouteCollectionVO> collections = routeCollectionService.getUserCollections(currentUserId, page, size);
+        return Result.success("查询成功", collections);
     }
 
     @GetMapping("/check")
     public Result<Boolean> checkCollected(@RequestParam Integer routeId) {
-        try {
-            Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("检查路线收藏状态请求: userId={}, routeId={}", currentUserId, routeId);
-            boolean collected = routeCollectionService.isCollected(routeId, currentUserId);
-            return Result.success("查询成功", collected);
-        } catch (Exception e) {
-            log.error("检查路线收藏状态失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("检查路线收藏状态请求: userId={}, routeId={}", currentUserId, routeId);
+        boolean collected = routeCollectionService.isCollected(routeId, currentUserId);
+        return Result.success("查询成功", collected);
     }
 
     @PutMapping("/{collectionId}/notes")
     public Result<Boolean> updateCollectionNotes(@PathVariable Integer collectionId,
                                                  @RequestBody UpdateNotesRequest request) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("更新收藏备注请求: collectionId={}, userId={}", collectionId, userId);
-            boolean result = routeCollectionService.updateCollectionNotes(collectionId, userId, request.getNotes());
-            return Result.success("更新备注成功", result);
-        } catch (Exception e) {
-            log.error("更新收藏备注失败: collectionId={}, error={}", collectionId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("更新收藏备注请求: collectionId={}, userId={}", collectionId, userId);
+        boolean result = routeCollectionService.updateCollectionNotes(collectionId, userId, request.getNotes());
+        return Result.success("更新备注成功", result);
     }
 
     @PutMapping("/{collectionId}/public-status")
     public Result<Boolean> updatePublicStatus(@PathVariable Integer collectionId,
                                               @RequestBody UpdatePublicStatusRequest request) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("更新收藏公开状态请求: collectionId={}, userId={}", collectionId, userId);
-            boolean result = routeCollectionService.updateCollectionPublicStatus(collectionId, userId, request.getIsPublic());
-            return Result.success("更新状态成功", result);
-        } catch (Exception e) {
-            log.error("更新收藏公开状态失败: collectionId={}, error={}", collectionId, e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("更新收藏公开状态请求: collectionId={}, userId={}", collectionId, userId);
+        boolean result = routeCollectionService.updateCollectionPublicStatus(collectionId, userId, request.getIsPublic());
+        return Result.success("更新状态成功", result);
     }
 
     @GetMapping("/public")
     public Result<List<travel.common.entity.user_community.RouteCollection>> getPublicCollections(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        try {
-            log.info("获取公开收藏列表请求: page={}, size={}", page, size);
-            List<travel.common.entity.user_community.RouteCollection> collections = routeCollectionService.getPublicCollections(page, size);
-            return Result.success("查询成功", collections);
-        } catch (Exception e) {
-            log.error("获取公开收藏列表失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        log.info("获取公开收藏列表请求: page={}, size={}", page, size);
+        List<travel.common.entity.user_community.RouteCollection> collections = routeCollectionService.getPublicCollections(page, size);
+        return Result.success("查询成功", collections);
     }
 
     @GetMapping("/categories/{userId}")
     public Result<List<String>> getCollectionCategories(@PathVariable Integer userId) {
-        try {
-            Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("获取用户收藏分类请求: userId={}", currentUserId);
-            List<String> categories = routeCollectionService.getUserCollectionCategories(currentUserId);
-            return Result.success("获取分类成功", categories);
-        } catch (Exception e) {
-            log.error("获取用户收藏分类失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("获取用户收藏分类请求: userId={}", currentUserId);
+        List<String> categories = routeCollectionService.getUserCollectionCategories(currentUserId);
+        return Result.success("获取分类成功", categories);
     }
 
     @GetMapping("/category/{userId}/{category}")
@@ -137,39 +101,29 @@ public class RouteCollectionController {
             @PathVariable String category,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
-        try {
-            Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("按分类获取收藏请求: userId={}, category={}, page={}, size={}", currentUserId, category, page, size);
-            List<RouteCollectionVO> collections = routeCollectionService.getUserCollectionsByCategory(
-                    currentUserId, category, page + 1, size);
-            List<RouteCollection> result = collections.stream().map(vo -> {
-                RouteCollection collection = new RouteCollection();
-                collection.setId(vo.getId());
-                collection.setRouteId(vo.getRouteId());
-                collection.setUserId(vo.getUserId());
-                collection.setCollectionTime(vo.getCollectionTime());
-                collection.setIsPublic(vo.getIsPublic());
-                collection.setNotes(vo.getNotes());
-                return collection;
-            }).toList();
-            return Result.success("获取收藏成功", result);
-        } catch (Exception e) {
-            log.error("按分类获取收藏失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer currentUserId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("按分类获取收藏请求: userId={}, category={}, page={}, size={}", currentUserId, category, page, size);
+        List<RouteCollectionVO> collections = routeCollectionService.getUserCollectionsByCategory(
+                currentUserId, category, page + 1, size);
+        List<RouteCollection> result = collections.stream().map(vo -> {
+            RouteCollection collection = new RouteCollection();
+            collection.setId(vo.getId());
+            collection.setRouteId(vo.getRouteId());
+            collection.setUserId(vo.getUserId());
+            collection.setCollectionTime(vo.getCollectionTime());
+            collection.setIsPublic(vo.getIsPublic());
+            collection.setNotes(vo.getNotes());
+            return collection;
+        }).toList();
+        return Result.success("获取收藏成功", result);
     }
 
     @DeleteMapping("/batch-remove")
     public Result<Integer> batchRemoveCollections(@RequestBody List<Integer> ids) {
-        try {
-            Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
-            log.info("批量移除收藏请求: count={}", ids.size());
-            int count = routeCollectionService.batchRemoveCollections(ids, userId);
-            return Result.success("批量移除成功", count);
-        } catch (Exception e) {
-            log.error("批量移除收藏失败: error={}", e.getMessage());
-            throw ExceptionPropagation.propagate(e);
-        }
+        Integer userId = AuthenticatedUserSupport.requireIntegerUserId();
+        log.info("批量移除收藏请求: count={}", ids.size());
+        int count = routeCollectionService.batchRemoveCollections(ids, userId);
+        return Result.success("批量移除成功", count);
     }
 
     // ==================== 请求DTO ====================
