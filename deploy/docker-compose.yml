@@ -7,6 +7,11 @@ x-base-env: &base-env
   SPRING_CLOUD_SENTINEL_ENABLED: "false"
   SEATA_ENABLED: "false"
   JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be configured}
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8080}
+  API_DOCS_ENABLED: "false"
+  SPRINGDOC_API_DOCS_ENABLED: "false"
+  SPRINGDOC_SWAGGER_UI_ENABLED: "false"
+  HSTS_ENABLED: ${HSTS_ENABLED:-false}
 
 x-service-env: &service-env
   <<: *base-env

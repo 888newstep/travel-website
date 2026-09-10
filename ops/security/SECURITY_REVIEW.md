@@ -87,7 +87,47 @@ MySQL 3306、Redis 6379、业务服务 8091—8095 已改为仅在 Docker 内部
 - 默认 Compose 静态检查确认仅存在 8080/8090 两组 `ports`；
 - 当前机器没有 Docker CLI，因此尚未执行真实容器启动验证。
 
-## 5. 剩余风险与修复优先级
+## 5. 本轮安全基线修复（2026-09-10）
+
+### 已完成：CORS 显式白名单
+
+- Gateway 与业务服务不再使用 `allowedOriginPatterns("*") + allowCredentials(true)`；
+- 使用 `CORS_ALLOWED_ORIGINS` 配置明确来源，默认仅允许 localhost/127.0.0.1 的前端开发与本地 Web 端口；
+- 空白或包含通配符的来源配置会拒绝启动；
+- Allowed-Headers 收敛到 Authorization、Content-Type、Idempotency-Key、X-Requested-With；
+- 增加 Gateway/common 的白名单解析与通配符拒绝测试。
+
+### 已完成：生产关闭 Swagger/OpenAPI
+
+- `API_DOCS_ENABLED` 同时控制 springdoc 文档生成和鉴权白名单；
+- Docker Compose 注入 `SPRINGDOC_API_DOCS_ENABLED=false`、`SPRINGDOC_SWAGGER_UI_ENABLED=false`、`API_DOCS_ENABLED=false`；
+- 本地开发默认保留文档；
+- 增加文档关闭时 `/v3/api-docs` 不再匿名公开的测试。
+
+### 已完成：JWT 密钥契约统一
+
+- Gateway 与 common 明确使用 UTF-8 原始密钥，经 Base64 编码后构造 HMAC Key；
+- 两端统一非空与最少 32 UTF-8 字节校验；
+- 增加固定测试向量、非 ASCII 密钥派生和 Gateway Token 解析/可信头重建测试；
+- 未改变现有 Token 格式与 `JWT_SECRET` 环境变量语义。
+
+### 已完成：Gateway 安全响应头与指纹清理
+
+- 使用 `beforeCommit` 在响应提交前添加 CSP、nosniff、DENY、Referrer-Policy、Permissions-Policy；
+- 清理 Server、X-Powered-By、X-Application-Context；
+- HSTS 仅在 `HSTS_ENABLED=true` 时启用，默认关闭以避免本地 HTTP 被错误升级；
+- 增加启用/禁用 HSTS 与指纹清理测试。
+
+### 验证结果
+
+- 针对性安全测试通过；
+- 后端全量：308 tests / 0 failure / 0 error / 3 skipped；
+- 前端 TypeScript lint 与 Vite production build 通过；
+- Gateway application.yml 与 Docker Compose YAML 解析通过；
+- 安全静态断言确认无 `allowedOriginPatterns("*")` 残留、Docker 文档开关关闭；
+- 本地 Gateway 未启动，因此未执行动态 HTTP 探测。
+
+## 6. 剩余风险与修复优先级
 
 ### 已缓解：公开 AI 接口可能被匿名滥用
 
@@ -131,7 +171,7 @@ MySQL 3306、Redis 6379、业务服务 8091—8095 已改为仅在 Docker 内部
 4. 使用独立生产 Compose override，避免开发端口配置误进入服务器。
 5. 即使服务不可公网访问，也保留业务服务 JWT 验证，形成纵深防御。
 
-### P1：JWT 密钥派生方式和服务间配置一致性需统一
+### 已缓解：JWT 密钥派生方式和服务间配置一致性需统一
 
 Gateway 使用：
 
@@ -149,7 +189,7 @@ Keys.hmacShaKeyFor(Base64.getEncoder().encode(jwtSecret.getBytes(UTF_8)))
 4. 增加密钥版本 `kid` 和轮换机制；访问令牌使用较短有效期，刷新令牌单独管理。
 5. CI 增加跨模块契约测试：user-service 签发的令牌必须同时通过 Gateway 和业务服务验证。
 
-### P1：公开 Swagger/OpenAPI 增加攻击面
+### 已缓解：公开 Swagger/OpenAPI 增加攻击面
 
 Gateway 和业务服务允许匿名访问 Swagger 与 `/v3/api-docs`。
 
@@ -183,7 +223,7 @@ Gateway 和业务服务允许匿名访问 Swagger 与 `/v3/api-docs`。
 - 分享访问：限制同 IP/同分享 ID 的写入频率；
 - 对公开写接口使用比普通 GET 更严格的 Sentinel/Gateway 限额。
 
-### P2：安全响应头和服务指纹需要统一治理
+### 已缓解：安全响应头和服务指纹需要统一治理
 
 建议在 Gateway 添加：
 
@@ -206,7 +246,7 @@ Gateway 和业务服务允许匿名访问 Swagger 与 `/v3/api-docs`。
 - 相同规划请求可缓存或合并，防止重复计算与重复外呼；
 - 对异常经纬度、重复景点、空列表进行快速失败。
 
-## 6. 动态探测覆盖项
+## 7. 动态探测覆盖项
 
 脚本当前覆盖：
 
@@ -224,7 +264,7 @@ Gateway 和业务服务允许匿名访问 Swagger 与 `/v3/api-docs`。
 12. 可选：8091—8095 直连；
 13. 可选：最多 12 个 GET 的轻量限流探测。
 
-## 7. 当前验证状态
+## 8. 当前验证状态
 
 已完成：
 
@@ -237,7 +277,7 @@ Gateway 和业务服务允许匿名访问 Swagger 与 `/v3/api-docs`。
 - 2026-08-29 检查时，本地 `127.0.0.1:8090` Gateway 未启动，因此没有生成有效动态攻击结果。
 - 启动本地测试栈后，应重新执行脚本，并以生成的 `security-report.json` 为准。
 
-## 8. 建议补入 CI 的安全门禁
+## 9. 建议补入 CI 的安全门禁
 
 1. 运行现有单元与集成测试；
 2. 增加 Gateway/服务授权矩阵测试；

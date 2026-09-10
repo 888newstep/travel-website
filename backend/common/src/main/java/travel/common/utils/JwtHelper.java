@@ -4,6 +4,7 @@ import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Base64;
 
@@ -23,9 +24,19 @@ public class JwtHelper {
         throw new IllegalStateException("Property 'jwt.secret' must be configured before using JwtHelper");
     }
     // 鐢熸垚瀵嗛挜瀵硅薄
-    private static SecretKey getSecretKey() {
-        byte[] keyBytes = Base64.getEncoder().encode(getTokenSignKey().getBytes());
+    static SecretKey deriveSecretKey(String rawSecret) {
+        if (rawSecret == null || rawSecret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET must be configured");
+        }
+        if (rawSecret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 32 UTF-8 bytes");
+        }
+        byte[] keyBytes = Base64.getEncoder().encode(rawSecret.getBytes(StandardCharsets.UTF_8));
         return Keys.hmacShaKeyFor(keyBytes);
+    }
+
+    private static SecretKey getSecretKey() {
+        return deriveSecretKey(getTokenSignKey());
     }
 
     /**

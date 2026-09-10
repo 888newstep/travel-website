@@ -37,18 +37,20 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private static final Set<String> PUBLIC_GET_PATHS = Set.of(
             "/api/attractions", "/api/cities", "/api/restaurants", "/api/routes",
             "/api/routes/search", "/api/travel-notes", "/api/route-share/validate",
-            "/swagger-ui", "/swagger-ui.html",
-            "/v3/api-docs", "/doc.html", "/actuator/health"
+            "/actuator/health"
     );
     private static final List<String> PUBLIC_GET_PREFIXES = List.of(
             "/api/attractions/", "/api/cities/", "/api/restaurants/", "/api/realtime-status/",
-            "/api/routes/city/", "/api/travel-notes/", "/swagger-ui/", "/v3/api-docs/",
+            "/api/routes/city/", "/api/travel-notes/",
             "/api/route-share/info/", "/api/route-share/access/", "/api/route-share/file/access/",
             "/actuator/health/"
     );
 
     @Value("${jwt.secret:}")
     private String jwtSecret;
+
+    @Value("${travel.security.api-docs-enabled:true}")
+    private boolean apiDocsEnabled;
 
     private volatile boolean secretConfigured;
 
@@ -84,8 +86,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
 
         try {
             String token = authHeader.substring(7);
-            SecretKey key = Keys.hmacShaKeyFor(Base64.getEncoder().encode(jwtSecret.getBytes(StandardCharsets.UTF_8)));
-            Claims claims = Jwts.parser().verifyWith(key).build().parseSignedClaims(token).getPayload();
+            Claims claims = Jwts.parser().verifyWith(deriveSecretKey(jwtSecret)).build()
+                    .parseSignedClaims(token).getPayload();
             Object userId = claims.get("userId");
             Object userType = claims.get("userType");
             Object role = claims.get("role");
@@ -102,6 +104,16 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             return exchange.getResponse().setComplete();
         }
+    }
+
+    static SecretKey deriveSecretKey(String rawSecret) {
+        if (rawSecret == null || rawSecret.isBlank()) {
+            throw new IllegalStateException("JWT_SECRET must be configured");
+        }
+        if (rawSecret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 32 UTF-8 bytes");
+        }
+        return Keys.hmacShaKeyFor(Base64.getEncoder().encode(rawSecret.getBytes(StandardCharsets.UTF_8)));
     }
 
     private ServerWebExchange sanitizeForwardedHeaders(ServerWebExchange exchange) {
@@ -138,7 +150,17 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         }
         return PUBLIC_GET_PATHS.contains(path)
                 || PUBLIC_GET_PREFIXES.stream().anyMatch(path::startsWith)
+                || (apiDocsEnabled && isApiDocsPath(path))
                 || isPublicRouteRead(path);
+    }
+
+    private boolean isApiDocsPath(String path) {
+        return path.equals("/swagger-ui")
+                || path.equals("/swagger-ui.html")
+                || path.startsWith("/swagger-ui/")
+                || path.equals("/v3/api-docs")
+                || path.startsWith("/v3/api-docs/")
+                || path.equals("/doc.html");
     }
 
     private boolean isPublicRouteRead(String path) {

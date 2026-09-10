@@ -41,6 +41,9 @@ public class WebSecurityConfig {
     @Value("${travel.performance.metrics-endpoints-enabled:false}")
     private boolean performanceMetricsEndpointsEnabled;
 
+    @Value("${travel.security.api-docs-enabled:${API_DOCS_ENABLED:true}}")
+    private boolean apiDocsEnabled;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
@@ -52,8 +55,10 @@ public class WebSecurityConfig {
                         authorize.requestMatchers("/css/**", "/js/**", "/images/**", "/static/**", "/favicon.ico").permitAll();
                         // 认证相关（登录、注册、验证码）
                         authorize.requestMatchers("/users/login", "/users/register", "/users/captcha").permitAll();
-                        // Swagger 文档
-                        authorize.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/doc.html", "/webjars/**").permitAll();
+                        // Swagger 文档仅在显式开启时公开，Docker/生产环境默认关闭。
+                        if (apiDocsEnabled) {
+                            authorize.requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**", "/doc.html", "/webjars/**").permitAll();
+                        }
                         // 健康检查
                         authorize.requestMatchers("/health", "/version", "/actuator/health", "/actuator/health/**").permitAll();
 

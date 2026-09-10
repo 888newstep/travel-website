@@ -1,5 +1,6 @@
 package travel.gateway.config;
 
+import io.jsonwebtoken.Jwts;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.server.MockServerWebExchange;
@@ -7,6 +8,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.util.Date;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -32,6 +35,33 @@ class AuthGlobalFilterTest {
         ReflectionTestUtils.setField(filter, "jwtSecret", "too-short");
 
         assertThrows(IllegalStateException.class, filter::validateJwtSecret);
+    }
+
+    @Test
+    void shouldAcceptTokenUsingSharedJwtKeyContract() {
+        String secret = "test-jwt-secret-that-is-long-enough-for-hmac-signing";
+        String token = Jwts.builder()
+                .subject("TRAVEL-PLATFORM-USER")
+                .issuedAt(Date.from(Instant.now()))
+                .expiration(Date.from(Instant.now().plusSeconds(300)))
+                .claim("userId", 42L)
+                .claim("userType", 1)
+                .claim("role", "USER")
+                .signWith(AuthGlobalFilter.deriveSecretKey(secret))
+                .compact();
+        AuthGlobalFilter filter = configuredFilter();
+        ServerWebExchange exchange = MockServerWebExchange.from(
+                get("/api/v1/notifications").header("Authorization", "Bearer " + token).build());
+        AtomicReference<ServerWebExchange> forwarded = new AtomicReference<>();
+
+        filter.filter(exchange, currentExchange -> {
+            forwarded.set(currentExchange);
+            return Mono.empty();
+        }).block();
+
+        assertEquals("42", forwarded.get().getRequest().getHeaders().getFirst("X-User-Id"));
+        assertEquals("1", forwarded.get().getRequest().getHeaders().getFirst("X-User-Type"));
+        assertEquals("USER", forwarded.get().getRequest().getHeaders().getFirst("X-User-Role"));
     }
 
     @Test
@@ -163,6 +193,17 @@ class AuthGlobalFilterTest {
     }
 
     @Test
+    void shouldProtectApiDocsWhenDisabled() {
+        AuthGlobalFilter filter = configuredFilter();
+        ReflectionTestUtils.setField(filter, "apiDocsEnabled", false);
+        ServerWebExchange exchange = MockServerWebExchange.from(get("/v3/api-docs").build());
+
+        filter.filter(exchange, currentExchange -> Mono.empty()).block();
+
+        assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+    }
+
+    @Test
     void shouldNotExposeManagementEndpoints() {
         AuthGlobalFilter filter = configuredFilter();
         ServerWebExchange exchange = MockServerWebExchange.from(get("/actuator/env").build());
@@ -178,6 +219,7 @@ class AuthGlobalFilterTest {
                 filter,
                 "jwtSecret",
                 "test-jwt-secret-that-is-long-enough-for-hmac-signing");
+        ReflectionTestUtils.setField(filter, "apiDocsEnabled", true);
         filter.validateJwtSecret();
         return filter;
     }
