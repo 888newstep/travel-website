@@ -24,10 +24,11 @@
     "@vitejs/plugin-react": "^4.7.0",
     "tailwindcss": "^4.2.4",
     "typescript": "~5.8.2",
-    "vite": "^6.4.3"
+    "vite": "^6.4.5"
   },
   "overrides": {
     "browserslist": "^4.29.3",
-    "baseline-browser-mapping": "^2.11.0"
+    "baseline-browser-mapping": "^2.11.0",
+    "follow-redirects": "^1.16.2"
   }
 }

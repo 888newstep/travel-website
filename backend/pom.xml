@@ -45,10 +45,17 @@
         <xxl-job.version>3.4.2</xxl-job.version>
         <druid.version>1.2.23</druid.version>
         <redisson.version>3.37.0</redisson.version>
+        <guava.version>33.7.2-jre</guava.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Guava 安全版本（dashscope-sdk 传递依赖带入 32.x，CVE-2026-102554） -->
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
             <!-- Spring Cloud BOM -->
             <dependency>
                 <groupId>org.springframework.cloud</groupId>
