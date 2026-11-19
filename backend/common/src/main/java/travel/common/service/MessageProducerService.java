@@ -4,12 +4,14 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.MessagePostProcessor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import travel.common.config.RabbitMQConfig;
+import travel.common.config.TraceIdFilter;
 import travel.common.vo.AsyncTaskMessageVO;
 import travel.common.vo.CacheUpdateMessageVO;
 import travel.common.vo.NotificationMessageVO;
@@ -266,6 +268,10 @@ public class MessageProducerService {
             }
             rabbitMessage.getMessageProperties().setMessageId(messageId);
             rabbitMessage.getMessageProperties().setType(messageType);
+            String traceId = MDC.get(TraceIdFilter.MDC_TRACE_KEY);
+            if (traceId != null && !traceId.isBlank()) {
+                rabbitMessage.getMessageProperties().setHeader(TraceIdFilter.TRACE_HEADER, traceId);
+            }
             return rabbitMessage;
         };
     }

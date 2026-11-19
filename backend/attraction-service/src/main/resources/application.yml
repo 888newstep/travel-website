@@ -111,6 +111,8 @@ seata:
 
 # 鏃ュ織閰嶇疆
 logging:
+  pattern:
+    level: "%5p [${spring.application.name:-app},%X{traceId:-NA}]"
   level:
     travel: debug
     org.springframework.web: debug

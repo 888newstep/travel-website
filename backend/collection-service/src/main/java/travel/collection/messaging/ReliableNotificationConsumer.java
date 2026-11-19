@@ -3,6 +3,7 @@ package travel.collection.messaging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -11,6 +12,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import travel.collection.service.NotificationService;
 import travel.common.config.RabbitMQConfig;
+import travel.common.config.TraceIdFilter;
 import travel.common.exception.NonRetryableMessageException;
 import travel.common.service.RabbitReliableMessageRepublisher;
 import travel.common.service.RedisMessageIdempotencyService;
@@ -63,64 +65,80 @@ public class ReliableNotificationConsumer {
             queues = RabbitMQConfig.RELIABLE_NOTIFICATION_QUEUE,
             ackMode = "MANUAL")
     public void onMessage(Message sourceMessage, Channel channel) throws IOException {
-        if (sourceMessage == null || channel == null) {
-            throw new IllegalArgumentException("sourceMessage and channel cannot be null");
+        String traceId = extractTraceId(sourceMessage);
+        if (traceId != null) {
+            MDC.put(TraceIdFilter.MDC_TRACE_KEY, traceId);
         }
-
-        String messageId = extractMessageId(sourceMessage);
-        if (isBlank(messageId)) {
-            handleNonRetryable(sourceMessage, channel, "missing message id");
-            return;
-        }
-
-        NotificationMessageVO notificationMessage;
         try {
-            notificationMessage = parseMessage(sourceMessage);
-        } catch (NonRetryableMessageException exception) {
-            handleNonRetryable(sourceMessage, channel, exception.getMessage());
-            return;
-        }
-
-        RedisMessageIdempotencyService.ClaimResult claim;
-        try {
-            claim = idempotencyService.tryClaim(messageId);
-        } catch (Exception exception) {
-            log.warn("notification idempotency claim failed, message will be requeued: messageId={}, error={}",
-                    messageId, exception.getMessage());
-            nackForRequeue(sourceMessage, channel);
-            return;
-        }
-
-        if (claim.status() == RedisMessageIdempotencyService.ClaimStatus.COMPLETED) {
-            ack(sourceMessage, channel);
-            return;
-        }
-
-        if (claim.status() == RedisMessageIdempotencyService.ClaimStatus.IN_PROGRESS) {
-            retryInProgress(sourceMessage, channel, messageId);
-            return;
-        }
-
-        try {
-            notificationService.createReliableNotification(messageId, notificationMessage);
-            idempotencyService.markCompleted(claim);
-        } catch (Exception exception) {
-            try {
-                idempotencyService.release(claim);
-            } catch (Exception releaseException) {
-                log.warn("notification idempotency release failed: messageId={}, error={}",
-                        messageId, releaseException.getMessage());
+            if (sourceMessage == null || channel == null) {
+                throw new IllegalArgumentException("sourceMessage and channel cannot be null");
             }
+
+            String messageId = extractMessageId(sourceMessage);
+            if (isBlank(messageId)) {
+                handleNonRetryable(sourceMessage, channel, "missing message id");
+                return;
+            }
+
+            NotificationMessageVO notificationMessage;
             try {
-                retryOrDeadLetter(sourceMessage, channel, messageId, exception.getMessage());
-            } catch (Exception republishException) {
-                log.warn("notification retry publish failed, message will be requeued: messageId={}, error={}",
-                        messageId, republishException.getMessage());
+                notificationMessage = parseMessage(sourceMessage);
+            } catch (NonRetryableMessageException exception) {
+                handleNonRetryable(sourceMessage, channel, exception.getMessage());
+                return;
+            }
+
+            RedisMessageIdempotencyService.ClaimResult claim;
+            try {
+                claim = idempotencyService.tryClaim(messageId);
+            } catch (Exception exception) {
+                log.warn("notification idempotency claim failed, message will be requeued: messageId={}, error={}",
+                        messageId, exception.getMessage());
                 nackForRequeue(sourceMessage, channel);
+                return;
             }
-            return;
+
+            if (claim.status() == RedisMessageIdempotencyService.ClaimStatus.COMPLETED) {
+                ack(sourceMessage, channel);
+                return;
+            }
+
+            if (claim.status() == RedisMessageIdempotencyService.ClaimStatus.IN_PROGRESS) {
+                retryInProgress(sourceMessage, channel, messageId);
+                return;
+            }
+
+            try {
+                notificationService.createReliableNotification(messageId, notificationMessage);
+                idempotencyService.markCompleted(claim);
+            } catch (Exception exception) {
+                try {
+                    idempotencyService.release(claim);
+                } catch (Exception releaseException) {
+                    log.warn("notification idempotency release failed: messageId={}, error={}",
+                            messageId, releaseException.getMessage());
+                }
+                try {
+                    retryOrDeadLetter(sourceMessage, channel, messageId, exception.getMessage());
+                } catch (Exception republishException) {
+                    log.warn("notification retry publish failed, message will be requeued: messageId={}, error={}",
+                            messageId, republishException.getMessage());
+                    nackForRequeue(sourceMessage, channel);
+                }
+                return;
+            }
+            ack(sourceMessage, channel);
+        } finally {
+            MDC.remove(TraceIdFilter.MDC_TRACE_KEY);
         }
-        ack(sourceMessage, channel);
+    }
+
+    private String extractTraceId(Message sourceMessage) {
+        if (sourceMessage.getMessageProperties() == null) {
+            return null;
+        }
+        Object header = sourceMessage.getMessageProperties().getHeader(TraceIdFilter.TRACE_HEADER);
+        return header instanceof String value && !value.isBlank() ? value : null;
     }
 
     private NotificationMessageVO parseMessage(Message sourceMessage) {

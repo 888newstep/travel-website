@@ -111,3 +111,8 @@ seata:
       server-addr: ${NACOS_SERVER_ADDR:localhost:8848}
       namespace: ${NACOS_NAMESPACE:public}
       group: SEATA_GROUP
+
+# traceId 日志贯穿（Gateway 下发，MDC 输出）
+logging:
+  pattern:
+    level: "%5p [${spring.application.name:-app},%X{traceId:-NA}]"

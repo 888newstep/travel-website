@@ -44,6 +44,8 @@ spring:
           response-body: '{"code":429,"message":"璇锋眰杩囦簬棰戠箒锛岃绋嶅悗鍐嶈瘯"}'
 
 logging:
+  pattern:
+    level: "%5p [${spring.application.name:-app},%X{traceId:-NA}]"
   level:
     travel.gateway: debug
 

@@ -105,6 +105,8 @@ mybatis-plus:
       logic-not-delete-value: 0
 
 logging:
+  pattern:
+    level: "%5p [${spring.application.name:-app},%X{traceId:-NA}]"
   level:
     travel: debug
     org.springframework.web: debug
