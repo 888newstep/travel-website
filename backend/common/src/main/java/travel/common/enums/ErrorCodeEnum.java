@@ -150,6 +150,8 @@ public enum ErrorCodeEnum {
     THIRD_PARTY_AUTH_ERROR(13003, "第三方认证错误"),
     THIRD_PARTY_TIMEOUT_ERROR(13004, "第三方服务超时"),
     THIRD_PARTY_RATE_LIMIT_ERROR(13005, "第三方服务速率限制"),
+    REQUEST_RATE_LIMITED(13006, "请求过于频繁，请稍后再试"),
+    AI_DAILY_QUOTA_EXCEEDED(13007, "今日 AI 调用次数已达上限，请明日再试"),
 
     // 140xx 安全模块错误
     SECURITY_ERROR(14001, "安全错误"),

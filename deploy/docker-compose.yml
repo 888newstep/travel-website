@@ -229,6 +229,9 @@ services:
     container_name: travel-gateway
     environment:
       <<: *base-env
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-change-me}
     depends_on:
       user-service:
         condition: service_healthy

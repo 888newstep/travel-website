@@ -1,5 +1,9 @@
 spring:
   cloud:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: "${SPRING_DATA_REDIS_PASSWORD:}"
     discovery:
       client:
         simple:
@@ -12,6 +16,17 @@ spring:
         locator:
           enabled: false
       routes:
+        - id: auth-limited
+          uri: http://user-service:8091/api
+          predicates:
+            - Path=/api/users/login,/api/users/register,/api/users/captcha
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 2
+                redis-rate-limiter.burstCapacity: 5
+                key-resolver: "#{@clientIpKeyResolver}"
         - id: user-service
           uri: http://user-service:8091/api
           predicates:
@@ -44,3 +59,8 @@ spring:
             - StripPrefix=1
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 20
+            redis-rate-limiter.burstCapacity: 40
+            key-resolver: "#{@clientIpKeyResolver}"

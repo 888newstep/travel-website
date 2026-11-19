@@ -6,12 +6,25 @@ spring:
   lifecycle:
     timeout-per-shutdown-phase: 30s
   cloud:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: "${SPRING_DATA_REDIS_PASSWORD:}"
     gateway:
       discovery:
         locator:
           enabled: true
           lower-case-service-id: true
       routes:
+        - id: auth-limited
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/login,/api/users/register,/api/users/captcha
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 2
+                redis-rate-limiter.burstCapacity: 5
+                key-resolver: "#{@clientIpKeyResolver}"
         - id: user-service
           uri: lb://user-service
           predicates:
@@ -34,6 +47,11 @@ spring:
             - Path=/api/file/**, /api/resource/**, /api/resource-file/**
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin
+        - name: RequestRateLimiter
+          args:
+            redis-rate-limiter.replenishRate: 20
+            redis-rate-limiter.burstCapacity: 40
+            key-resolver: "#{@clientIpKeyResolver}"
 
     # Sentinel
     sentinel:
