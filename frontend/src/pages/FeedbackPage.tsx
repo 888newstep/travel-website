@@ -7,6 +7,7 @@ import { userApi } from '../api/user.api'
 import { LoadingSpinner } from '../components/common/LoadingSpinner'
 
 import { FEEDBACK_MAX_LENGTH } from '../constants'
+import { formatTime } from '../lib/format'
 
 
 
@@ -21,16 +22,6 @@ const DEFAULT_FEEDBACK_TYPES = [
   { value: 'other', label: '其他' },
 
 ]
-
-
-
-function formatTime(value?: string) {
-
-  if (!value) return '未知'
-
-  return value.replace('T', ' ').slice(0, 16)
-
-}
 
 
 

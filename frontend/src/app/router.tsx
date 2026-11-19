@@ -1,4 +1,5 @@
 ﻿import { Navigate, Route, Routes } from 'react-router-dom'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import { AIChatPage } from '../pages/AIChatPage'
 import { AttractionsPage } from '../pages/AttractionsPage'
 import { FeedbackPage } from '../pages/FeedbackPage'
@@ -17,6 +18,7 @@ import { UserProfilePage } from '../pages/UserProfilePage'
 
 export function AppRouter() {
   return (
+    <ErrorBoundary>
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/attractions" element={<AttractionsPage />} />
@@ -34,5 +36,6 @@ export function AppRouter() {
       <Route path="/optimization" element={<ProtectedRoute><RouteOptimizationPage /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </ErrorBoundary>
   )
 }

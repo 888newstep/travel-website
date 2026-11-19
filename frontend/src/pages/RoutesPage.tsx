@@ -18,6 +18,7 @@ import { getStoredToken } from '../lib/auth'
 import { isRequestTimeoutError, withRequestTimeout } from '../lib/request'
 import { useDebouncedKeywordEffect } from '../hooks/useDebouncedKeywordEffect'
 import { useSyncedKeyword } from '../hooks/useSyncedKeyword'
+import { formatTime } from '../lib/format'
 
 type RouteTab = 'local' | 'popular'
 type DisplayRoute = Route | RoutePlan
@@ -83,11 +84,6 @@ function getRouteTags(route?: DisplayRoute | null) {
 
 function getRouteDuration(route?: DisplayRoute | null) {
   return route?.durationDays ? `${route.durationDays} 天` : '未设置'
-}
-
-function formatTime(value?: string) {
-  if (!value) return '未知'
-  return value.replace('T', ' ').slice(0, 16)
 }
 
 function getCommentCount(stats: Record<string, unknown> | null, comments: RouteComment[]) {

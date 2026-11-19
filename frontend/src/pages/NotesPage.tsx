@@ -9,11 +9,7 @@ import { DEBOUNCE_DELAY, TEXT } from '../constants'
 import { isRequestTimeoutError, withRequestTimeout } from '../lib/request'
 import { useDebouncedKeywordEffect } from '../hooks/useDebouncedKeywordEffect'
 import { useSyncedKeyword } from '../hooks/useSyncedKeyword'
-
-function formatTime(value?: string) {
-  if (!value) return '未知'
-  return value.replace('T', ' ').slice(0, 16)
-}
+import { formatTime } from '../lib/format'
 
 interface InlineNotice { tone: StatusNoticeTone; message: string }
 

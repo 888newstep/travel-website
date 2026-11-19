@@ -8,9 +8,12 @@
     "build": "vite build",
     "preview": "vite preview",
     "clean": "powershell -NoProfile -Command \"Remove-Item dist -Recurse -Force -ErrorAction SilentlyContinue\"",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.108.1",
     "axios": "1.20.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
@@ -18,13 +21,16 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^22.14.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.7.0",
+    "jsdom": "^31.0.1",
     "tailwindcss": "^4.2.4",
     "typescript": "~5.8.2",
-    "vite": "^6.4.5"
+    "vite": "^6.4.5",
+    "vitest": "^5.1.1"
   },
   "overrides": {
     "browserslist": "^4.29.3",

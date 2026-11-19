@@ -4,11 +4,7 @@ import { LoadingSpinner } from '../components/common/LoadingSpinner'
 import { SearchEmptyState } from '../components/common/SearchFeedback'
 import { type StatusNoticeTone, StatusNotice } from '../components/common/StatusNotice'
 import { DEFAULT_PAGE, DEFAULT_PAGE_SIZE } from '../constants'
-
-function formatTime(value?: string) {
-  if (!value) return '\u672a\u77e5\u65f6\u95f4'
-  return value.replace('T', ' ').slice(0, 16)
-}
+import { formatTime } from '../lib/format'
 
 function getTypeLabel(type: string) {
   if (type === 'system') return '\u7cfb\u7edf\u901a\u77e5'
