@@ -1,0 +1,99 @@
+# ============================================
+# travel — CD 手动部署（GitHub Actions → 腾讯云）
+# ============================================
+# 设计决策：
+#   1. 只用 workflow_dispatch 手动触发，不做 push 自动部署——
+#      travel-stack 与 newagent/novel-agent 有 systemd Conflicts 互斥，
+#      自动重启 travel 会强停正在运行的其他项目（可能打断面试演示）。
+#   2. 对准云端真实形态：裸 jar + systemd（travel-stack.target，5 服务），
+#      不走镜像仓库（2C8G 单机、演示项目，服务器上直接覆盖 jar）。
+#   3. 失败自动回滚（deploy.sh 内置备份与回滚逻辑）。
+#
+# 前置一次性配置（GitHub 仓库 Settings → Secrets and variables → Actions）：
+#   DEPLOY_HOST     服务器公网 IP，如 49.234.187.76
+#   DEPLOY_USER     SSH 用户，如 ubuntu
+#   DEPLOY_SSH_KEY  部署专用私钥（建议单独生成，非个人主 key），
+#                   公钥写入服务器 ~/.ssh/authorized_keys
+#   DEPLOY_PATH     部署根目录（可选，默认 /home/ubuntu/travel）
+# 服务器安全组需放行 22 端口给 GitHub Actions runner（runner IP 段动态，
+#   若安全组收紧到固定 IP，需改用自托管 runner）。
+
+name: CD Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 部署原因（记入运行日志）
+        required: false
+        default: manual deploy
+
+concurrency:
+  group: cd-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy to Cloud VM
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Build service jars
+        run: >
+          mvn -B -pl gateway,user-service,attraction-service,route-service,collection-service
+          -am package -DskipTests
+
+      - name: Collect jars
+        run: |
+          mkdir -p staging
+          for mod in gateway user-service attraction-service route-service collection-service; do
+            cp backend/${mod}/target/${mod}-*.jar staging/ 2>/dev/null || \
+              { echo "::error::缺少 ${mod} 的 jar"; exit 1; }
+          done
+          ls -lh staging/
+
+      - name: Upload deploy script
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: 'deploy/deploy.sh'
+          target: /tmp/travel-cd/
+          strip_components: 1
+
+      - name: Upload jars
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: 'staging/*'
+          target: /tmp/travel-cd/release-${{ github.run_id }}/
+          strip_components: 1
+
+      - name: Run deployment with health check and rollback
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            chmod +x /tmp/travel-cd/deploy.sh
+            /tmp/travel-cd/deploy.sh \
+              "/tmp/travel-cd/release-${{ github.run_id }}" \
+              "${{ secrets.DEPLOY_PATH || '/home/ubuntu/travel' }}"
+            rm -rf /tmp/travel-cd/release-${{ github.run_id }}
+            echo "部署原因: ${{ github.event.inputs.reason }}"
