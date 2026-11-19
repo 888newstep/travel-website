@@ -134,3 +134,10 @@ file:
     max-file-size-bytes: ${FILE_STORAGE_MAX_FILE_SIZE_BYTES:10485760}
     max-batch-files: ${FILE_STORAGE_MAX_BATCH_FILES:10}
     max-filename-length: ${FILE_STORAGE_MAX_FILENAME_LENGTH:255}
+
+# Prometheus 指标仅内部网络可达（安全组不发布宿主端口）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

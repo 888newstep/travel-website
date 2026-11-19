@@ -117,3 +117,10 @@ logging:
     travel: debug
     org.springframework.web: debug
     travel.exception: debug
+
+# Prometheus 指标仅内部网络可达（安全组不发布宿主端口）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

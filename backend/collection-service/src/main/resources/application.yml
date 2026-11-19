@@ -111,3 +111,10 @@ seata:
 logging:
   pattern:
     level: "%5p [${spring.application.name:-app},%X{traceId:-NA}]"
+
+# Prometheus 指标仅内部网络可达（安全组不发布宿主端口）
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

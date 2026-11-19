@@ -62,6 +62,12 @@ public class WebSecurityConfig {
                         // 健康检查
                         authorize.requestMatchers("/health", "/version", "/actuator/health", "/actuator/health/**").permitAll();
 
+                        // Prometheus 抓取：业务服务端口仅存在内部网络（compose 不发布宿主端口），
+                        // 仅允许容器网段/回环访问，公网请求无法直达该端点。
+                        authorize.requestMatchers(HttpMethod.GET, "/actuator/prometheus")
+                                .access(new WebExpressionAuthorizationManager(
+                                        "hasIpAddress('127.0.0.1') or hasIpAddress('172.16.0.0/12')"));
+
                         if (performanceMetricsEndpointsEnabled) {
                             // 性能脚本只从本机回环地址读取指标，生产默认不开启该分支。
                             authorize.requestMatchers(HttpMethod.GET, "/actuator/**", "/druid/*.json")

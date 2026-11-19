@@ -1,0 +1,17 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # 业务服务 metrics 端点仅存在于 travel-network 内部网络（compose 不发布宿主端口）
+  - job_name: "travel-services"
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets:
+          - "user-service:8091"
+          - "attraction-service:8092"
+          - "route-service:8093"
+          - "collection-service:8094"
+          - "file-service:8095"
+        labels:
+          project: travel
