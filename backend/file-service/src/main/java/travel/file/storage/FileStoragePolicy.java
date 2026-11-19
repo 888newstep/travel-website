@@ -22,10 +22,17 @@ import java.util.UUID;
 @Component
 public class FileStoragePolicy {
 
-    /** 禁止上传的脚本/可执行扩展名。 */
+    /** 禁止上传的脚本/可执行扩展名（第一层，防扩展名绕过）。 */
     private static final Set<String> BLOCKED_EXTENSIONS = Set.of(
             "exe", "bat", "cmd", "sh", "ps1", "vbs", "js", "jar", "msi",
-            "scr", "com", "dll", "php", "jsp", "asp", "aspx", "wsf");
+            "scr", "com", "dll", "php", "jsp", "asp", "aspx", "wsf",
+            "html", "htm", "svg", "xml");
+
+    /**
+     * 业务白名单（第二层，默认拒绝未知类型）：与 FileTypeSniffer 的魔数表同源，
+     * 保证"声明类型"一定有对应的魔数校验。
+     */
+    static final Set<String> ALLOWED_EXTENSIONS = FileTypeSniffer.KNOWN_EXTENSIONS;
 
     private final Path rootDir;
     private final String publicPath;
@@ -67,6 +74,7 @@ public class FileStoragePolicy {
      */
     public StoredFile store(MultipartFile file) {
         validate(file);
+        verifyMagicBytes(file);
         String originalFilename = sanitizeOriginal(file.getOriginalFilename());
         String storedFilename = uniqueStoredFilename(originalFilename);
         Path target = resolveStoredPath(storedFilename);
@@ -91,11 +99,30 @@ public class FileStoragePolicy {
             throw new IllegalArgumentException("文件超出大小上限: " + maxFileSizeBytes + " 字节");
         }
         String name = file.getOriginalFilename();
-        if (name != null) {
-            String ext = resolveExtension(name);
-            if (BLOCKED_EXTENSIONS.contains(ext)) {
-                throw new IllegalArgumentException("不允许的文件类型: ." + ext);
-            }
+        String ext = name == null ? "" : resolveExtension(name);
+        if (BLOCKED_EXTENSIONS.contains(ext)) {
+            throw new IllegalArgumentException("不允许的文件类型: ." + ext);
+        }
+        if (!ALLOWED_EXTENSIONS.contains(ext)) {
+            throw new IllegalArgumentException("不支持的文件类型: ." + ext);
+        }
+    }
+
+    /**
+     * 魔数校验（第三层）：读取文件头与声明扩展名比对；
+     * 防御双扩展名（evil.php.jpg）、MIME 欺骗与伪装扩展名的可执行内容。
+     */
+    private void verifyMagicBytes(MultipartFile file) {
+        byte[] head = new byte[16];
+        int headLen;
+        try (var in = file.getInputStream()) {
+            headLen = in.readNBytes(head, 0, head.length);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("文件内容读取失败");
+        }
+        String ext = resolveExtension(file.getOriginalFilename());
+        if (!FileTypeSniffer.matches(head, headLen, ext)) {
+            throw new IllegalArgumentException("文件内容与声明类型不一致: ." + ext);
         }
     }
 
