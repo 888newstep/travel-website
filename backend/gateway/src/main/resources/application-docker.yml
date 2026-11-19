@@ -1,5 +1,12 @@
 spring:
   cloud:
+    discovery:
+      client:
+        simple:
+          instances:
+            collection-service:
+              - uri: http://collection-service:8094/api
+              - uri: http://collection-service-2:8096/api
     gateway:
       discovery:
         locator:
@@ -24,7 +31,7 @@ spring:
           filters:
             - StripPrefix=1
         - id: collection-service
-          uri: http://collection-service:8094/api
+          uri: lb://collection-service
           predicates:
             - Path=/api/v1/route-collections/**, /api/route-comments/**, /api/travel-notes/**, /api/feedback/**, /api/v1/notifications/**, /api/v1/user/stats/**, /api/route-share/**
           filters:
