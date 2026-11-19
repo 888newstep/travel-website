@@ -1,7 +1,10 @@
 server:
+  shutdown: graceful
   port: 8090
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   cloud:
     gateway:
       discovery:

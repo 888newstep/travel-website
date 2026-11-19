@@ -1,4 +1,5 @@
 server:
+  shutdown: graceful
   port: 8091
 
 mq:
@@ -11,6 +12,8 @@ travel:
       demo-mode: ${CAPTCHA_DEMO_MODE:false}
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   profiles:
     active: dev
   datasource:

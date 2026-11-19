@@ -1,4 +1,5 @@
 server:
+  shutdown: graceful
   port: 8095
 
 mq:
@@ -6,6 +7,8 @@ mq:
     enabled: ${MQ_STATUS_PERSISTENCE_ENABLED:false}
 
 spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   servlet:
     multipart:
       max-file-size: ${FILE_STORAGE_MAX_FILE_SIZE:10MB}
