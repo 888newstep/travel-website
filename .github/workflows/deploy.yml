@@ -41,6 +41,7 @@ jobs:
       # actions/setup-java 需从 adoptium 下载 JDK，国内服务器不可达，故不使用。
 
       - name: Build service jars
+        working-directory: backend
         run: >
           mvn -B -pl gateway,user-service,attraction-service,route-service,collection-service
           -am package -DskipTests
