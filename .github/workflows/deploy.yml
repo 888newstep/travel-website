@@ -37,12 +37,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
+      # 服务器自带 JDK 21 + Maven 3.6.3（release=17 目标兼容），
+      # actions/setup-java 需从 adoptium 下载 JDK，国内服务器不可达，故不使用。
 
       - name: Build service jars
         run: >
