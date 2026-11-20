@@ -301,6 +301,29 @@ travel/
 - **数据可信度**：没有数据源时为何返回不可用，而不是生成漂亮但不可验证的数据。
 - **工程验证**：单元测试、真实服务集成、JMeter 指标和数据库最终状态如何形成证据链。
 
+## 演进路线（P2 取舍）
+
+以下项为已评估、当前阶段刻意不实施的演进方向，记录取舍依据：
+
+### 按服务分库（当前：五服务共库 23 表）
+- 结论：真分库改造（A/B 表归属、跨库查询改写、分布式事务）成本高，业务量不需要，仅保留方案文档。
+- 过渡路径：schema 级分离（每服务独立 schema、独立账号授权）→ 按服务归属拆表：user 库（users/user_auth）、attraction 库（attractions/attraction_cache）、route 库（routes/route_shares/ai_conversations）、collection 库（collections/notes/notifications）；跨服务查询走 API 而非 JOIN；全局唯一 ID 已有负 id 换位与状态机基础。
+- 触发条件：单表数据量进入千万级或写入 QPS 成为瓶颈时再实施。
+
+### SkyWalking 全链路追踪（当前：MDC traceId 日志串联）
+- 结论：2C8G 单机上 SkyWalking agent + OAP 常驻开销约 10-15% 内存，演示项目不装。
+- 现有替代：Gateway TraceIdGlobalFilter + 服务端 TraceIdFilter + MQ 消息头携带，一个 traceId 从网关串到 MQ 消费端；配合 Prometheus/Grafana 已覆盖 QPS/P95/JVM/GC/5xx。
+- 触发条件：服务数或流量上量、日志串联排查不够用时再引入 APM（可选 OTel 生态而非绑定 SkyWalking）。
+
+### JWT 轮换（kid + 多密钥池）
+- 结论：单实例演示场景收益低，当前为固定 JWT_SECRET（≥32 字节强校验）。
+- 方案：密钥池 + kid 声明，签发用最新密钥、验证按 kid 匹配历史密钥，重叠窗口期平滑轮换；Gateway 与 common 共享同一 Key 工厂（契约测试已固化）。
+- 触发条件：多实例长期运行、需要密钥泄露应急能力时实施。
+
+### 其余明确不做
+- Seata：无 @GlobalTransactional 场景，启用是空转；保持"预留 + 最终一致性"设计。
+- K8s / 微前端 / SSR：成本与当前阶段不匹配。
+
 ## License
 
 [Apache License 2.0](LICENSE)
