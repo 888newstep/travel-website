@@ -17,7 +17,7 @@ STAGING_DIR="${1:?用法: deploy.sh <新jar所在目录> [部署根目录]}"
 DEPLOY_ROOT="${2:-/home/ubuntu/travel}"
 TARGET="travel-stack.target"
 GATEWAY_HEALTH="http://127.0.0.1:8090/actuator/health"
-HEALTH_TIMEOUT_SEC=180
+HEALTH_TIMEOUT_SEC=300
 
 # 模块名（Maven artifactId）→ 服务器 jar 短名
 declare -A SERVER_JAR=(
