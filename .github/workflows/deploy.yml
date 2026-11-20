@@ -1,22 +1,17 @@
 # ============================================
-# travel — CD 手动部署（GitHub Actions → 腾讯云）
+# travel — CD 手动部署（GitHub Actions self-hosted runner → 腾讯云）
 # ============================================
 # 设计决策：
-#   1. 只用 workflow_dispatch 手动触发，不做 push 自动部署——
-#      travel-stack 与 newagent/novel-agent 有 systemd Conflicts 互斥，
-#      自动重启 travel 会强停正在运行的其他项目（可能打断面试演示）。
-#   2. 对准云端真实形态：裸 jar + systemd（travel-stack.target，5 服务），
-#      不走镜像仓库（2C8G 单机、演示项目，服务器上直接覆盖 jar）。
-#   3. 失败自动回滚（deploy.sh 内置备份与回滚逻辑）。
+#   1. 只用 workflow_dispatch 手动触发——travel-stack 与 newagent/novel-agent
+#      systemd 三方互斥，自动重启会强停正在运行的其他项目。
+#   2. self-hosted runner 安装在云服务器上：安全组只放行 Tailscale（公网 22 不通），
+#      托管 runner 无法 SSH 进来；self-hosted 在服务器本地直接执行部署，无需 SSH 与私钥。
+#      安全性成立前提：本 workflow 仅有 workflow_dispatch 触发（fork PR 无法执行）。
+#   3. 对准云端真实形态：裸 jar + systemd（travel-stack.target，5 服务）。
+#   4. 失败自动回滚（deploy.sh 内置备份与回滚逻辑）。
 #
-# 前置一次性配置（GitHub 仓库 Settings → Secrets and variables → Actions）：
-#   DEPLOY_HOST     服务器公网 IP，如 49.234.187.76
-#   DEPLOY_USER     SSH 用户，如 ubuntu
-#   DEPLOY_SSH_KEY  部署专用私钥（建议单独生成，非个人主 key），
-#                   公钥写入服务器 ~/.ssh/authorized_keys
-#   DEPLOY_PATH     部署根目录（可选，默认 /home/ubuntu/travel）
-# 服务器安全组需放行 22 端口给 GitHub Actions runner（runner IP 段动态，
-#   若安全组收紧到固定 IP，需改用自托管 runner）。
+# 前置：服务器已安装并注册 self-hosted runner（labels: deploy, self-hosted）。
+# 服务器需能访问 github.com（下载 actions runner 与 Maven 依赖；走服务器现有代理/直连均可）。
 
 name: CD Deploy
 
@@ -34,8 +29,8 @@ concurrency:
 
 jobs:
   deploy:
-    name: Build & Deploy to Cloud VM
-    runs-on: ubuntu-latest
+    name: Build & Deploy on Cloud VM
+    runs-on: [self-hosted, deploy]
     timeout-minutes: 30
 
     steps:
@@ -63,37 +58,12 @@ jobs:
           done
           ls -lh staging/
 
-      - name: Upload deploy script
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: 'deploy/deploy.sh'
-          target: /tmp/travel-cd/
-          strip_components: 1
+      - name: Deploy with health check and rollback
+        run: |
+          chmod +x deploy/deploy.sh
+          ./deploy/deploy.sh "$(pwd)/staging" "${DEPLOY_PATH:-/home/ubuntu/travel}"
+          echo "部署原因: ${{ github.event.inputs.reason }}"
 
-      - name: Upload jars
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          source: 'staging/*'
-          target: /tmp/travel-cd/release-${{ github.run_id }}/
-          strip_components: 1
-
-      - name: Run deployment with health check and rollback
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.DEPLOY_HOST }}
-          username: ${{ secrets.DEPLOY_USER }}
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
-            set -e
-            chmod +x /tmp/travel-cd/deploy.sh
-            /tmp/travel-cd/deploy.sh \
-              "/tmp/travel-cd/release-${{ github.run_id }}" \
-              "${{ secrets.DEPLOY_PATH || '/home/ubuntu/travel' }}"
-            rm -rf /tmp/travel-cd/release-${{ github.run_id }}
-            echo "部署原因: ${{ github.event.inputs.reason }}"
+      - name: Cleanup staging
+        if: always()
+        run: rm -rf staging
