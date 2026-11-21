@@ -2,9 +2,11 @@
 
 [English](README_EN.md) | 中文
 
-面向**秋招答辩、企业与学校技术交流**的全栈项目，重点展示 Spring Boot 微服务、JWT 鉴权、HTTP 幂等、并发一致性、高德真实交通、RabbitMQ 可靠通知和 JMeter 可复现压测。它不是已经商业化运营的旅游平台，因此文档会明确区分已验证能力、外部条件能力和未实现能力。
+面向**秋招答辩、企业与学校技术交流**的全栈项目，重点展示 Spring Boot 微服务、JWT 鉴权、HTTP 幂等、并发一致性、高德真实交通、RabbitMQ 可靠通知和 JMeter 可复现压测；企业级基建覆盖全链路 traceId、Prometheus/Grafana 监控、网关限流、优雅停机与 self-hosted runner 一键 CD。它不是已经商业化运营的旅游平台，因此文档会明确区分已验证能力、外部条件能力和未实现能力。
 
 [![CI/CD Pipeline](https://github.com/888newstep/travel-website/actions/workflows/ci.yml/badge.svg)](https://github.com/888newstep/travel-website/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/888newstep/travel-website/actions/workflows/codeql.yml/badge.svg)](https://github.com/888newstep/travel-website/actions/workflows/codeql.yml)
+[![CD Deploy](https://github.com/888newstep/travel-website/actions/workflows/deploy.yml/badge.svg)](https://github.com/888newstep/travel-website/actions/workflows/deploy.yml)
 [![JDK 17](https://img.shields.io/badge/JDK-17-blue.svg)](https://adoptium.net/)
 [![Spring Boot 3.3.5](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
 [![React 19](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
@@ -16,7 +18,7 @@
 
 | 项目 | 结果 |
 |------|------|
-| 后端全量测试 | 297 tests，0 failure，0 error，0 skipped |
+| 后端全量测试 | 320 tests，0 failure，0 error，0 skipped |
 | 路线收藏同键幂等 | 100 并发仅 1 次业务执行，99 个处理中 409，最终 1 条记录 |
 | 景点点评 UPSERT | 100 并发全部 HTTP 200，最终同一点评 ID、1 条记录 |
 | 路线评论点赞 | 100 用户并发，最终点赞数和行为记录数均为 100 |
