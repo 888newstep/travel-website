@@ -108,9 +108,18 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-    </dependencies>
+        <!-- 街道级路网试点（热点城市包 P2）：GraphHopper 9.1（Java 17 兼容；GH 10 需 JDK21）。
+             OSM 数据文件不进仓库，通过 travel.roadnet.osm-path 配置；缺省时本服务自动降级，走坐标近似 -->
+        <dependency>
+            <groupId>com.graphhopper</groupId>
+            <artifactId>graphhopper-core</artifactId>
+            <version>9.1</version>
+        </dependency>
 
-    <build>
+
+        </dependencies>
+
+<build>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
