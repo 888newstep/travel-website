@@ -13,6 +13,7 @@ import travel.common.entity.route_planning.RouteAttraction;
 import travel.common.entity.travel_recommendation.Attraction;
 import travel.common.utils.AMapRouteService;
 import travel.common.service.DistributedLockService;
+import travel.route.algorithm.GaPreset;
 import travel.route.algorithm.GeneticAlgorithmTSP;
 import travel.route.algorithm.RoutePlanAlgorithm;
 import travel.route.dto.optimization.ApplyOptimizationRequest;
@@ -239,7 +240,7 @@ class RouteOptimizationServiceImplTest {
 
         when(attractionService.getById(501)).thenReturn(first);
         when(attractionService.getById(502)).thenReturn(second);
-        when(geneticAlgorithmTSP.optimizeRoute(anyList(), eq("balanced")))
+        when(geneticAlgorithmTSP.optimizeRoute(anyList(), any(travel.route.algorithm.GaPreset.class)))
                 .thenReturn(List.of(first, second));
         when(aMapRouteService.calculateMultiPointRoute(anyList())).thenReturn(routeInfo);
 
@@ -259,7 +260,7 @@ class RouteOptimizationServiceImplTest {
         Attraction second = attraction(512, 121.0, 31.0, 10);
         when(attractionService.getById(511)).thenReturn(first);
         when(attractionService.getById(512)).thenReturn(second);
-        when(geneticAlgorithmTSP.optimizeRoute(anyList(), eq("fast")))
+        when(geneticAlgorithmTSP.optimizeRoute(anyList(), any(travel.route.algorithm.GaPreset.class)))
                 .thenReturn(List.of(first, second));
         when(aMapRouteService.calculateMultiPointRoute(anyList())).thenReturn(null);
 

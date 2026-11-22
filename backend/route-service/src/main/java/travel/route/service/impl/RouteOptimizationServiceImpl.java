@@ -10,6 +10,8 @@ import travel.common.entity.route_planning.RouteAttraction;
 import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
 import travel.common.service.DistributedLockService;
+import travel.route.algorithm.FitnessContext;
+import travel.route.algorithm.GaPreset;
 import travel.route.algorithm.GeneticAlgorithmTSP;
 import travel.route.algorithm.RouteDayCluster;
 import travel.route.algorithm.RoutePlanAlgorithm;
@@ -84,6 +86,8 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
             }
 
             Map<String, Double> weights = calculateWeights(preference);
+            // 偏好→修复参数（与 GA 参数正交）：带娃/慢节奏收紧相邻段上限（km）
+            double maxLegKm = preference.contains("亲子") || preference.contains("慢") ? 15.0 : 0;
             Map<Integer, List<Attraction>> dailyAttractions = distributeAttractionsToDays(attractions, maxDays);
 
             double totalDistance = 0.0;
@@ -94,7 +98,18 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                 int dayNumber = entry.getKey();
                 List<Attraction> dayAttractionList = entry.getValue();
 
-                List<Attraction> optimizedOrder = geneticAlgorithmTSP.optimizeRoute(dayAttractionList, preference);
+                // 选择层修复：预算按"兴趣/票价"性价比淘汰（诚实降级，记录被砍站点）
+                FitnessContext ctx = FitnessContext.of(dayAttractionList, weights,
+                        interestAttractionMap, budget, maxLegKm);
+                dayAttractionList = ctx.repairBudget();
+
+                List<Attraction> optimizedOrder = geneticAlgorithmTSP.optimizeRoute(
+                        dayAttractionList, GaPreset.forScale(dayAttractionList.size()));
+                // 排列层修复：相邻段距离上限（交换→修不动则淘汰并记录）
+                optimizedOrder = ctx.repairMaxLeg(optimizedOrder);
+                if (!ctx.getDroppedByRepair().isEmpty()) {
+                    log.warn("第{}天偏好修复降级: {}", dayNumber, ctx.getDroppedByRepair());
+                }
                 RoutePlanAlgorithm.RouteDayPlan dayPlan = createDayPlanWithRealData(dayNumber, optimizedOrder);
                 optimalRoute.getDayPlans().add(dayPlan);
 

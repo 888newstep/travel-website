@@ -32,15 +32,25 @@ public class GeneticAlgorithmTSP {
      * @return 优化后的景点顺序
      */
     public List<Attraction> optimizeRoute(List<Attraction> attractions, String optimizationType) {
+        // 兼容旧签名：按规模自动选档（暴力实验：小规模 FAST 质量无损）
+        return optimizeRoute(attractions, GaPreset.forScale(attractions.size()));
+    }
+
+    /**
+     * 预设档位驱动的优化入口。
+     * 参数与用户偏好正交：偏好/预算在 FitnessContext（选择层）处理，
+     * 本方法只负责"给定集合内的顺序优化"（距离度量）。
+     */
+    public List<Attraction> optimizeRoute(List<Attraction> attractions, GaPreset preset) {
         if (attractions.size() <= 2) {
             return attractions;
         }
-
-        log.info("开始遗传算法优化: 景点数={}, 优化类型={}", attractions.size(), optimizationType);
+        GaPreset p = preset == null ? GaPreset.STANDARD : preset;
+        log.info("开始遗传算法优化: 景点数={}, 档位={}", attractions.size(), p);
 
         // 1. 初始化种群：随机个体 + 贪心最近邻种子（加速收敛）
         Random random = new Random();
-        List<int[]> population = initializePopulation(attractions.size());
+        List<int[]> population = initializePopulation(attractions.size(), p);
         population.set(0, nearestNeighborSeed(attractions, random));
 
         // 2. 迭代进化（带早停：连续 EARLY_STOP_GENERATIONS 代无提升则收敛）
@@ -50,7 +60,7 @@ public class GeneticAlgorithmTSP {
 
         for (int generation = 0; generation < MAX_GENERATIONS; generation++) {
             // 计算适应度
-            Map<int[], Double> fitnessMap = calculateFitness(population, attractions, optimizationType);
+            Map<int[], Double> fitnessMap = calculateFitness(population, attractions);
 
             // 找到最优解
             double generationBest = bestFitness;
@@ -61,13 +71,13 @@ public class GeneticAlgorithmTSP {
                 }
             }
             generationsWithoutImprovement = bestFitness > generationBest ? 0 : generationsWithoutImprovement + 1;
-            if (generation >= MAX_GENERATIONS / 2 && generationsWithoutImprovement >= EARLY_STOP_GENERATIONS) {
+            if (generation >= p.generations / 2 && generationsWithoutImprovement >= p.earlyStopGenerations) {
                 log.info("遗传算法早停: 第{}代连续{}代无提升", generation + 1, generationsWithoutImprovement);
                 break;
             }
 
             // 选择、交叉、变异
-            population = evolve(population, fitnessMap, attractions.size(), random);
+            population = evolve(population, fitnessMap, attractions.size(), random, p);
 
             // 每50代输出一次日志
             if ((generation + 1) % 50 == 0) {
@@ -91,11 +101,11 @@ public class GeneticAlgorithmTSP {
     /**
      * 初始化种群
      */
-    private List<int[]> initializePopulation(int size) {
+    private List<int[]> initializePopulation(int size, GaPreset p) {
         List<int[]> population = new ArrayList<>();
         Random random = new Random();
 
-        for (int i = 0; i < POPULATION_SIZE; i++) {
+        for (int i = 0; i < p.population; i++) {
             int[] chromosome = IntStream.range(0, size).toArray();
             shuffleArray(chromosome, random);
             population.add(chromosome);
@@ -108,12 +118,11 @@ public class GeneticAlgorithmTSP {
      * 计算适应度
      */
     private Map<int[], Double> calculateFitness(List<int[]> population,
-                                                List<Attraction> attractions,
-                                                String optimizationType) {
+                                                List<Attraction> attractions) {
         Map<int[], Double> fitnessMap = new HashMap<>();
 
         for (int[] chromosome : population) {
-            double fitness = evaluateFitness(chromosome, attractions, optimizationType);
+            double fitness = evaluateFitness(chromosome, attractions);
             fitnessMap.put(chromosome, fitness);
         }
 
@@ -123,7 +132,7 @@ public class GeneticAlgorithmTSP {
     /**
      * 评估单个染色体的适应度
      */
-    private double evaluateFitness(int[] chromosome, List<Attraction> attractions, String optimizationType) {
+    private double evaluateFitness(int[] chromosome, List<Attraction> attractions) {
         double totalDistance = 0.0;
         for (int index = 0; index < chromosome.length - 1; index++) {
             Attraction current = attractions.get(chromosome[index]);
@@ -158,7 +167,8 @@ public class GeneticAlgorithmTSP {
     /**
      * 进化：选择、交叉、变异
      */
-    private List<int[]> evolve(List<int[]> population, Map<int[], Double> fitnessMap, int chromosomeLength, Random random) {
+    private List<int[]> evolve(List<int[]> population, Map<int[], Double> fitnessMap,
+                               int chromosomeLength, Random random, GaPreset p) {
         List<int[]> newPopulation = new ArrayList<>();
 
         // 1. 精英保留
@@ -166,24 +176,24 @@ public class GeneticAlgorithmTSP {
                 .sorted(Map.Entry.<int[], Double>comparingByValue().reversed())
                 .collect(Collectors.toList());
 
-        for (int i = 0; i < ELITISM_COUNT && i < sortedByFitness.size(); i++) {
+        for (int i = 0; i < p.elitismCount && i < sortedByFitness.size(); i++) {
             newPopulation.add(sortedByFitness.get(i).getKey().clone());
         }
 
         // 2. 选择、交叉、变异生成新个体
-        while (newPopulation.size() < POPULATION_SIZE) {
+        while (newPopulation.size() < p.population) {
             int[] parent1 = tournamentSelection(population, fitnessMap, random);
             int[] parent2 = tournamentSelection(population, fitnessMap, random);
 
             int[] child;
-            if (random.nextDouble() < CROSSOVER_RATE) {
+            if (random.nextDouble() < p.crossoverRate) {
                 child = orderedCrossover(parent1, parent2, chromosomeLength);
             } else {
                 child = parent1.clone();
             }
 
             // 变异
-            if (random.nextDouble() < MUTATION_RATE) {
+            if (random.nextDouble() < p.mutationRate) {
                 mutate(child, random);
             }
 
