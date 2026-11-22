@@ -13,4 +13,5 @@ jobs:
         run: |
           git clone --bare "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" repo.git
           cd repo.git
-          git push --force "https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/travel-regulations/site-project.git" "refs/remotes/origin/*:refs/heads/*"
+          # bare clone 中远端分支在 refs/heads/*（旧 refspec refs/remotes/origin/* 匹配不到任何 ref，导致 push 空跑假成功）
+          git push --force "https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/travel-regulations/site-project.git" "refs/heads/master:refs/heads/master"
