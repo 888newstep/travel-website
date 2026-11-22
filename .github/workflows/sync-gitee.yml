@@ -1,0 +1,16 @@
+name: Sync to Gitee
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mirror push to Gitee
+        run: |
+          git clone --bare "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" repo.git
+          cd repo.git
+          git push --force "https://oauth2:${{ secrets.GITEE_TOKEN }}@gitee.com/travel-regulations/site-project.git" "refs/remotes/origin/*:refs/heads/*"
