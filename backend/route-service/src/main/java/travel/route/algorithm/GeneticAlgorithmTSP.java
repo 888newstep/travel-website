@@ -18,9 +18,9 @@ public class GeneticAlgorithmTSP {
 
     private static final Logger log = LoggerFactory.getLogger(GeneticAlgorithmTSP.class);
 
-    private static final int POPULATION_SIZE = 100;    // 种群大小
+    private static final int POPULATION_SIZE = 150;    // 种群大小（网格寻优 150/0.8/0.05 最优）
     private static final int MAX_GENERATIONS = 200;    // 最大迭代次数
-    private static final double MUTATION_RATE = 0.02;  // 变异率
+    private static final double MUTATION_RATE = 0.05;  // 变异率（网格寻优最优）
     private static final double CROSSOVER_RATE = 0.8;  // 交叉率
     private static final int ELITISM_COUNT = 5;        // 精英保留数量
     private static final int EARLY_STOP_GENERATIONS = 30;   // 连续无提升代数阈值（早停）
