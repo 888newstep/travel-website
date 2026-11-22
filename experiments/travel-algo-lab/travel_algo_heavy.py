@@ -31,7 +31,7 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results.csv")
-FIELDS = ["stage", "n", "algo", "pop", "gen", "cx", "mut", "elite",
+FIELDS = ["stage", "n", "algo", "cfg_id", "pop", "gen", "cx", "mut", "elite",
           "nn_seed", "early_stop", "two_opt", "k_nn", "or_opt",
           "cluster_size", "seed", "dist", "gens", "evals", "sec", "improve_vs_nn_pct"]
 
