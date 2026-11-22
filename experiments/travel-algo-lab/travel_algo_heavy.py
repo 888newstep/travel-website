@@ -31,7 +31,7 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 RESULTS = os.path.join(HERE, "results.csv")
-FIELDS = ["stage", "n", "algo", "cfg_id", "pop", "gen", "cx", "mut", "elite",
+FIELDS = ["stage", "n", "algo", "cfg_id", "deadline_hit", "pop", "gen", "cx", "mut", "elite",
           "nn_seed", "early_stop", "two_opt", "k_nn", "or_opt",
           "cluster_size", "seed", "dist", "gens", "evals", "sec", "improve_vs_nn_pct"]
 
@@ -92,7 +92,7 @@ def solve_nn(dist):
     return tour
 
 
-def two_opt_nn(tour, dist, nn, deadline=None, max_pass=50):
+def two_opt_nn(tour, dist, nn, deadline=None, max_pass=50, hit=None):
     """邻接候选表 2-opt（first-improvement）。开放路径：j+1 必须有效。"""
     n = len(tour)
     pos = [0] * n
@@ -112,11 +112,13 @@ def two_opt_nn(tour, dist, nn, deadline=None, max_pass=50):
                     for j in range(i + 1, p_c + 1): pos[tour[j]] = j
                     improved = True
                     dab = dist[a][tour[i + 1]]
-            if deadline and time.time() > deadline: return tour
+            if deadline and time.time() > deadline:
+                if hit is not None: hit[0] = True
+                return tour
     return tour
 
 
-def or_opt_nn(tour, dist, nn, deadline=None):
+def or_opt_nn(tour, dist, nn, deadline=None, hit=None):
     """段迁移 or-opt（段长 1-3）：把段拔出重插到更优位置（开放路径语义）"""
     n = len(tour)
     pos = [0] * n
@@ -162,7 +164,7 @@ def or_opt_nn(tour, dist, nn, deadline=None):
 
 
 def ga_solve(dist, pop, gen, cx, mut, elite, nn_seed, early_stop, seed,
-             deadline=None, k_nn=10):
+             deadline=None, k_nn=10, hit=None):
     """GA 主干（与 Java 版语义一致）：NN 种子 + 锦标赛 + OX + 交换变异 + 精英 + 早停；收尾 2-opt(邻接表)"""
     n = len(dist); rng = random.Random(seed)
     evals = 0
@@ -182,7 +184,9 @@ def ga_solve(dist, pop, gen, cx, mut, elite, nn_seed, early_stop, seed,
     best, best_f, stag, pre = None, -1.0, 0, -1.0
     g = 0
     for g in range(gen):
-        if deadline and time.time() > deadline: break
+        if deadline and time.time() > deadline:
+            if hit is not None: hit[0] = True
+            break
         fits = [1 / (1 + tl(t)) for t in population]
         gb = max(fits)
         for t, f in zip(population, fits):
@@ -214,7 +218,7 @@ def ga_solve(dist, pop, gen, cx, mut, elite, nn_seed, early_stop, seed,
     if best is None: best = population[0]
     # 收尾局部搜索
     nn = knn_list(dist.copy(), k_nn)
-    best = two_opt_nn(best, dist, nn, deadline)
+    best = two_opt_nn(best, dist, nn, deadline, hit=hit)
     return best, tl(best), g + 1, evals
 
 
@@ -274,16 +278,17 @@ def run_job(job):
     deadline = time.time() + job.get("time_limit", 600) if job.get("time_limit") else None
     algo = job["algo"]
     gens = evals = 0
+    hit = [False]
     if algo == "nn2opt":
-        tour = two_opt_nn(nn_tour[:], dist, nn, deadline)
+        tour = two_opt_nn(nn_tour[:], dist, nn, deadline, hit=hit)
         if job.get("or_opt"):
-            tour = or_opt_nn(tour, dist, nn, deadline)
-            tour = two_opt_nn(tour, dist, nn, deadline)
+            tour = or_opt_nn(tour, dist, nn, deadline, hit=hit)
+            tour = two_opt_nn(tour, dist, nn, deadline, hit=hit)
     elif algo == "ga":
         tour, _, gens, evals = ga_solve(
             dist, job["pop"], job["gen"], job["cx"], job["mut"], job["elite"],
-            job["nn_seed"], job["early_stop"], seed * 1000 + job["cfg_id"], deadline, nn_k)
-        tour = two_opt_nn(tour, dist, nn, deadline) if job.get("two_opt", True) else tour
+            job["nn_seed"], job["early_stop"], seed * 1000 + job["cfg_id"], deadline, nn_k, hit=hit)
+        tour = two_opt_nn(tour, dist, nn, deadline, hit=hit) if job.get("two_opt", True) else tour
     elif algo == "hier":
         tour = solve_hier(pts, dist, job, seed, deadline, job.get("cluster_size", 80))
     else:
@@ -292,6 +297,7 @@ def run_job(job):
     row = {k: job.get(k) for k in FIELDS}
     row.update({"dist": round(d, 2), "gens": gens, "evals": evals,
                 "sec": round(time.time() - t0, 3),
+                "deadline_hit": int(hit[0]),
                 "improve_vs_nn_pct": round((nn_d - d) / nn_d * 100, 2)})
     return row
 
@@ -360,12 +366,55 @@ def build_jobs(stage, budget_deadline):
                              "seed": seed, "data_cfg": dc(n), "pop": 150, "gen": 200,
                              "cx": 0.8, "mut": 0.05, "elite": 7, "cluster_size": 80,
                              "k_nn": 10, "time_limit": 900})
+    if stage in ("brute", "all"):
+        # 满血参数网格（原 1152 组合）× 3 种子
+        cfg_id = 2000
+        for pop, gen, cx, mut, nn_s, to in product(
+                [50, 100, 150, 300], [100, 200, 400], [0.6, 0.8, 0.95],
+                [0.01, 0.02, 0.05, 0.10], [True, False], [True, False]):
+            for seed in range(3):
+                cfg_id += 1
+                jobs.append({"stage": "brute_screen", "n": 50, "algo": "ga", "cfg_id": cfg_id,
+                             "seed": seed, "data_cfg": dc(50), "pop": pop, "gen": gen,
+                             "cx": cx, "mut": mut, "elite": max(2, pop // 20),
+                             "nn_seed": nn_s, "early_stop": 30, "two_opt": to,
+                             "k_nn": 10, "time_limit": 300})
+        # Top 网格配置 × 5 规模 × 30 种子（高置信分布）
+        cfg_id = 5000
+        for pop, gen, cx, mut in [(150, 200, 0.8, 0.05), (150, 400, 0.6, 0.02), (300, 200, 0.8, 0.05)]:
+            for n in (25, 50, 100, 200, 400):
+                for seed in range(30):
+                    cfg_id += 1
+                    jobs.append({"stage": "brute_refine", "n": n, "algo": "ga", "cfg_id": cfg_id,
+                                 "seed": seed, "data_cfg": dc(n), "pop": pop, "gen": gen,
+                                 "cx": cx, "mut": mut, "elite": max(2, pop // 20),
+                                 "nn_seed": True, "early_stop": 30, "two_opt": True,
+                                 "k_nn": 10, "time_limit": 1800})
+        # 超大规模：n 到 12800，全部长时限、不许截断（deadline_hit 应为 0）
+        cfg_id = 9000
+        for n in (1600, 3200, 6400, 12800):
+            for seed in range(5):
+                cfg_id += 1
+                jobs.append({"stage": "brute_scale", "n": n, "algo": "nn2opt", "cfg_id": cfg_id,
+                             "seed": seed, "data_cfg": dc(n), "k_nn": 10,
+                             "or_opt": False, "time_limit": 3600})
+                jobs.append({"stage": "brute_scale", "n": n, "algo": "hier", "cfg_id": cfg_id + 10000,
+                             "seed": seed, "data_cfg": dc(n), "pop": 150, "gen": 200,
+                             "cx": 0.8, "mut": 0.05, "elite": 7, "cluster_size": 80,
+                             "k_nn": 10, "time_limit": 3600})
+            for seed in range(3):
+                cfg_id += 1
+                jobs.append({"stage": "brute_scale", "n": n, "algo": "ga", "cfg_id": cfg_id + 20000,
+                             "seed": seed, "data_cfg": dc(n), "pop": 150, "gen": 200,
+                             "cx": 0.8, "mut": 0.05, "elite": 7, "nn_seed": True,
+                             "early_stop": 30, "two_opt": True, "k_nn": 10,
+                             "time_limit": 3600})
     return jobs
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--stage", default="all", choices=["screen", "refine", "scale", "all"])
+    ap.add_argument("--stage", default="all", choices=["screen", "refine", "scale", "brute", "all"])
     ap.add_argument("--budget", type=float, default=7.0, help="小时")
     ap.add_argument("--workers", type=int, default=0, help="0=自动(cpu数)")
     args = ap.parse_args()
