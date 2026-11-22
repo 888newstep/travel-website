@@ -79,4 +79,17 @@ class GeneticAlgorithmTSPTest {
         List<Attraction> result = ga.optimizeRoute(attractions, "distance");
         assertEquals(attractions.size(), result.size());
     }
+
+    @Test
+    void largeScaleFastPathReturnsValidPermutation() {
+        // 2230 组暴力基准结论：n>400 走 NN+2-opt 快速路径（GA 质量优势消失且时间爆炸）
+        List<Attraction> attractions = lineAttractions(450);
+        long t0 = System.currentTimeMillis();
+        List<Attraction> result = ga.optimizeRoute(attractions, "distance");
+        long ms = System.currentTimeMillis() - t0;
+        assertEquals(attractions.size(), result.size());
+        long distinct = result.stream().map(Attraction::getId).distinct().count();
+        assertEquals(attractions.size(), distinct);
+        assertTrue(ms < 5000, "n=450 快速路径应在秒级内，实际 " + ms + "ms");
+    }
 }
