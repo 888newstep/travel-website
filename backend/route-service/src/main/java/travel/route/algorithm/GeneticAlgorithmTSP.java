@@ -23,6 +23,7 @@ public class GeneticAlgorithmTSP {
     private static final double MUTATION_RATE = 0.02;  // 变异率
     private static final double CROSSOVER_RATE = 0.8;  // 交叉率
     private static final int ELITISM_COUNT = 5;        // 精英保留数量
+    private static final int EARLY_STOP_GENERATIONS = 30;   // 连续无提升代数阈值（早停）
 
     /**
      * 使用遗传算法优化景点顺序
@@ -37,27 +38,36 @@ public class GeneticAlgorithmTSP {
 
         log.info("开始遗传算法优化: 景点数={}, 优化类型={}", attractions.size(), optimizationType);
 
-        // 1. 初始化种群
+        // 1. 初始化种群：随机个体 + 贪心最近邻种子（加速收敛）
+        Random random = new Random();
         List<int[]> population = initializePopulation(attractions.size());
+        population.set(0, nearestNeighborSeed(attractions, random));
 
-        // 2. 迭代进化
+        // 2. 迭代进化（带早停：连续 EARLY_STOP_GENERATIONS 代无提升则收敛）
         int[] bestSolution = null;
-        double bestFitness = Double.MIN_VALUE;
+        double bestFitness = -Double.MAX_VALUE;
+        int generationsWithoutImprovement = 0;
 
         for (int generation = 0; generation < MAX_GENERATIONS; generation++) {
             // 计算适应度
             Map<int[], Double> fitnessMap = calculateFitness(population, attractions, optimizationType);
 
             // 找到最优解
+            double generationBest = bestFitness;
             for (Map.Entry<int[], Double> entry : fitnessMap.entrySet()) {
                 if (entry.getValue() > bestFitness) {
                     bestFitness = entry.getValue();
                     bestSolution = entry.getKey().clone();
                 }
             }
+            generationsWithoutImprovement = bestFitness > generationBest ? 0 : generationsWithoutImprovement + 1;
+            if (generation >= MAX_GENERATIONS / 2 && generationsWithoutImprovement >= EARLY_STOP_GENERATIONS) {
+                log.info("遗传算法早停: 第{}代连续{}代无提升", generation + 1, generationsWithoutImprovement);
+                break;
+            }
 
             // 选择、交叉、变异
-            population = evolve(population, fitnessMap, attractions.size());
+            population = evolve(population, fitnessMap, attractions.size(), random);
 
             // 每50代输出一次日志
             if ((generation + 1) % 50 == 0) {
@@ -65,7 +75,10 @@ public class GeneticAlgorithmTSP {
             }
         }
 
-        // 3. 将最优解转换为景点列表
+        // 3. 2-opt 局部搜索消除交叉路径，再转换为景点列表
+        if (bestSolution != null) {
+            twoOpt(bestSolution, attractions);
+        }
         List<Attraction> optimizedOrder = new ArrayList<>();
         for (int index : bestSolution) {
             optimizedOrder.add(attractions.get(index));
@@ -145,9 +158,8 @@ public class GeneticAlgorithmTSP {
     /**
      * 进化：选择、交叉、变异
      */
-    private List<int[]> evolve(List<int[]> population, Map<int[], Double> fitnessMap, int chromosomeLength) {
+    private List<int[]> evolve(List<int[]> population, Map<int[], Double> fitnessMap, int chromosomeLength, Random random) {
         List<int[]> newPopulation = new ArrayList<>();
-        Random random = new Random();
 
         // 1. 精英保留
         List<Map.Entry<int[], Double>> sortedByFitness = fitnessMap.entrySet().stream()
@@ -187,7 +199,7 @@ public class GeneticAlgorithmTSP {
     private int[] tournamentSelection(List<int[]> population, Map<int[], Double> fitnessMap, Random random) {
         int tournamentSize = 5;
         int[] best = null;
-        double bestFitness = Double.MIN_VALUE;
+        double bestFitness = -Double.MAX_VALUE;
 
         for (int i = 0; i < tournamentSize; i++) {
             int index = random.nextInt(population.size());
@@ -250,6 +262,89 @@ public class GeneticAlgorithmTSP {
         int temp = chromosome[index1];
         chromosome[index1] = chromosome[index2];
         chromosome[index2] = temp;
+    }
+
+    /**
+     * 贪心最近邻种子解：从随机起点出发，每步去最近的未访问景点。
+     * 作为种群第 0 号个体，为进化提供一个 O(n^2) 的良好起点。
+     */
+    private int[] nearestNeighborSeed(List<Attraction> attractions, Random random) {
+        int n = attractions.size();
+        int[] tour = new int[n];
+        boolean[] visited = new boolean[n];
+        int current = random.nextInt(n);
+        tour[0] = current;
+        visited[current] = true;
+        for (int i = 1; i < n; i++) {
+            int next = -1;
+            double best = Double.MAX_VALUE;
+            for (int j = 0; j < n; j++) {
+                if (visited[j]) {
+                    continue;
+                }
+                double d = safeDistance(attractions.get(current), attractions.get(j));
+                if (d < best) {
+                    best = d;
+                    next = j;
+                }
+            }
+            if (next < 0) {
+                // 全部距离不可用时（坐标缺失）退化为顺序填充，保证排列合法
+                for (int j = 0; j < n; j++) {
+                    if (!visited[j]) {
+                        next = j;
+                        break;
+                    }
+                }
+            }
+            tour[i] = next;
+            visited[next] = true;
+            current = next;
+        }
+        return tour;
+    }
+
+    private double safeDistance(Attraction a, Attraction b) {
+        if (a.getLatitude() == null || a.getLongitude() == null
+                || b.getLatitude() == null || b.getLongitude() == null) {
+            return Double.MAX_VALUE;
+        }
+        return haversineDistance(a.getLongitude().doubleValue(), a.getLatitude().doubleValue(),
+                b.getLongitude().doubleValue(), b.getLatitude().doubleValue());
+    }
+
+    /**
+     * 2-opt 局部搜索：反复反转产生交叉的路径段，直到无改进（first-improvement）。
+     * 对 GA 输出做收尾优化，消除"路线交叉"的次优段。
+     */
+    void twoOpt(int[] tour, List<Attraction> attractions) {
+        int n = tour.length;
+        boolean improved = true;
+        while (improved) {
+            improved = false;
+            for (int i = 0; i < n - 1; i++) {
+                for (int j = i + 2; j < n; j++) {
+                    double before = safeDistance(attractions.get(tour[i]), attractions.get(tour[i + 1]))
+                            + safeDistance(attractions.get(tour[j]), attractions.get(tour[(j + 1) % n]));
+                    double after = safeDistance(attractions.get(tour[i]), attractions.get(tour[j]))
+                            + safeDistance(attractions.get(tour[i + 1]), attractions.get(tour[(j + 1) % n]));
+                    if (after < before - 1e-9) {
+                        reverse(tour, i + 1, j);
+                        improved = true;
+                    }
+                }
+            }
+        }
+    }
+
+    private void reverse(int[] tour, int from, int to) {
+        while (from < to) {
+            int tmp = tour[from];
+            tour[from] = tour[to];
+            tour[to] = tmp;
+            from++;
+            to--;
+        }
     }
 
     /**

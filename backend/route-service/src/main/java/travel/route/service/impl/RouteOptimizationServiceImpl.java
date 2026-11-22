@@ -11,6 +11,7 @@ import travel.common.enums.ErrorCodeEnum;
 import travel.common.exception.BusinessException;
 import travel.common.service.DistributedLockService;
 import travel.route.algorithm.GeneticAlgorithmTSP;
+import travel.route.algorithm.RouteDayCluster;
 import travel.route.algorithm.RoutePlanAlgorithm;
 import travel.route.dto.optimization.ApplyOptimizationRequest;
 import travel.route.dto.optimization.OptimizationHistoryItem;
@@ -176,18 +177,12 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     }
 
     private Map<Integer, List<Attraction>> distributeAttractionsToDays(List<Attraction> attractions, int maxDays) {
+        // 地理 K-means 均衡聚类分天：同天景点地理相邻，消除跨城折返（固定种子保证可复现）
         Map<Integer, List<Attraction>> dailyAttractions = new HashMap<>();
-        int attractionsPerDay = (int) Math.ceil((double) attractions.size() / maxDays);
-
-        for (int day = 1; day <= maxDays; day++) {
-            int startIndex = (day - 1) * attractionsPerDay;
-            int endIndex = Math.min(startIndex + attractionsPerDay, attractions.size());
-
-            if (startIndex < attractions.size()) {
-                dailyAttractions.put(day, attractions.subList(startIndex, endIndex));
-            }
+        List<List<Attraction>> clusters = RouteDayCluster.clusterByDay(attractions, maxDays, 42L);
+        for (int i = 0; i < clusters.size(); i++) {
+            dailyAttractions.put(i + 1, clusters.get(i));
         }
-
         return dailyAttractions;
     }
 
