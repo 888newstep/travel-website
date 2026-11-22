@@ -114,6 +114,14 @@
             <groupId>com.graphhopper</groupId>
             <artifactId>graphhopper-core</artifactId>
             <version>9.1</version>
+            <exclusions>
+                <!-- GH 传递引入 jackson-dataformat-xml 会改变 MockMvc standalone 消息转换器集合，
+                     导致控制器 JSON 断言全线崩（2640 基准同日坑）；路由功能不需要 XML -->
+                <exclusion>
+                    <groupId>com.fasterxml.jackson.dataformat</groupId>
+                    <artifactId>jackson-dataformat-xml</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
 
