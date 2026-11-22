@@ -15,6 +15,8 @@ import travel.route.algorithm.GaPreset;
 import travel.route.algorithm.GeneticAlgorithmTSP;
 import travel.route.algorithm.RouteDayCluster;
 import travel.route.algorithm.RoutePlanAlgorithm;
+import travel.route.service.support.PreferenceProfile;
+import travel.route.service.support.RouteScheduleValidator;
 import travel.route.dto.optimization.ApplyOptimizationRequest;
 import travel.route.dto.optimization.OptimizationHistoryItem;
 import travel.route.dto.optimization.*;
@@ -52,7 +54,9 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
     private final TransactionTemplate transactionTemplate;
 
     // 兴趣标签与景点类型映射
-    private final Map<String, List<String>> interestAttractionMap = createInterestMap();
+    private final Map<String, List<String>> interestAttractionMap = PreferenceProfile.INTEREST_KEYWORDS;
+    private final PreferenceProfile preferenceProfile;
+    private final RouteScheduleValidator scheduleValidator;
 
     private static Map<String, List<String>> createInterestMap() {
         Map<String, List<String>> map = new HashMap<>();
@@ -86,8 +90,8 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
             }
 
             Map<String, Double> weights = calculateWeights(preference);
-            // 偏好→修复参数（与 GA 参数正交）：带娃/慢节奏收紧相邻段上限（km）
-            double maxLegKm = preference.contains("亲子") || preference.contains("慢") ? 15.0 : 0;
+            // 偏好→修复参数（与 GA 参数正交）：配置表驱动（PreferenceProfile）
+            double maxLegKm = preferenceProfile.resolveMaxLegKm(preference);
             Map<Integer, List<Attraction>> dailyAttractions = distributeAttractionsToDays(attractions, maxDays);
 
             double totalDistance = 0.0;
@@ -107,6 +111,12 @@ public class RouteOptimizationServiceImpl implements RouteOptimizationService {
                         dayAttractionList, GaPreset.forScale(dayAttractionList.size()));
                 // 排列层修复：相邻段距离上限（交换→修不动则淘汰并记录）
                 optimizedOrder = ctx.repairMaxLeg(optimizedOrder);
+                // 时间窗后置校验+贪心修复（TSPTW 不进 GA 的取舍：修不动降级为"建议改天"）
+                RouteScheduleValidator.Result schedule = scheduleValidator.validateAndFix(optimizedOrder);
+                if (!schedule.unsatisfiable().isEmpty()) {
+                    log.warn("第{}天时间窗降级: {} (交换修复{}次)", dayNumber,
+                            schedule.unsatisfiable(), schedule.swaps());
+                }
                 if (!ctx.getDroppedByRepair().isEmpty()) {
                     log.warn("第{}天偏好修复降级: {}", dayNumber, ctx.getDroppedByRepair());
                 }

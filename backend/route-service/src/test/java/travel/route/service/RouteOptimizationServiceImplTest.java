@@ -7,6 +7,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import travel.common.entity.route_planning.Route;
 import travel.common.entity.route_planning.RouteAttraction;
@@ -72,6 +73,12 @@ class RouteOptimizationServiceImplTest {
 
     @InjectMocks
     private RouteOptimizationServiceImpl routeOptimizationService;
+
+    @Spy
+    private final travel.route.service.support.PreferenceProfile preferenceProfile = new travel.route.service.support.PreferenceProfile();
+
+    @Spy
+    private final travel.route.service.support.RouteScheduleValidator scheduleValidator = new travel.route.service.support.RouteScheduleValidator();
 
     @Test
     void shouldApplyExplicitOrderOnlyOnceWhenRequestIsRepeated() {
@@ -297,7 +304,8 @@ class RouteOptimizationServiceImplTest {
 
         assertEquals(5.0, result.getAverageRating());
         assertEquals(4.0, result.getAttractionsPerDay());
-        assertEquals(0.76, result.getQualityScore(), 0.0001);
+        // 兴趣维度从 5 扩到 6（PreferenceProfile 新增"亲子"），diversity=1/6 → 0.4+0.3+0.05=0.75
+        assertEquals(0.75, result.getQualityScore(), 0.0001);
         assertEquals("推荐", result.getRecommendationLevel());
     }
 
