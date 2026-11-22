@@ -322,12 +322,13 @@ public class GeneticAlgorithmTSP {
         boolean improved = true;
         while (improved) {
             improved = false;
-            for (int i = 0; i < n - 1; i++) {
-                for (int j = i + 2; j < n; j++) {
+            for (int i = 0; i < n - 2; i++) {
+                for (int j = i + 2; j < n - 1; j++) {
+                    // 开放路径 2-opt：不含闭环边（j+1 必须是有效后继）
                     double before = safeDistance(attractions.get(tour[i]), attractions.get(tour[i + 1]))
-                            + safeDistance(attractions.get(tour[j]), attractions.get(tour[(j + 1) % n]));
+                            + safeDistance(attractions.get(tour[j]), attractions.get(tour[j + 1]));
                     double after = safeDistance(attractions.get(tour[i]), attractions.get(tour[j]))
-                            + safeDistance(attractions.get(tour[i + 1]), attractions.get(tour[(j + 1) % n]));
+                            + safeDistance(attractions.get(tour[i + 1]), attractions.get(tour[j + 1]));
                     if (after < before - 1e-9) {
                         reverse(tour, i + 1, j);
                         improved = true;
