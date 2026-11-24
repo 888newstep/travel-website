@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import {
   intelligentRouteApi,
   routeCrudApi,
@@ -37,31 +37,7 @@ export function RouteOptimizationPage() {
   const [history, setHistory] = useState<RouteOptimizationHistory[]>([])
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    void loadRoutes()
-  }, [])
-
-  useEffect(() => {
-    if (selectedRouteId) {
-      void loadOptimizationData(selectedRouteId)
-    }
-  }, [selectedRouteId])
-
-  async function loadRoutes() {
-    try {
-      const data = await routeCrudApi.getRoutesByCity(DEFAULT_CITY_ID)
-      const list = Array.isArray(data) ? data : []
-      setRoutes(list)
-
-      if (list.length && !selectedRouteId) {
-        setSelectedRouteId(Number(list[0].id) || 0)
-      }
-    } catch {
-      setRoutes([])
-    }
-  }
-
-  async function loadOptimizationData(routeId = selectedRouteId) {
+  const loadOptimizationData = useCallback(async (routeId: number) => {
     if (!routeId) return
 
     setLoading(true)
@@ -79,7 +55,34 @@ export function RouteOptimizationPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+
+    void (async () => {
+      try {
+        const data = await routeCrudApi.getRoutesByCity(DEFAULT_CITY_ID)
+        if (!active) return
+
+        const list = Array.isArray(data) ? data : []
+        setRoutes(list)
+        setSelectedRouteId((current) => current || Number(list[0]?.id) || 0)
+      } catch {
+        if (active) setRoutes([])
+      }
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedRouteId) {
+      void loadOptimizationData(selectedRouteId)
+    }
+  }, [selectedRouteId, loadOptimizationData])
 
   async function applyOptimization(suggestion: RouteOptimizationSuggestion) {
     if (!selectedRouteId || !suggestion.id) return

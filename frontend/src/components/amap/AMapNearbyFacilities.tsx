@@ -57,7 +57,7 @@ export function AMapNearbyFacilities({ attractionId }: AMapNearbyFacilitiesProps
     return () => {
       active = false
     }
-  }, [loadFacilities])
+  }, [attractionId, loadFacilities])
 
   function selectCategory(nextCategory: AMapFacilityCategory) {
     setCategory(nextCategory)

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { clearStoredAuth, getStoredToken, getStoredUsername } from '../../lib/auth'
 
@@ -32,10 +32,7 @@ export function AppHeader() {
     }
   }, [])
 
-  const userInitial = useMemo(() => {
-    const name = getStoredUsername() || 'U'
-    return name.slice(0, 1).toUpperCase()
-  }, [token])
+  const userInitial = (getStoredUsername() || 'U').slice(0, 1).toUpperCase()
 
   return (
     <header

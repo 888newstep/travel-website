@@ -183,7 +183,7 @@ export function RoutesPage() {
   })
 
   const localRoutes = overviewQuery.data?.local ?? []
-  const popularRoutes = overviewQuery.data?.popular ?? []
+  const popularRoutes = useMemo(() => overviewQuery.data?.popular ?? [], [overviewQuery.data])
   const searchedLocalRoutes = searchQuery.data ?? []
   const loading = overviewQuery.isLoading
   const searchingLocal = searchQuery.isFetching && Boolean(debouncedKeyword)
@@ -327,7 +327,7 @@ export function RoutesPage() {
   })
 
   const detailData = detailQuery.data?.detail ?? null
-  const routeComments: RouteComment[] = detailQuery.data?.comments ?? []
+  const routeComments: RouteComment[] = useMemo(() => detailQuery.data?.comments ?? [], [detailQuery.data])
   const similarRoutes: RoutePlan[] = detailQuery.data?.similar ?? []
   const commentStats = detailQuery.data?.stats ?? null
   const detailLoading = detailQuery.isLoading

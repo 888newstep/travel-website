@@ -91,7 +91,7 @@ export function AttractionsPage() {
     },
   })
 
-  const items = listQuery.data ?? []
+  const items = useMemo(() => listQuery.data ?? [], [listQuery.data])
   const loading = listQuery.isLoading
   const searching = listQuery.isFetching && !listQuery.isLoading
   const searchNotice: InlineNotice | null = listQuery.error
@@ -106,7 +106,7 @@ export function AttractionsPage() {
     : null
   const detailData = detailQuery.data?.detail ?? null
   const detailImages = detailQuery.data?.images ?? []
-  const reviews = detailQuery.data?.reviews ?? []
+  const reviews = useMemo(() => detailQuery.data?.reviews ?? [], [detailQuery.data])
   const nearby = detailQuery.data?.nearby ?? []
   const detailLoading = detailQuery.isLoading
   const submittingReview = reviewMutation.isPending
