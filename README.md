@@ -10,7 +10,7 @@
 [![tests](https://img.shields.io/badge/tests-348%20passing-brightgreen.svg)](docs/enterprise-upgrade-plan.md)
 [![Release v1.0.0](https://img.shields.io/github/v/release/888newstep/travel-website?label=release&color=blue)](https://github.com/888newstep/travel-website/releases)
 <!-- 社交证明徽章（stars/forks/commit-activity/last-commit/repo-size/code-size）已按低星策略隐藏：
-     项目星数 >50 后恢复，模板见 docs/enterprise-upgrade-plan.md 徽章小节 -->
+     星数 >50 后恢复；模板在 git 历史 43a984f 的前一版 README（99728da） -->
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-4caf50.svg)](https://github.com/888newstep/travel-website/pulls)
 [![JDK 17](https://img.shields.io/badge/JDK-17-blue.svg)](https://adoptium.net/)
 [![Spring Boot 3.3.5](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
