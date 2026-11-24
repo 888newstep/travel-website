@@ -9,12 +9,8 @@
 [![CD Deploy](https://github.com/888newstep/travel-website/actions/workflows/deploy.yml/badge.svg)](https://github.com/888newstep/travel-website/actions/workflows/deploy.yml)
 [![tests](https://img.shields.io/badge/tests-348%20passing-brightgreen.svg)](docs/enterprise-upgrade-plan.md)
 [![Release v1.0.0](https://img.shields.io/github/v/release/888newstep/travel-website?label=release&color=blue)](https://github.com/888newstep/travel-website/releases)
-[![stars](https://img.shields.io/github/stars/888newstep/travel-website?style=flat&color=yellow)](https://github.com/888newstep/travel-website/stargazers)
-[![forks](https://img.shields.io/github/forks/888newstep/travel-website?style=flat&color=lightgrey)](https://github.com/888newstep/travel-website/network/members)
-[![commit activity](https://img.shields.io/github/commit-activity/m/888newstep/travel-website)](https://github.com/888newstep/travel-website/commits/master)
-[![last commit](https://img.shields.io/github/last-commit/888newstep/travel-website/master)](https://github.com/888newstep/travel-website/commits/master)
-[![repo size](https://img.shields.io/github/repo-size/888newstep/travel-website)](https://github.com/888newstep/travel-website)
-[![code size](https://img.shields.io/github/languages/code-size/888newstep/travel-website)](https://github.com/888newstep/travel-website)
+<!-- 社交证明徽章（stars/forks/commit-activity/last-commit/repo-size/code-size）已按低星策略隐藏：
+     项目星数 >50 后恢复，模板见 docs/enterprise-upgrade-plan.md 徽章小节 -->
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-4caf50.svg)](https://github.com/888newstep/travel-website/pulls)
 [![JDK 17](https://img.shields.io/badge/JDK-17-blue.svg)](https://adoptium.net/)
 [![Spring Boot 3.3.5](https://img.shields.io/badge/Spring%20Boot-3.3.5-green.svg)](https://spring.io/projects/spring-boot)
