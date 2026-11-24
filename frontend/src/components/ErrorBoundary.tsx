@@ -31,9 +31,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         <div className="mx-auto max-w-xl mt-16 rounded-2xl border border-amber-200 bg-amber-50 p-8 text-center">
           <h2 className="text-lg font-semibold text-amber-800">页面出现了一点问题</h2>
-          <p className="mt-2 text-sm text-amber-700">
-            {this.state.error.message || '渲染时发生未知异常'}
-          </p>
+          <p className="mt-2 text-sm text-amber-700">{this.state.error.message || '渲染时发生未知异常'}</p>
           <div className="mt-6 flex justify-center gap-3">
             <button
               type="button"

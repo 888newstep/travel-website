@@ -136,10 +136,7 @@ export function useAIChatPage() {
     () => messages.length + assistantMessages.length,
     [messages.length, assistantMessages.length],
   )
-  const activeLabel = useMemo(
-    () => tabs.find((tab) => tab.key === activeTab)?.label || 'AI 对话',
-    [tabs, activeTab],
-  )
+  const activeLabel = useMemo(() => tabs.find((tab) => tab.key === activeTab)?.label || 'AI 对话', [tabs, activeTab])
 
   async function sendMessage() {
     const text = input.trim()

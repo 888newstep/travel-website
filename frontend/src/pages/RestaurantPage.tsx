@@ -53,7 +53,9 @@ export function RestaurantPage() {
     setLoading(true)
     try {
       const normalized = (searchText ?? keyword).trim()
-      const data = normalized ? await restaurantApi.search(DEFAULT_CITY_ID, normalized) : await restaurantApi.getByCity(DEFAULT_CITY_ID)
+      const data = normalized
+        ? await restaurantApi.search(DEFAULT_CITY_ID, normalized)
+        : await restaurantApi.getByCity(DEFAULT_CITY_ID)
       setRestaurants(Array.isArray(data) ? data : [])
     } catch {
       setRestaurants([])
@@ -85,20 +87,30 @@ export function RestaurantPage() {
               <span className="chip">{'\u7f8e\u98df\u5730\u56fe'}</span>
               <span className="chip">{'\u7528\u9910\u53c2\u8003'}</span>
             </div>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">{'\u53d1\u73b0\u65c5\u9014\u4e2d\u7684\u5f53\u5730\u597d\u5473\u9053'}</h1>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
+              {'\u53d1\u73b0\u65c5\u9014\u4e2d\u7684\u5f53\u5730\u597d\u5473\u9053'}
+            </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
-              {'\u6c47\u603b\u57ce\u5e02\u9910\u5385\u3001\u70ed\u95e8\u83dc\u7cfb\u4e0e\u8425\u4e1a\u4fe1\u606f\uff0c\u5e2e\u52a9\u4f60\u5728\u51fa\u884c\u9014\u4e2d\u5feb\u901f\u627e\u5230\u66f4\u9002\u5408\u5f53\u524d\u8282\u594f\u7684\u7528\u9910\u9009\u62e9\u3002'}
+              {
+                '\u6c47\u603b\u57ce\u5e02\u9910\u5385\u3001\u70ed\u95e8\u83dc\u7cfb\u4e0e\u8425\u4e1a\u4fe1\u606f\uff0c\u5e2e\u52a9\u4f60\u5728\u51fa\u884c\u9014\u4e2d\u5feb\u901f\u627e\u5230\u66f4\u9002\u5408\u5f53\u524d\u8282\u594f\u7684\u7528\u9910\u9009\u62e9\u3002'
+              }
             </p>
             <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <StatTile label={'\u9910\u5385\u6570'} value={restaurants.length} />
-              <StatTile label={'\u641c\u7d22\u72b6\u6001'} value={keyword.trim() ? '\u641c\u7d22\u4e2d' : '\u5168\u90e8'} />
+              <StatTile
+                label={'\u641c\u7d22\u72b6\u6001'}
+                value={keyword.trim() ? '\u641c\u7d22\u4e2d' : '\u5168\u90e8'}
+              />
               <StatTile label={'\u9ad8\u8bc4\u5206'} value={highRatedCount} />
               <StatTile label={'\u57ce\u5e02\u7f16\u53f7'} value={DEFAULT_CITY_ID} />
             </div>
             {topCuisineTypes.length ? (
               <div className="mt-5 flex flex-wrap gap-2">
                 {topCuisineTypes.map((item) => (
-                  <span key={item} className="chip">{'\u70ed\u95e8 \u00b7 '}{item}</span>
+                  <span key={item} className="chip">
+                    {'\u70ed\u95e8 \u00b7 '}
+                    {item}
+                  </span>
                 ))}
               </div>
             ) : null}
@@ -108,7 +120,11 @@ export function RestaurantPage() {
             <SectionHeader
               title={'\u5feb\u901f\u7b5b\u9009'}
               description={'\u8f93\u5165\u5173\u952e\u8bcd\u67e5\u627e\u5e97\u540d\u3001\u83dc\u7cfb\u6216\u5730\u5740'}
-              action={<span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">{'\u7f8e\u98df'}</span>}
+              action={
+                <span className="rounded-full bg-sky-100 px-3 py-1 text-xs font-medium text-sky-700">
+                  {'\u7f8e\u98df'}
+                </span>
+              }
             />
             <div className="flex flex-col gap-3 sm:flex-row">
               <input
@@ -126,7 +142,10 @@ export function RestaurantPage() {
               </button>
             </div>
             <div className="mt-4 text-sm text-slate-500">
-              {'\u5f53\u524d\u663e\u793a\uff1a'}{keyword.trim() ? '\u5173\u952e\u8bcd\u5df2\u5e94\u7528' : '\u6d4f\u89c8\u5168\u90e8'} {'\u00b7 \u57ce\u5e02\u7f16\u53f7 '}{DEFAULT_CITY_ID}
+              {'\u5f53\u524d\u663e\u793a\uff1a'}
+              {keyword.trim() ? '\u5173\u952e\u8bcd\u5df2\u5e94\u7528' : '\u6d4f\u89c8\u5168\u90e8'}{' '}
+              {'\u00b7 \u57ce\u5e02\u7f16\u53f7 '}
+              {DEFAULT_CITY_ID}
             </div>
           </div>
         </div>
@@ -134,19 +153,36 @@ export function RestaurantPage() {
 
       <section className="mt-8">
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title={'\u9009\u62e9\u5efa\u8bae'} description={'\u7ed3\u5408\u65c5\u6e38\u573a\u666f\uff0c\u4f18\u5148\u5173\u6ce8\u8bc4\u5206\u3001\u8425\u4e1a\u65f6\u95f4\u4e0e\u53e3\u5473\u5339\u914d\u5ea6'} />
+          <SectionHeader
+            title={'\u9009\u62e9\u5efa\u8bae'}
+            description={
+              '\u7ed3\u5408\u65c5\u6e38\u573a\u666f\uff0c\u4f18\u5148\u5173\u6ce8\u8bc4\u5206\u3001\u8425\u4e1a\u65f6\u95f4\u4e0e\u53e3\u5473\u5339\u914d\u5ea6'
+            }
+          />
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <div className="travel-step-card">
               <div className="text-base font-semibold text-slate-900">{'\u5148\u770b\u53e3\u5473'}</div>
-              <p className="mt-2 leading-6 text-slate-500">{'\u901a\u8fc7\u70ed\u95e8\u83dc\u7cfb\u5feb\u901f\u7b5b\u9009\uff0c\u66f4\u5bb9\u6613\u627e\u5230\u7b26\u5408\u5f53\u524d\u65c5\u7a0b\u504f\u597d\u7684\u9910\u5385\u3002'}</p>
+              <p className="mt-2 leading-6 text-slate-500">
+                {
+                  '\u901a\u8fc7\u70ed\u95e8\u83dc\u7cfb\u5feb\u901f\u7b5b\u9009\uff0c\u66f4\u5bb9\u6613\u627e\u5230\u7b26\u5408\u5f53\u524d\u65c5\u7a0b\u504f\u597d\u7684\u9910\u5385\u3002'
+                }
+              </p>
             </div>
             <div className="travel-step-card">
               <div className="text-base font-semibold text-slate-900">{'\u518d\u770b\u8bc4\u5206'}</div>
-              <p className="mt-2 leading-6 text-slate-500">{'\u4f18\u5148\u67e5\u770b\u9ad8\u8bc4\u5206\u5546\u5bb6\uff0c\u51cf\u5c11\u4e34\u65f6\u8e29\u5751\uff0c\u63d0\u9ad8\u7528\u9910\u4f53\u9a8c\u7a33\u5b9a\u6027\u3002'}</p>
+              <p className="mt-2 leading-6 text-slate-500">
+                {
+                  '\u4f18\u5148\u67e5\u770b\u9ad8\u8bc4\u5206\u5546\u5bb6\uff0c\u51cf\u5c11\u4e34\u65f6\u8e29\u5751\uff0c\u63d0\u9ad8\u7528\u9910\u4f53\u9a8c\u7a33\u5b9a\u6027\u3002'
+                }
+              </p>
             </div>
             <div className="travel-step-card">
               <div className="text-base font-semibold text-slate-900">{'\u786e\u8ba4\u8425\u4e1a'}</div>
-              <p className="mt-2 leading-6 text-slate-500">{'\u7ed3\u5408\u8425\u4e1a\u65f6\u95f4\u4e0e\u8054\u7cfb\u65b9\u5f0f\uff0c\u907f\u514d\u5230\u5e97\u540e\u4e34\u65f6\u6251\u7a7a\u6216\u6392\u961f\u8fc7\u4e45\u3002'}</p>
+              <p className="mt-2 leading-6 text-slate-500">
+                {
+                  '\u7ed3\u5408\u8425\u4e1a\u65f6\u95f4\u4e0e\u8054\u7cfb\u65b9\u5f0f\uff0c\u907f\u514d\u5230\u5e97\u540e\u4e34\u65f6\u6251\u7a7a\u6216\u6392\u961f\u8fc7\u4e45\u3002'
+                }
+              </p>
             </div>
           </div>
         </div>
@@ -154,7 +190,12 @@ export function RestaurantPage() {
 
       <section className="mt-8">
         <div className="scenic-shell-soft edge-glow animate-fade-in p-6">
-          <SectionHeader title={'\u6570\u636e\u6982\u89c8'} description={'\u4ece\u5f53\u524d\u7b5b\u9009\u7ed3\u679c\u4e2d\u5feb\u901f\u67e5\u770b\u53ef\u7528\u9910\u5385\u7684\u6574\u4f53\u5206\u5e03'} />
+          <SectionHeader
+            title={'\u6570\u636e\u6982\u89c8'}
+            description={
+              '\u4ece\u5f53\u524d\u7b5b\u9009\u7ed3\u679c\u4e2d\u5feb\u901f\u67e5\u770b\u53ef\u7528\u9910\u5385\u7684\u6574\u4f53\u5206\u5e03'
+            }
+          />
           <div className="mt-5 space-y-3 text-sm text-slate-600">
             <div className="metric-card surface-card-hover flex items-center justify-between">
               <span>{'\u5f53\u524d\u57ce\u5e02'}</span>
@@ -162,7 +203,9 @@ export function RestaurantPage() {
             </div>
             <div className="metric-card surface-card-hover flex items-center justify-between">
               <span>{'\u68c0\u7d22\u6a21\u5f0f'}</span>
-              <span className="font-semibold text-slate-900">{keyword.trim() ? '\u5173\u952e\u8bcd\u641c\u7d22' : '\u57ce\u5e02\u5168\u91cf'}</span>
+              <span className="font-semibold text-slate-900">
+                {keyword.trim() ? '\u5173\u952e\u8bcd\u641c\u7d22' : '\u57ce\u5e02\u5168\u91cf'}
+              </span>
             </div>
             <div className="metric-card surface-card-hover flex items-center justify-between">
               <span>{'\u9ad8\u5206\u5360\u6bd4'}</span>
@@ -175,7 +218,11 @@ export function RestaurantPage() {
       <div className="mb-6 mt-10 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="section-heading text-[1.75rem]">{'\u9910\u5385\u5217\u8868'}</h2>
-          <p className="section-subtitle mt-2">{'\u652f\u6301\u67e5\u770b\u8bc4\u5206\u3001\u83dc\u7cfb\u3001\u4eba\u5747\u6d88\u8d39\u4e0e\u8425\u4e1a\u65f6\u95f4\u4fe1\u606f\u3002'}</p>
+          <p className="section-subtitle mt-2">
+            {
+              '\u652f\u6301\u67e5\u770b\u8bc4\u5206\u3001\u83dc\u7cfb\u3001\u4eba\u5747\u6d88\u8d39\u4e0e\u8425\u4e1a\u65f6\u95f4\u4fe1\u606f\u3002'
+            }
+          </p>
         </div>
       </div>
 
@@ -195,7 +242,11 @@ export function RestaurantPage() {
             >
               {item.imageUrl ? (
                 <div className="relative overflow-hidden">
-                  <img src={item.imageUrl} alt={item.name} className="h-44 w-full object-cover transition duration-500 hover:scale-[1.03]" />
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="h-44 w-full object-cover transition duration-500 hover:scale-[1.03]"
+                  />
                   <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-900/45 to-transparent" />
                 </div>
               ) : (
@@ -209,17 +260,31 @@ export function RestaurantPage() {
                     <h3 className="text-lg font-semibold text-slate-900">{item.name}</h3>
                     <p className="mt-1 text-xs text-slate-400">{item.address}</p>
                   </div>
-                  <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-slate-500">{'\u2605 '}{item.rating || '--'}</span>
+                  <span className="rounded-full bg-sky-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+                    {'\u2605 '}
+                    {item.rating || '--'}
+                  </span>
                 </div>
-                <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-500">{item.description || item.feature || '\u6682\u65e0\u9910\u5385\u4ecb\u7ecd'}</p>
+                <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-500">
+                  {item.description || item.feature || '\u6682\u65e0\u9910\u5385\u4ecb\u7ecd'}
+                </p>
                 <div className="mt-4 flex flex-wrap gap-2 text-xs text-slate-400">
                   <span className="chip">{item.cuisineType || '\u672a\u5206\u7c7b'}</span>
                   <span className="chip">{item.priceLevel || formatCost(item.averageCost)}</span>
                 </div>
                 <div className="mt-4 space-y-1 text-xs text-slate-400">
-                  <div>{'\u4eba\u5747\uff1a'}{formatCost(item.averageCost)}</div>
-                  <div>{'\u8425\u4e1a\uff1a'}{item.openingHours || '\u672a\u63d0\u4f9b'}</div>
-                  <div>{'\u7535\u8bdd\uff1a'}{item.phone || '\u672a\u63d0\u4f9b'}</div>
+                  <div>
+                    {'\u4eba\u5747\uff1a'}
+                    {formatCost(item.averageCost)}
+                  </div>
+                  <div>
+                    {'\u8425\u4e1a\uff1a'}
+                    {item.openingHours || '\u672a\u63d0\u4f9b'}
+                  </div>
+                  <div>
+                    {'\u7535\u8bdd\uff1a'}
+                    {item.phone || '\u672a\u63d0\u4f9b'}
+                  </div>
                 </div>
               </div>
             </article>

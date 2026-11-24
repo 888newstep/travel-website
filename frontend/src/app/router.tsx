@@ -19,23 +19,65 @@ import { UserProfilePage } from '../pages/UserProfilePage'
 export function AppRouter() {
   return (
     <ErrorBoundary>
-    <Routes>
-      <Route path="/" element={<HomePage />} />
-      <Route path="/attractions" element={<AttractionsPage />} />
-      <Route path="/routes" element={<RoutesPage />} />
-      <Route path="/notes" element={<NotesPage />} />
-      <Route path="/ai-chat" element={<AIChatPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/restaurants" element={<RestaurantPage />} />
-      <Route path="/realtime" element={<RealtimeStatusPage />} />
-      <Route path="/profile" element={<ProtectedRoute><UserProfilePage /></ProtectedRoute>} />
-      <Route path="/notifications" element={<ProtectedRoute><NotificationPage /></ProtectedRoute>} />
-      <Route path="/feedback" element={<ProtectedRoute><FeedbackPage /></ProtectedRoute>} />
-      <Route path="/files" element={<ProtectedRoute><FileManagementPage /></ProtectedRoute>} />
-      <Route path="/share" element={<ProtectedRoute><RouteSharePage /></ProtectedRoute>} />
-      <Route path="/optimization" element={<ProtectedRoute><RouteOptimizationPage /></ProtectedRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/attractions" element={<AttractionsPage />} />
+        <Route path="/routes" element={<RoutesPage />} />
+        <Route path="/notes" element={<NotesPage />} />
+        <Route path="/ai-chat" element={<AIChatPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/restaurants" element={<RestaurantPage />} />
+        <Route path="/realtime" element={<RealtimeStatusPage />} />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <UserProfilePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            <ProtectedRoute>
+              <NotificationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/feedback"
+          element={
+            <ProtectedRoute>
+              <FeedbackPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/files"
+          element={
+            <ProtectedRoute>
+              <FileManagementPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/share"
+          element={
+            <ProtectedRoute>
+              <RouteSharePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/optimization"
+          element={
+            <ProtectedRoute>
+              <RouteOptimizationPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
     </ErrorBoundary>
   )
 }

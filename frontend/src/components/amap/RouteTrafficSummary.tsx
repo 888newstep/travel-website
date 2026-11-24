@@ -58,14 +58,27 @@ export function RouteTrafficSummary({ routeId }: { routeId: number }) {
       {!loading && traffic?.dataAvailable ? (
         <>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="metric-card"><div className="text-xs text-slate-400">驾车距离</div><div className="mt-2 font-semibold text-slate-900">{formatDistance(traffic.totalDistanceMeters)}</div></div>
-            <div className="metric-card"><div className="text-xs text-slate-400">预计耗时</div><div className="mt-2 font-semibold text-slate-900">{formatDuration(traffic.totalDurationSeconds)}</div></div>
+            <div className="metric-card">
+              <div className="text-xs text-slate-400">驾车距离</div>
+              <div className="mt-2 font-semibold text-slate-900">{formatDistance(traffic.totalDistanceMeters)}</div>
+            </div>
+            <div className="metric-card">
+              <div className="text-xs text-slate-400">预计耗时</div>
+              <div className="mt-2 font-semibold text-slate-900">{formatDuration(traffic.totalDurationSeconds)}</div>
+            </div>
           </div>
           <div className="mt-4 space-y-2">
             {traffic.segments.map((segment, index) => (
-              <div key={segment.segmentId || index} className="flex items-center justify-between gap-3 border-t border-slate-100 py-3 text-sm">
-                <span className="text-slate-600">第 {index + 1} 段 · {formatDistance(segment.distanceMeters)}</span>
-                <span className="font-medium text-slate-900">{STATUS_LABELS[segment.status] || STATUS_LABELS.unknown}</span>
+              <div
+                key={segment.segmentId || index}
+                className="flex items-center justify-between gap-3 border-t border-slate-100 py-3 text-sm"
+              >
+                <span className="text-slate-600">
+                  第 {index + 1} 段 · {formatDistance(segment.distanceMeters)}
+                </span>
+                <span className="font-medium text-slate-900">
+                  {STATUS_LABELS[segment.status] || STATUS_LABELS.unknown}
+                </span>
               </div>
             ))}
           </div>

@@ -35,7 +35,10 @@ export function CommentFeed({ title, items, emptyText }: CommentFeedProps) {
       {items.length ? (
         <div className="mt-3 space-y-3">
           {items.map((item) => (
-            <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+            <article
+              key={item.id}
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600"
+            >
               <div className="flex items-center justify-between gap-3 text-xs text-slate-400">
                 <span>{item.author}</span>
                 <span>{item.time}</span>
@@ -46,7 +49,9 @@ export function CommentFeed({ title, items, emptyText }: CommentFeedProps) {
           ))}
         </div>
       ) : (
-        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-400">{emptyText}</div>
+        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-400">
+          {emptyText}
+        </div>
       )}
     </div>
   )

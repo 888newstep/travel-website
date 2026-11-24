@@ -9,15 +9,7 @@ interface DetailDrawerProps extends PropsWithChildren {
   onClose: () => void
 }
 
-export function DetailDrawer({
-  open,
-  title,
-  subtitle,
-  loading = false,
-  footer,
-  onClose,
-  children,
-}: DetailDrawerProps) {
+export function DetailDrawer({ open, title, subtitle, loading = false, footer, onClose, children }: DetailDrawerProps) {
   if (!open) {
     return null
   }
@@ -25,12 +17,7 @@ export function DetailDrawer({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/50 supports-[backdrop-filter]:backdrop-blur-[2px]">
       <div className="absolute inset-y-0 right-0 flex w-full justify-end">
-        <button
-          type="button"
-          aria-label="关闭详情抽屉"
-          className="h-full flex-1 cursor-default"
-          onClick={onClose}
-        />
+        <button type="button" aria-label="关闭详情抽屉" className="h-full flex-1 cursor-default" onClick={onClose} />
         <section className="drawer-shell relative h-full w-full max-w-2xl overflow-y-auto border-l border-white/70 bg-white/96 p-5 shadow-2xl shadow-slate-900/20 backdrop-blur sm:p-6 md:p-7">
           <div className="drawer-header sticky top-0 z-10 -mx-5 -mt-5 border-b border-slate-200/80 bg-white/92 px-5 py-4 backdrop-blur sm:-mx-6 sm:-mt-6 sm:px-6 md:-mx-7 md:-mt-7 md:px-7 md:py-5">
             <div className="flex items-start justify-between gap-4">

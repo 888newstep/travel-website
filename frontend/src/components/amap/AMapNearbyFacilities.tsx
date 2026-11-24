@@ -25,20 +25,23 @@ export function AMapNearbyFacilities({ attractionId }: AMapNearbyFacilitiesProps
   const [message, setMessage] = useState<string | null>(null)
   const [weather, setWeather] = useState<AMapWeatherResponse | null>(null)
 
-  const loadFacilities = useCallback(async (nextCategory: AMapFacilityCategory) => {
-    setLoading(true)
-    setMessage(null)
-    try {
-      const result = await withRequestTimeout(attractionApi.getNearbyFacilities(attractionId, nextCategory, 1000))
-      setResponse(result)
-      if (!result.dataAvailable) setMessage(result.message || '周边设施暂不可用。')
-    } catch (error) {
-      setResponse(null)
-      setMessage(isRequestTimeoutError(error) ? '周边设施加载超时。' : '周边设施加载失败。')
-    } finally {
-      setLoading(false)
-    }
-  }, [attractionId])
+  const loadFacilities = useCallback(
+    async (nextCategory: AMapFacilityCategory) => {
+      setLoading(true)
+      setMessage(null)
+      try {
+        const result = await withRequestTimeout(attractionApi.getNearbyFacilities(attractionId, nextCategory, 1000))
+        setResponse(result)
+        if (!result.dataAvailable) setMessage(result.message || '周边设施暂不可用。')
+      } catch (error) {
+        setResponse(null)
+        setMessage(isRequestTimeoutError(error) ? '周边设施加载超时。' : '周边设施加载失败。')
+      } finally {
+        setLoading(false)
+      }
+    },
+    [attractionId],
+  )
 
   useEffect(() => {
     setCategory('restaurant')
@@ -65,10 +68,27 @@ export function AMapNearbyFacilities({ attractionId }: AMapNearbyFacilitiesProps
     <section>
       {weather ? (
         <div className="mb-5 grid grid-cols-2 gap-3 rounded-lg border border-slate-200 p-4 sm:grid-cols-4">
-          <div><div className="text-xs text-slate-400">当前天气</div><div className="mt-2 font-semibold text-slate-900">{weather.weather || '--'}</div></div>
-          <div><div className="text-xs text-slate-400">温度</div><div className="mt-2 font-semibold text-slate-900">{typeof weather.temperature === 'number' ? `${weather.temperature}°C` : '--'}</div></div>
-          <div><div className="text-xs text-slate-400">湿度</div><div className="mt-2 font-semibold text-slate-900">{weather.humidity ? `${weather.humidity}%` : '--'}</div></div>
-          <div><div className="text-xs text-slate-400">风向风力</div><div className="mt-2 font-semibold text-slate-900">{[weather.windDirection, weather.windPower ? `${weather.windPower}级` : ''].filter(Boolean).join(' ') || '--'}</div></div>
+          <div>
+            <div className="text-xs text-slate-400">当前天气</div>
+            <div className="mt-2 font-semibold text-slate-900">{weather.weather || '--'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-400">温度</div>
+            <div className="mt-2 font-semibold text-slate-900">
+              {typeof weather.temperature === 'number' ? `${weather.temperature}°C` : '--'}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-400">湿度</div>
+            <div className="mt-2 font-semibold text-slate-900">{weather.humidity ? `${weather.humidity}%` : '--'}</div>
+          </div>
+          <div>
+            <div className="text-xs text-slate-400">风向风力</div>
+            <div className="mt-2 font-semibold text-slate-900">
+              {[weather.windDirection, weather.windPower ? `${weather.windPower}级` : ''].filter(Boolean).join(' ') ||
+                '--'}
+            </div>
+          </div>
         </div>
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -96,7 +116,9 @@ export function AMapNearbyFacilities({ attractionId }: AMapNearbyFacilitiesProps
       {loading ? <div className="mt-4 text-sm text-slate-500">正在加载...</div> : null}
       {!loading && message ? <div className="mt-4 text-sm text-amber-700">{message}</div> : null}
       {!loading && response?.dataAvailable && !response.items.length ? (
-        <div className="mt-4 border-t border-dashed border-slate-200 py-4 text-sm text-slate-500">该范围内暂无{response.categoryLabel}。</div>
+        <div className="mt-4 border-t border-dashed border-slate-200 py-4 text-sm text-slate-500">
+          该范围内暂无{response.categoryLabel}。
+        </div>
       ) : null}
       {!loading && response?.items.length ? (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -104,7 +126,9 @@ export function AMapNearbyFacilities({ attractionId }: AMapNearbyFacilitiesProps
             <div key={item.poiId || `${item.name}-${index}`} className="rounded-lg border border-slate-200 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="font-medium text-slate-900">{item.name}</div>
-                {typeof item.distanceMeters === 'number' ? <span className="text-xs text-slate-400">{item.distanceMeters} 米</span> : null}
+                {typeof item.distanceMeters === 'number' ? (
+                  <span className="text-xs text-slate-400">{item.distanceMeters} 米</span>
+                ) : null}
               </div>
               <div className="mt-2 text-sm leading-6 text-slate-500">{item.address || '暂无地址'}</div>
             </div>

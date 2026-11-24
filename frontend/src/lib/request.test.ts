@@ -1,11 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  AuthError,
-  NetworkError,
-  RequestTimeoutError,
-  isRequestTimeoutError,
-  withRequestTimeout,
-} from './request'
+import { AuthError, NetworkError, RequestTimeoutError, isRequestTimeoutError, withRequestTimeout } from './request'
 import { formatTime, formatDate } from './format'
 
 describe('withRequestTimeout', () => {
@@ -25,9 +19,7 @@ describe('withRequestTimeout', () => {
   })
 
   it('底层错误原样透传', async () => {
-    await expect(
-      withRequestTimeout(Promise.reject(new NetworkError()), 1000),
-    ).rejects.toBeInstanceOf(NetworkError)
+    await expect(withRequestTimeout(Promise.reject(new NetworkError()), 1000)).rejects.toBeInstanceOf(NetworkError)
   })
 
   it('isRequestTimeoutError 只识别超时类型', () => {

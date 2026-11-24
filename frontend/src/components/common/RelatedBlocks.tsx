@@ -21,7 +21,9 @@ export function RelatedSection({ title, emptyText, hasItems, children }: Related
       {hasItems ? (
         <div className="mt-3 grid gap-3 sm:grid-cols-2">{children}</div>
       ) : (
-        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-400">{emptyText}</div>
+        <div className="mt-3 rounded-2xl border border-dashed border-slate-200 px-4 py-4 text-sm text-slate-400">
+          {emptyText}
+        </div>
       )}
     </div>
   )

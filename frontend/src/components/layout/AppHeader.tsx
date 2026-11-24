@@ -75,9 +75,7 @@ export function AppHeader() {
                   <NavLink
                     key={item.path}
                     to={item.path}
-                    className={({ isActive }) =>
-                      `tab-pill ${isActive ? 'tab-pill-active' : 'tab-pill-idle'}`
-                    }
+                    className={({ isActive }) => `tab-pill ${isActive ? 'tab-pill-active' : 'tab-pill-idle'}`}
                   >
                     {item.label}
                   </NavLink>

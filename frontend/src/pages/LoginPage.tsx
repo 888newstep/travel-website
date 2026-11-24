@@ -156,7 +156,9 @@ export function LoginPage() {
             <span className="section-kicker">登录</span>
             <h2 className="mt-3 text-2xl font-semibold text-slate-900">{mode === 'login' ? '账号登录' : '创建账号'}</h2>
             <p className="mt-2 text-sm text-slate-500">
-              {mode === 'login' ? '登录后可同步你的路线、收藏和游记内容。' : '完成注册后即可开始保存路线、笔记和个人偏好。'}
+              {mode === 'login'
+                ? '登录后可同步你的路线、收藏和游记内容。'
+                : '完成注册后即可开始保存路线、笔记和个人偏好。'}
             </p>
           </div>
 
@@ -203,7 +205,9 @@ export function LoginPage() {
             ) : null}
 
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-500">{mode === 'login' ? '手机号 / 用户名' : '手机号'}</label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-500">
+                {mode === 'login' ? '手机号 / 用户名' : '手机号'}
+              </label>
               <input
                 value={form.phone}
                 onChange={(event) => updateField('phone', event.target.value)}
@@ -238,17 +242,32 @@ export function LoginPage() {
                     placeholder="请输入短信验证码"
                     className="search-input min-w-0 flex-1"
                   />
-                  <button type="button" onClick={handleSendCaptcha} disabled={sendingCaptcha} className="btn-secondary shrink-0 px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60">
+                  <button
+                    type="button"
+                    onClick={handleSendCaptcha}
+                    disabled={sendingCaptcha}
+                    className="btn-secondary shrink-0 px-4 py-3 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
                     {sendingCaptcha ? '发送中...' : '发送验证码'}
                   </button>
                 </div>
               </div>
             ) : null}
 
-            {error ? <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div> : null}
-            {message ? <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div> : null}
+            {error ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</div>
+            ) : null}
+            {message ? (
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                {message}
+              </div>
+            ) : null}
 
-            <button type="submit" disabled={loading} className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60">
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
+            >
               {loading ? '提交中...' : mode === 'login' ? '立即登录' : '完成注册'}
             </button>
           </form>
