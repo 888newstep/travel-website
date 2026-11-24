@@ -221,7 +221,7 @@ export function AttractionsPage() {
           </div>
         </div>
       </section>
-      {searching ? (
+      {loading || searching ? (
         <div className="mt-8">
           <LoadingSpinner />
         </div>
