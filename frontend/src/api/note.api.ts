@@ -14,25 +14,38 @@ export interface TravelNote {
   createTime?: string
 }
 
+type UnknownRecord = Record<string, unknown>
+
+function asRecord(value: unknown): UnknownRecord {
+  return value && typeof value === 'object' ? (value as UnknownRecord) : {}
+}
+
+function pickString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === 'string' && value) {
+      return value
+    }
+  }
+  return undefined
+}
+
 function normalizeTravelNote(value: unknown): TravelNote {
-  const envelope = value && typeof value === 'object' ? (value as Record<string, any>) : {}
-  const source =
-    envelope.travelNote && typeof envelope.travelNote === 'object'
-      ? (envelope.travelNote as Record<string, any>)
-      : envelope
+  const envelope = asRecord(value)
+  const source = envelope.travelNote ? asRecord(envelope.travelNote) : envelope
+  const user = asRecord(source.user)
   const content = typeof source.content === 'string' ? source.content : ''
 
   return {
     id: Number(source.id) || 0,
     title: typeof source.title === 'string' ? source.title : '',
-    author: String(source.author || source.user?.nickname || source.user?.username || ''),
+    author: pickString(source.author, user.nickname, user.username) || '',
     image: String(source.image || source.coverImage || ''),
     likes: Number(source.likes ?? source.likesCount) || 0,
     excerpt: String(source.excerpt || content),
     content,
     isLiked: Boolean(source.isLiked),
     isCollected: Boolean(source.isCollected),
-    createTime: source.createTime || source.createdAt,
+    createTime: pickString(source.createTime, source.createdAt),
   }
 }
 
@@ -41,7 +54,7 @@ function normalizeTravelNotes(value: unknown): TravelNote[] {
 }
 
 export const noteApi = {
-  getNotes(page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE, filters?: Record<string, any>) {
+  getNotes(page: number = DEFAULT_PAGE, size: number = DEFAULT_PAGE_SIZE, filters?: Record<string, unknown>) {
     return apiClient
       .get<TravelNote[]>('/travel-notes/list', {
         params: { page, size, ...filters },

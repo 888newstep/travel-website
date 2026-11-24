@@ -7,8 +7,8 @@ export interface RoutePlan {
   userId?: number
   cityId?: number
   durationDays?: number
-  preferences?: Record<string, any>
-  constraints?: Record<string, any>
+  preferences?: Record<string, unknown>
+  constraints?: Record<string, unknown>
   createTime?: string
 }
 

@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
-import { aiApi } from '../api/ai.api'
+import { aiApi, type AIResultEnvelope } from '../api/ai.api'
 
 interface TabItem {
   key: string
@@ -176,11 +176,11 @@ export function useAIChatPage() {
 
     try {
       const response = await aiApi.getTravelRecommendation(payload)
-      const result = response?.data || response
+      const result = (response?.data || response) as AIResultEnvelope | unknown[]
 
       if (Array.isArray(result)) {
         setRecommendResults(result)
-      } else if (Array.isArray(result?.recommendations)) {
+      } else if (Array.isArray(result.recommendations)) {
         setRecommendResults(result.recommendations)
       } else {
         setRecommendResults([result])

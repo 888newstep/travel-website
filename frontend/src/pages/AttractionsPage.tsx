@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { attractionApi, type Attraction } from '../api/attraction.api'
+import {
+  attractionApi,
+  type Attraction,
+  type AttractionDetail,
+  type AttractionReview,
+  type NearbyAttraction,
+} from '../api/attraction.api'
 import { AMapNearbyFacilities } from '../components/amap/AMapNearbyFacilities'
 import { AMapPlaceSearchPanel } from '../components/amap/AMapPlaceSearchPanel'
 import { CommentComposer, CommentFeed } from '../components/common/CommentBlocks'
@@ -33,10 +39,10 @@ interface InlineNotice {
 }
 
 interface AttractionDetailBundle {
-  detail: Record<string, any> | null
+  detail: AttractionDetail | null
   images: string[]
-  reviews: Record<string, any>[]
-  nearby: Record<string, any>[]
+  reviews: AttractionReview[]
+  nearby: NearbyAttraction[]
 }
 
 export function AttractionsPage() {
@@ -74,10 +80,10 @@ export function AttractionsPage() {
         withRequestTimeout(attractionApi.getAttractionNearby(id)),
       ])
       return {
-        detail: detailResult.status === 'fulfilled' ? (detailResult.value as Record<string, any>) || null : null,
-        images: imageResult.status === 'fulfilled' ? (imageResult.value as string[]) || [] : [],
-        reviews: reviewResult.status === 'fulfilled' ? (reviewResult.value as Record<string, any>[]) || [] : [],
-        nearby: nearbyResult.status === 'fulfilled' ? (nearbyResult.value as Record<string, any>[]) || [] : [],
+        detail: detailResult.status === 'fulfilled' ? detailResult.value || null : null,
+        images: imageResult.status === 'fulfilled' ? imageResult.value || [] : [],
+        reviews: reviewResult.status === 'fulfilled' ? reviewResult.value || [] : [],
+        nearby: nearbyResult.status === 'fulfilled' ? nearbyResult.value || [] : [],
       }
     },
   })

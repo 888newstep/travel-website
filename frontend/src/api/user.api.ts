@@ -31,24 +31,21 @@ export interface User {
 }
 
 export const userApi = {
-  async login(data: LoginRequest) {
-    const response: any = await apiClient.post('/users/login', data)
-    return response
+  login(data: LoginRequest) {
+    // 登录返回结构由后端决定（token/accessToken 等），交给 persistAuth 做兼容解析
+    return apiClient.post<unknown>('/users/login', data)
   },
 
-  async register(data: RegisterRequest) {
-    const response: any = await apiClient.post('/users/register', data)
-    return response as User
+  register(data: RegisterRequest) {
+    return apiClient.post<User>('/users/register', data)
   },
 
-  async getCurrentUser() {
-    const response: any = await apiClient.get('/users/current')
-    return response as User
+  getCurrentUser() {
+    return apiClient.get<User>('/users/current')
   },
 
-  async updateProfile(user: Partial<User>) {
-    const response: any = await apiClient.put('/users/profile', user)
-    return response as User
+  updateProfile(user: Partial<User>) {
+    return apiClient.put<User>('/users/profile', user)
   },
 
   async logout() {

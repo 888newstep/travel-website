@@ -18,6 +18,26 @@ export interface FileCategory {
   parentId?: number | null
 }
 
+export interface FileStatistics {
+  totalFiles?: number
+  totalCategories?: number
+}
+
+export interface FileVersion {
+  id?: number | string
+  version?: string
+  uploadTime?: string
+  createTime?: string
+  description?: string
+}
+
+export interface FileVersionCompare {
+  version1?: string
+  version2?: string
+  diff?: string
+  message?: string
+}
+
 export const fileApi = {
   uploadFile(formData: FormData) {
     return apiClient.post<ResourceFile>('/resource-file/upload', formData, {
@@ -29,7 +49,7 @@ export const fileApi = {
     return apiClient.delete<boolean>(`/resource-file/delete/${id}`)
   },
 
-  getFileList(params?: Record<string, any>) {
+  getFileList(params?: Record<string, unknown>) {
     return apiClient.get<ResourceFile[]>('/resource-file/list', { params })
   },
 
@@ -38,16 +58,16 @@ export const fileApi = {
   },
 
   getFileStatistics() {
-    return apiClient.get<any>('/resource-file/statistics')
+    return apiClient.get<FileStatistics>('/resource-file/statistics')
   },
 
   // 分类管理
   getCategories() {
-    return apiClient.get<any[]>('/resource-file/category/list')
+    return apiClient.get<FileCategory[]>('/resource-file/category/list')
   },
 
   createCategory(category: Partial<FileCategory>) {
-    return apiClient.post<any>('/resource-file/category/create', category)
+    return apiClient.post<FileCategory>('/resource-file/category/create', category)
   },
 
   deleteCategory(id: string) {
@@ -56,11 +76,11 @@ export const fileApi = {
 
   // 版本管理
   getFileVersions(fileId: string) {
-    return apiClient.get<any[]>(`/resource-file/version/list/${fileId}`)
+    return apiClient.get<FileVersion[]>(`/resource-file/version/list/${fileId}`)
   },
 
   compareVersions(version1Id: string, version2Id: string) {
-    return apiClient.post<any>('/resource-file/version/compare', null, {
+    return apiClient.post<FileVersionCompare>('/resource-file/version/compare', null, {
       params: { version1Id, version2Id },
     })
   },

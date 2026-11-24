@@ -69,6 +69,39 @@ export interface AMapWeatherResponse {
   message?: string
 }
 
+export interface AttractionDetail {
+  id?: number
+  name?: string
+  description?: string
+  address?: string
+  rating?: number
+  price?: number
+  openingHours?: string
+  contactInfo?: string
+  images?: string[]
+}
+
+export interface AttractionReview {
+  id?: number
+  userId?: number
+  username?: string
+  userName?: string
+  nickname?: string
+  rating?: number
+  content?: string
+  comment?: string
+  createTime?: string
+  createdAt?: string
+}
+
+export interface NearbyAttraction {
+  id?: number
+  name?: string
+  description?: string
+  address?: string
+  distance?: number
+}
+
 export const attractionApi = {
   getAttractions() {
     return apiClient.get<Attraction[]>('/attractions')
@@ -93,7 +126,7 @@ export const attractionApi = {
   },
 
   getAttractionDetail(id: number) {
-    return apiClient.get<any>(`/attractions/detail/${id}`)
+    return apiClient.get<AttractionDetail>(`/attractions/detail/${id}`)
   },
 
   getAttractionImages(id: number) {
@@ -101,13 +134,13 @@ export const attractionApi = {
   },
 
   getAttractionReviews(id: number, page?: number, size?: number) {
-    return apiClient.get<any[]>(`/attractions/reviews/${id}`, {
+    return apiClient.get<AttractionReview[]>(`/attractions/reviews/${id}`, {
       params: { page, size },
     })
   },
 
   getAttractionNearby(id: number) {
-    return apiClient.get<any[]>(`/attractions/${id}/nearby`)
+    return apiClient.get<NearbyAttraction[]>(`/attractions/${id}/nearby`)
   },
 
   getNearbyFacilities(id: number, category: AMapFacilityCategory = 'restaurant', radiusMeters: number = 1000) {
@@ -121,6 +154,6 @@ export const attractionApi = {
   },
 
   submitReview(attractionId: number, rating: number, content: string) {
-    return apiClient.post<any>(`/attractions/${attractionId}/review`, { rating, content })
+    return apiClient.post<AttractionReview>(`/attractions/${attractionId}/review`, { rating, content })
   },
 }

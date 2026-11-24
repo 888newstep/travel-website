@@ -27,7 +27,7 @@ export const commentApi = {
   },
 
   getCommentStatistics(routeId: number) {
-    return apiClient.get<Record<string, any>>(`/route-comments/statistics/${routeId}`)
+    return apiClient.get<Record<string, unknown>>(`/route-comments/statistics/${routeId}`)
   },
 
   getLatestComments(routeId: number, limit: number = DEFAULT_LIMIT_SMALL) {
