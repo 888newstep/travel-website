@@ -1,4 +1,6 @@
-﻿export function getStoredToken() {
+﻿import { useSyncExternalStore } from 'react'
+
+export function getStoredToken() {
   return localStorage.getItem('token')
 }
 
@@ -45,4 +47,18 @@ export function clearStoredAuth() {
   localStorage.removeItem('token')
   localStorage.removeItem('username')
   notifyAuthChanged()
+}
+
+export function subscribeAuth(onStoreChange: () => void) {
+  window.addEventListener('storage', onStoreChange)
+  window.addEventListener('auth-change', onStoreChange)
+  return () => {
+    window.removeEventListener('storage', onStoreChange)
+    window.removeEventListener('auth-change', onStoreChange)
+  }
+}
+
+/** 订阅登录态：登录、退出（含其他标签页）都会触发依赖它的组件重渲染。 */
+export function useStoredToken() {
+  return useSyncExternalStore(subscribeAuth, getStoredToken, () => null)
 }
