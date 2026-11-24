@@ -158,7 +158,9 @@ export function RoutesPage() {
     ])
 
     setLocalRoutes(localResult.status === 'fulfilled' && Array.isArray(localResult.value) ? localResult.value : [])
-    setPopularRoutes(popularResult.status === 'fulfilled' && Array.isArray(popularResult.value) ? popularResult.value : [])
+    setPopularRoutes(
+      popularResult.status === 'fulfilled' && Array.isArray(popularResult.value) ? popularResult.value : [],
+    )
 
     const hasTimeout = [localResult, popularResult].some(
       (result) => result.status === 'rejected' && isRequestTimeoutError(result.reason),
@@ -207,7 +209,9 @@ export function RoutesPage() {
         setSearchedLocalRoutes([])
         setPageNotice({
           tone: 'warning',
-          message: isRequestTimeoutError(error) ? '搜索响应超时，请稍后重试。' : '本地路线搜索失败，请更换关键词后重试。',
+          message: isRequestTimeoutError(error)
+            ? '搜索响应超时，请稍后重试。'
+            : '本地路线搜索失败，请更换关键词后重试。',
         })
       }
     } finally {
@@ -233,7 +237,8 @@ export function RoutesPage() {
       }
     }
 
-    userApi.getCurrentUser()
+    userApi
+      .getCurrentUser()
       .then((user) => {
         if (active && user?.id) {
           setCurrentUserId(user.id)
@@ -252,13 +257,14 @@ export function RoutesPage() {
 
   const localRouteSource = normalizedKeyword ? searchedLocalRoutes : localRoutes
   const routeCommentFeedItems = useMemo(
-    () => routeComments.map((comment, index) => ({
-      id: String(comment.id || `route-comment-${index}`),
-      author: comment.isAnonymous ? '匿名用户' : `用户编号 ${comment.userId}`,
-      time: formatTime(comment.createTime || comment.updateTime),
-      meta: `评分 ${comment.rating || '--'} 分 · 点赞 ${comment.likeCount || 0}`,
-      content: String(comment.content || '暂无评论内容'),
-    })),
+    () =>
+      routeComments.map((comment, index) => ({
+        id: String(comment.id || `route-comment-${index}`),
+        author: comment.isAnonymous ? '匿名用户' : `用户编号 ${comment.userId}`,
+        time: formatTime(comment.createTime || comment.updateTime),
+        meta: `评分 ${comment.rating || '--'} 分 · 点赞 ${comment.likeCount || 0}`,
+        content: String(comment.content || '暂无评论内容'),
+      })),
     [routeComments],
   )
 
@@ -339,23 +345,31 @@ export function RoutesPage() {
       return
     }
 
+    const routeId = route.id
+
     try {
       const [detailResult, commentResult, similarResult, statsResult] = await Promise.allSettled([
-        withRequestTimeout(routeCrudApi.getRoute(route.id)),
-        withRequestTimeout(commentApi.getLatestComments(route.id, 6)).catch(() => withRequestTimeout(commentApi.getRouteComments(route.id, 1, 6))),
-        withRequestTimeout(intelligentRouteApi.getSimilarRoutes(route.id, 4)),
-        withRequestTimeout(commentApi.getCommentStatistics(route.id)),
+        withRequestTimeout(routeCrudApi.getRoute(routeId)),
+        withRequestTimeout(commentApi.getLatestComments(routeId, 6)).catch(() =>
+          withRequestTimeout(commentApi.getRouteComments(routeId, 1, 6)),
+        ),
+        withRequestTimeout(intelligentRouteApi.getSimilarRoutes(routeId, 4)),
+        withRequestTimeout(commentApi.getCommentStatistics(routeId)),
       ])
 
       setDetailData(detailResult.status === 'fulfilled' && detailResult.value ? detailResult.value : route)
-      setRouteComments(commentResult.status === 'fulfilled' && Array.isArray(commentResult.value) ? commentResult.value : [])
-      setSimilarRoutes(similarResult.status === 'fulfilled' && Array.isArray(similarResult.value) ? similarResult.value : [])
+      setRouteComments(
+        commentResult.status === 'fulfilled' && Array.isArray(commentResult.value) ? commentResult.value : [],
+      )
+      setSimilarRoutes(
+        similarResult.status === 'fulfilled' && Array.isArray(similarResult.value) ? similarResult.value : [],
+      )
       setCommentStats(statsResult.status === 'fulfilled' && statsResult.value ? statsResult.value : null)
 
       const userId = await ensureCurrentUser()
       if (userId) {
         try {
-          const value = await collectionApi.checkCollected(route.id)
+          const value = await collectionApi.checkCollected(routeId)
           setCollected(Boolean(value))
         } catch {
           setCollected(false)
@@ -445,20 +459,26 @@ export function RoutesPage() {
     setCommentSubmitting(true)
     setDrawerNotice(null)
     try {
-      await withRequestTimeout(commentApi.createComment({
-        routeId: activeRouteId,
-        userId,
-        rating: Number(commentForm.rating) || 5,
-        content: commentForm.content.trim(),
-        isAnonymous: false,
-      }))
+      await withRequestTimeout(
+        commentApi.createComment({
+          routeId: activeRouteId,
+          userId,
+          rating: Number(commentForm.rating) || 5,
+          content: commentForm.content.trim(),
+          isAnonymous: false,
+        }),
+      )
 
       const [commentResult, statsResult] = await Promise.allSettled([
-        withRequestTimeout(commentApi.getLatestComments(activeRouteId, 6)).catch(() => withRequestTimeout(commentApi.getRouteComments(activeRouteId, 1, 6))),
+        withRequestTimeout(commentApi.getLatestComments(activeRouteId, 6)).catch(() =>
+          withRequestTimeout(commentApi.getRouteComments(activeRouteId, 1, 6)),
+        ),
         withRequestTimeout(commentApi.getCommentStatistics(activeRouteId)),
       ])
 
-      setRouteComments(commentResult.status === 'fulfilled' && Array.isArray(commentResult.value) ? commentResult.value : [])
+      setRouteComments(
+        commentResult.status === 'fulfilled' && Array.isArray(commentResult.value) ? commentResult.value : [],
+      )
       setCommentStats(statsResult.status === 'fulfilled' && statsResult.value ? statsResult.value : null)
       setCommentForm({ rating: '5', content: '' })
       setDrawerNotice({ tone: 'success', message: '评论发布成功。' })
@@ -502,30 +522,31 @@ export function RoutesPage() {
     setDrawerNotice(null)
   }
 
-  const drawerFooter = detailMode === 'local' ? (
-    <div className="flex flex-wrap gap-3">
-      <button
-        type="button"
-        onClick={handleToggleCollection}
-        disabled={collectionSubmitting || !hasToken || !activeRouteId}
-        className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {collectionSubmitting ? '处理中...' : collected ? '取消收藏' : '加入收藏'}
-      </button>
-      <Link to="/ai-chat" className="btn-secondary">
-        咨询 AI 助手
-      </Link>
-    </div>
-  ) : (
-    <div className="flex flex-wrap gap-3">
-      <Link to="/ai-chat" className="btn-primary">
-        让 AI 解析路线
-      </Link>
-      <Link to="/optimization" className="btn-secondary">
-        去优化路线
-      </Link>
-    </div>
-  )
+  const drawerFooter =
+    detailMode === 'local' ? (
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={handleToggleCollection}
+          disabled={collectionSubmitting || !hasToken || !activeRouteId}
+          className="btn-primary disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {collectionSubmitting ? '处理中...' : collected ? '取消收藏' : '加入收藏'}
+        </button>
+        <Link to="/ai-chat" className="btn-secondary">
+          咨询 AI 助手
+        </Link>
+      </div>
+    ) : (
+      <div className="flex flex-wrap gap-3">
+        <Link to="/ai-chat" className="btn-primary">
+          让 AI 解析路线
+        </Link>
+        <Link to="/optimization" className="btn-secondary">
+          去优化路线
+        </Link>
+      </div>
+    )
 
   return (
     <div className="app-container pb-16 pt-4 md:pt-6">
@@ -541,9 +562,12 @@ export function RoutesPage() {
               <span className="chip">热门推荐</span>
               <span className="chip">轻松规划</span>
             </div>
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">发现更适合你的旅行路线</h1>
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 md:text-4xl">
+              发现更适合你的旅行路线
+            </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-slate-600 md:text-base">
-              在本地路线库与 AI 热门推荐之间自由切换，结合天数、难度、偏好与评论信息，快速筛出更适合当前出游节奏的行程方案。
+              在本地路线库与 AI
+              热门推荐之间自由切换，结合天数、难度、偏好与评论信息，快速筛出更适合当前出游节奏的行程方案。
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/ai-chat" className="btn-primary">
@@ -689,7 +713,9 @@ export function RoutesPage() {
                 className="surface-card surface-card-hover edge-glow animate-scale-in rounded-[1.75rem] p-5"
               >
                 <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">AI 推荐</span>
+                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-600">
+                    AI 推荐
+                  </span>
                   <span className="text-xs text-slate-400">{item.durationDays || '--'} 天</span>
                 </div>
                 <h3 className="text-lg font-semibold text-slate-900">{item.title}</h3>
@@ -715,7 +741,12 @@ export function RoutesPage() {
       >
         <div className="space-y-6">
           {drawerNotice ? (
-            <StatusNotice tone={drawerNotice.tone} message={drawerNotice.message} actionLabel="重试" onAction={retryDrawerData} />
+            <StatusNotice
+              tone={drawerNotice.tone}
+              message={drawerNotice.message}
+              actionLabel="重试"
+              onAction={retryDrawerData}
+            />
           ) : null}
 
           {getRouteCover(activeDetail) ? (
@@ -739,7 +770,9 @@ export function RoutesPage() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {getRouteTags(activeDetail).length ? (
                     getRouteTags(activeDetail).map((tag) => (
-                      <span key={tag} className="chip">{tag}</span>
+                      <span key={tag} className="chip">
+                        {tag}
+                      </span>
                     ))
                   ) : (
                     <span className="text-slate-400">暂未解析出偏好标签，可继续咨询 AI 助手。</span>
@@ -807,4 +840,3 @@ export function RoutesPage() {
     </div>
   )
 }
-
