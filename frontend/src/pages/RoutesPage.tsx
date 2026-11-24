@@ -1,4 +1,5 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { collectionApi } from '../api/collection.api'
 import { commentApi, type RouteComment } from '../api/comment.api'
@@ -124,108 +125,78 @@ function getAverageRating(stats: Record<string, unknown> | null, comments: Route
 
 export function RoutesPage() {
   const [tab, setTab] = useState<RouteTab>('local')
-  const [localRoutes, setLocalRoutes] = useState<Route[]>([])
-  const [searchedLocalRoutes, setSearchedLocalRoutes] = useState<Route[]>([])
-  const [popularRoutes, setPopularRoutes] = useState<RoutePlan[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchingLocal, setSearchingLocal] = useState(false)
   const { keyword, setKeyword, normalizedKeyword } = useSyncedKeyword()
+  const [debouncedKeyword, setDebouncedKeyword] = useState(normalizedKeyword)
   const [activeDifficulty, setActiveDifficulty] = useState('全部')
   const [selectedRoute, setSelectedRoute] = useState<DisplayRoute | null>(null)
   const [detailMode, setDetailMode] = useState<RouteTab | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailData, setDetailData] = useState<DisplayRoute | null>(null)
-  const [routeComments, setRouteComments] = useState<RouteComment[]>([])
-  const [similarRoutes, setSimilarRoutes] = useState<RoutePlan[]>([])
-  const [commentStats, setCommentStats] = useState<Record<string, unknown> | null>(null)
   const [commentForm, setCommentForm] = useState({ rating: '5', content: '' })
-  const [commentSubmitting, setCommentSubmitting] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<number | null>(null)
-  const [collected, setCollected] = useState(false)
-  const [collectionSubmitting, setCollectionSubmitting] = useState(false)
-  const [pageNotice, setPageNotice] = useState<InlineNotice | null>(null)
   const [drawerNotice, setDrawerNotice] = useState<InlineNotice | null>(null)
+  const queryClient = useQueryClient()
   const hasToken = Boolean(getStoredToken())
-  const searchRequestRef = useRef(0)
-
-  const loadOverviewData = useCallback(async () => {
-    setPageNotice(null)
-    setLoading(true)
-
-    const [localResult, popularResult] = await Promise.allSettled([
-      withRequestTimeout(routeCrudApi.getRoutesByCity(DEFAULT_CITY_ID)),
-      withRequestTimeout(intelligentRouteApi.getPopularRoutes(DEFAULT_CITY_ID, 3, 6)),
-    ])
-
-    setLocalRoutes(localResult.status === 'fulfilled' && Array.isArray(localResult.value) ? localResult.value : [])
-    setPopularRoutes(
-      popularResult.status === 'fulfilled' && Array.isArray(popularResult.value) ? popularResult.value : [],
-    )
-
-    const hasTimeout = [localResult, popularResult].some(
-      (result) => result.status === 'rejected' && isRequestTimeoutError(result.reason),
-    )
-
-    if (localResult.status === 'rejected' && popularResult.status === 'rejected') {
-      setPageNotice({
-        tone: 'error',
-        message: hasTimeout ? '路线数据加载超时，请稍后重试。' : '路线数据加载失败，请稍后重试。',
-      })
-    } else if (localResult.status === 'rejected' || popularResult.status === 'rejected') {
-      setPageNotice({
-        tone: 'warning',
-        message: hasTimeout ? '部分路线加载超时，已先展示可用内容。' : '部分路线加载失败，已先展示当前可用内容。',
-      })
-    }
-
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    void loadOverviewData()
-  }, [loadOverviewData])
-
-  const runLocalSearch = useCallback(async (searchText: string) => {
-    setPageNotice(null)
-    if (!searchText) {
-      setSearchedLocalRoutes([])
-      setSearchingLocal(false)
-      return
-    }
-
-    setSearchingLocal(true)
-    const requestId = searchRequestRef.current + 1
-    searchRequestRef.current = requestId
-
-    try {
-      const result = await withRequestTimeout(routeCrudApi.searchRoutes(searchText))
-      if (searchRequestRef.current !== requestId) {
-        return
-      }
-
-      setSearchedLocalRoutes(Array.isArray(result) ? result : [])
-    } catch (error) {
-      if (searchRequestRef.current === requestId) {
-        setSearchedLocalRoutes([])
-        setPageNotice({
-          tone: 'warning',
-          message: isRequestTimeoutError(error)
-            ? '搜索响应超时，请稍后重试。'
-            : '本地路线搜索失败，请更换关键词后重试。',
-        })
-      }
-    } finally {
-      if (searchRequestRef.current === requestId) {
-        setSearchingLocal(false)
-      }
-    }
-  }, [])
 
   useDebouncedKeywordEffect({
     keyword: normalizedKeyword,
     delay: DEBOUNCE_DELAY,
-    onKeywordChange: runLocalSearch,
+    onKeywordChange: setDebouncedKeyword,
   })
+
+  const overviewQuery = useQuery({
+    queryKey: ['routes', 'overview', DEFAULT_CITY_ID],
+    queryFn: async () => {
+      const [localResult, popularResult] = await Promise.allSettled([
+        withRequestTimeout(routeCrudApi.getRoutesByCity(DEFAULT_CITY_ID)),
+        withRequestTimeout(intelligentRouteApi.getPopularRoutes(DEFAULT_CITY_ID, 3, 6)),
+      ])
+
+      const hasTimeout = [localResult, popularResult].some(
+        (result) => result.status === 'rejected' && isRequestTimeoutError(result.reason),
+      )
+
+      let notice: InlineNotice | null = null
+      if (localResult.status === 'rejected' && popularResult.status === 'rejected') {
+        notice = {
+          tone: 'error',
+          message: hasTimeout ? '路线数据加载超时，请稍后重试。' : '路线数据加载失败，请稍后重试。',
+        }
+      } else if (localResult.status === 'rejected' || popularResult.status === 'rejected') {
+        notice = {
+          tone: 'warning',
+          message: hasTimeout ? '部分路线加载超时，已先展示可用内容。' : '部分路线加载失败，已先展示当前可用内容。',
+        }
+      }
+
+      return {
+        local: localResult.status === 'fulfilled' && Array.isArray(localResult.value) ? localResult.value : [],
+        popular: popularResult.status === 'fulfilled' && Array.isArray(popularResult.value) ? popularResult.value : [],
+        notice,
+      }
+    },
+  })
+
+  const searchQuery = useQuery({
+    queryKey: ['routes', 'search', debouncedKeyword],
+    queryFn: () => withRequestTimeout(routeCrudApi.searchRoutes(debouncedKeyword)),
+    enabled: Boolean(debouncedKeyword),
+    placeholderData: keepPreviousData,
+  })
+
+  const localRoutes = overviewQuery.data?.local ?? []
+  const popularRoutes = overviewQuery.data?.popular ?? []
+  const searchedLocalRoutes = searchQuery.data ?? []
+  const loading = overviewQuery.isLoading
+  const searchingLocal = searchQuery.isFetching && Boolean(debouncedKeyword)
+  const pageNotice: InlineNotice | null = normalizedKeyword
+    ? searchQuery.error
+      ? {
+          tone: 'warning',
+          message: isRequestTimeoutError(searchQuery.error)
+            ? '搜索响应超时，请稍后重试。'
+            : '本地路线搜索失败，请更换关键词后重试。',
+        }
+      : null
+    : (overviewQuery.data?.notice ?? null)
 
   useEffect(() => {
     let active = true
@@ -256,17 +227,6 @@ export function RoutesPage() {
   }, [hasToken])
 
   const localRouteSource = normalizedKeyword ? searchedLocalRoutes : localRoutes
-  const routeCommentFeedItems = useMemo(
-    () =>
-      routeComments.map((comment, index) => ({
-        id: String(comment.id || `route-comment-${index}`),
-        author: comment.isAnonymous ? '匿名用户' : `用户编号 ${comment.userId}`,
-        time: formatTime(comment.createTime || comment.updateTime),
-        meta: `评分 ${comment.rating || '--'} 分 · 点赞 ${comment.likeCount || 0}`,
-        content: String(comment.content || '暂无评论内容'),
-      })),
-    [routeComments],
-  )
 
   const difficultyOptions = useMemo(() => ['全部', ...getDifficultyOptions(localRouteSource)], [localRouteSource])
 
@@ -288,8 +248,114 @@ export function RoutesPage() {
 
   const activeList = tab === 'local' ? filteredLocalRoutes : filteredPopularRoutes
   const activeSummary = tab === 'local' ? '本地路线' : '热门推荐'
+  const selectedRouteId = getRouteId(selectedRoute)
+
+  const detailQuery = useQuery({
+    queryKey: ['routes', 'detail', detailMode, selectedRouteId],
+    enabled: Boolean(selectedRoute && detailMode),
+    queryFn: async () => {
+      const route = selectedRoute as DisplayRoute
+      if (!selectedRouteId) {
+        return { detail: route, comments: [], similar: [], stats: null }
+      }
+
+      if (detailMode === 'popular') {
+        const similar = await withRequestTimeout(intelligentRouteApi.getSimilarRoutes(selectedRouteId, 4))
+        return { detail: route, comments: [], similar: Array.isArray(similar) ? similar : [], stats: null }
+      }
+
+      const [detailResult, commentResult, similarResult, statsResult] = await Promise.allSettled([
+        withRequestTimeout(routeCrudApi.getRoute(selectedRouteId)),
+        withRequestTimeout(commentApi.getLatestComments(selectedRouteId, 6)).catch(() =>
+          withRequestTimeout(commentApi.getRouteComments(selectedRouteId, 1, 6)),
+        ),
+        withRequestTimeout(intelligentRouteApi.getSimilarRoutes(selectedRouteId, 4)),
+        withRequestTimeout(commentApi.getCommentStatistics(selectedRouteId)),
+      ])
+
+      return {
+        detail: detailResult.status === 'fulfilled' && detailResult.value ? detailResult.value : route,
+        comments: commentResult.status === 'fulfilled' && Array.isArray(commentResult.value) ? commentResult.value : [],
+        similar: similarResult.status === 'fulfilled' && Array.isArray(similarResult.value) ? similarResult.value : [],
+        stats: statsResult.status === 'fulfilled' && statsResult.value ? statsResult.value : null,
+      }
+    },
+  })
+
+  const collectedQuery = useQuery({
+    queryKey: ['routes', 'collected', selectedRouteId, currentUserId],
+    queryFn: () => withRequestTimeout(collectionApi.checkCollected(selectedRouteId as number)),
+    enabled: detailMode === 'local' && Boolean(selectedRouteId) && Boolean(currentUserId),
+  })
+
+  const collectionMutation = useMutation({
+    mutationFn: (routeId: number) => withRequestTimeout(collectionApi.toggleCollection(routeId)),
+    onSuccess: (result) => {
+      setDrawerNotice({ tone: 'success', message: result?.collected ? '已加入收藏。' : '已取消收藏。' })
+      void queryClient.invalidateQueries({ queryKey: ['routes', 'collected'] })
+    },
+    onError: (error) => {
+      setDrawerNotice({
+        tone: 'error',
+        message: isRequestTimeoutError(error) ? '收藏操作超时，请稍后再试。' : '收藏操作失败，请稍后重试。',
+      })
+    },
+  })
+
+  const commentMutation = useMutation({
+    mutationFn: (variables: { routeId: number; userId: number; rating: number; content: string }) =>
+      withRequestTimeout(
+        commentApi.createComment({
+          routeId: variables.routeId,
+          userId: variables.userId,
+          rating: variables.rating,
+          content: variables.content,
+          isAnonymous: false,
+        }),
+      ),
+    onSuccess: async (_data, variables) => {
+      setCommentForm({ rating: '5', content: '' })
+      setDrawerNotice({ tone: 'success', message: '评论发布成功。' })
+      await queryClient.invalidateQueries({ queryKey: ['routes', 'detail', 'local', variables.routeId] })
+    },
+    onError: (error) => {
+      setDrawerNotice({
+        tone: 'error',
+        message: isRequestTimeoutError(error) ? '评论提交超时，请稍后再试。' : '评论提交失败，请稍后重试。',
+      })
+    },
+  })
+
+  const detailData = detailQuery.data?.detail ?? null
+  const routeComments: RouteComment[] = detailQuery.data?.comments ?? []
+  const similarRoutes: RoutePlan[] = detailQuery.data?.similar ?? []
+  const commentStats = detailQuery.data?.stats ?? null
+  const detailLoading = detailQuery.isLoading
+  const collected = collectedQuery.data ?? false
+  const commentSubmitting = commentMutation.isPending
+  const collectionSubmitting = collectionMutation.isPending
   const activeDetail = detailData || selectedRoute
   const activeRouteId = getRouteId(activeDetail)
+  const detailNotice: InlineNotice | null = detailQuery.error
+    ? {
+        tone: 'warning',
+        message: isRequestTimeoutError(detailQuery.error)
+          ? '路线详情加载超时，请稍后重试。'
+          : '路线详情加载失败，请稍后重试。',
+      }
+    : null
+  const shownDrawerNotice = drawerNotice ?? detailNotice
+  const routeCommentFeedItems = useMemo(
+    () =>
+      routeComments.map((comment, index) => ({
+        id: String(comment.id || `route-comment-${index}`),
+        author: comment.isAnonymous ? '匿名用户' : `用户编号 ${comment.userId}`,
+        time: formatTime(comment.createTime || comment.updateTime),
+        meta: `评分 ${comment.rating || '--'} 分 · 点赞 ${comment.likeCount || 0}`,
+        content: String(comment.content || '暂无评论内容'),
+      })),
+    [routeComments],
+  )
 
   const routeMetricItems = useMemo(
     () => [
@@ -323,102 +389,24 @@ export function RoutesPage() {
     return null
   }
 
-  function resetDetailState() {
-    setDetailData(null)
-    setRouteComments([])
-    setSimilarRoutes([])
-    setCommentStats(null)
-    setCommentForm({ rating: '5', content: '' })
-    setCollected(false)
-  }
-
-  async function openLocalDetail(route: Route) {
+  function openLocalDetail(route: Route) {
     setSelectedRoute(route)
     setDetailMode('local')
-    setDetailLoading(true)
-    resetDetailState()
+    setCommentForm({ rating: '5', content: '' })
     setDrawerNotice(null)
-
-    if (!route.id) {
-      setDetailData(route)
-      setDetailLoading(false)
-      return
-    }
-
-    const routeId = route.id
-
-    try {
-      const [detailResult, commentResult, similarResult, statsResult] = await Promise.allSettled([
-        withRequestTimeout(routeCrudApi.getRoute(routeId)),
-        withRequestTimeout(commentApi.getLatestComments(routeId, 6)).catch(() =>
-          withRequestTimeout(commentApi.getRouteComments(routeId, 1, 6)),
-        ),
-        withRequestTimeout(intelligentRouteApi.getSimilarRoutes(routeId, 4)),
-        withRequestTimeout(commentApi.getCommentStatistics(routeId)),
-      ])
-
-      setDetailData(detailResult.status === 'fulfilled' && detailResult.value ? detailResult.value : route)
-      setRouteComments(
-        commentResult.status === 'fulfilled' && Array.isArray(commentResult.value) ? commentResult.value : [],
-      )
-      setSimilarRoutes(
-        similarResult.status === 'fulfilled' && Array.isArray(similarResult.value) ? similarResult.value : [],
-      )
-      setCommentStats(statsResult.status === 'fulfilled' && statsResult.value ? statsResult.value : null)
-
-      const userId = await ensureCurrentUser()
-      if (userId) {
-        try {
-          const value = await collectionApi.checkCollected(routeId)
-          setCollected(Boolean(value))
-        } catch {
-          setCollected(false)
-        }
-      }
-    } catch (error) {
-      setDetailData(route)
-      setRouteComments([])
-      setSimilarRoutes([])
-      setCommentStats(null)
-      setDrawerNotice({
-        tone: 'error',
-        message: isRequestTimeoutError(error) ? '路线详情加载超时，请稍后重试。' : '路线详情加载失败，请稍后重试。',
-      })
-    } finally {
-      setDetailLoading(false)
-    }
+    commentMutation.reset()
+    collectionMutation.reset()
   }
 
-  async function openPopularDetail(route: RoutePlan) {
+  function openPopularDetail(route: RoutePlan) {
     setSelectedRoute(route)
     setDetailMode('popular')
-    setDetailLoading(true)
-    resetDetailState()
-    setDetailData(route)
     setDrawerNotice(null)
-
-    const routeId = getRouteId(route)
-    if (!routeId) {
-      setDetailLoading(false)
-      return
-    }
-
-    try {
-      const similar = await withRequestTimeout(intelligentRouteApi.getSimilarRoutes(routeId, 4))
-      setSimilarRoutes(Array.isArray(similar) ? similar : [])
-    } catch (error) {
-      setSimilarRoutes([])
-      setDrawerNotice({
-        tone: 'warning',
-        message: isRequestTimeoutError(error) ? '相似路线加载超时，请稍后重试。' : '相似路线加载失败，稍后再试。',
-      })
-    } finally {
-      setDetailLoading(false)
-    }
+    commentMutation.reset()
   }
 
   async function handleToggleCollection() {
-    if (!activeRouteId || detailMode !== 'local' || collectionSubmitting) {
+    if (!activeRouteId || detailMode !== 'local' || collectionMutation.isPending) {
       return
     }
 
@@ -427,27 +415,12 @@ export function RoutesPage() {
       return
     }
 
-    setCollectionSubmitting(true)
     setDrawerNotice(null)
-    try {
-      const result = await withRequestTimeout(collectionApi.toggleCollection(activeRouteId))
-      setCollected(Boolean(result?.collected))
-      setDrawerNotice({
-        tone: 'success',
-        message: result?.collected ? '已加入收藏。' : '已取消收藏。',
-      })
-    } catch (error) {
-      setDrawerNotice({
-        tone: 'error',
-        message: isRequestTimeoutError(error) ? '收藏操作超时，请稍后再试。' : '收藏操作失败，请稍后重试。',
-      })
-    } finally {
-      setCollectionSubmitting(false)
-    }
+    collectionMutation.mutate(activeRouteId)
   }
 
   async function submitComment() {
-    if (!activeRouteId || detailMode !== 'local' || !commentForm.content.trim() || commentSubmitting) {
+    if (!activeRouteId || detailMode !== 'local' || !commentForm.content.trim() || commentMutation.isPending) {
       return
     }
 
@@ -456,49 +429,22 @@ export function RoutesPage() {
       return
     }
 
-    setCommentSubmitting(true)
     setDrawerNotice(null)
-    try {
-      await withRequestTimeout(
-        commentApi.createComment({
-          routeId: activeRouteId,
-          userId,
-          rating: Number(commentForm.rating) || 5,
-          content: commentForm.content.trim(),
-          isAnonymous: false,
-        }),
-      )
-
-      const [commentResult, statsResult] = await Promise.allSettled([
-        withRequestTimeout(commentApi.getLatestComments(activeRouteId, 6)).catch(() =>
-          withRequestTimeout(commentApi.getRouteComments(activeRouteId, 1, 6)),
-        ),
-        withRequestTimeout(commentApi.getCommentStatistics(activeRouteId)),
-      ])
-
-      setRouteComments(
-        commentResult.status === 'fulfilled' && Array.isArray(commentResult.value) ? commentResult.value : [],
-      )
-      setCommentStats(statsResult.status === 'fulfilled' && statsResult.value ? statsResult.value : null)
-      setCommentForm({ rating: '5', content: '' })
-      setDrawerNotice({ tone: 'success', message: '评论发布成功。' })
-    } catch (error) {
-      setDrawerNotice({
-        tone: 'error',
-        message: isRequestTimeoutError(error) ? '评论提交超时，请稍后再试。' : '评论提交失败，请稍后重试。',
-      })
-    } finally {
-      setCommentSubmitting(false)
-    }
+    commentMutation.mutate({
+      routeId: activeRouteId,
+      userId,
+      rating: Number(commentForm.rating) || 5,
+      content: commentForm.content.trim(),
+    })
   }
 
   function retryPageData() {
     if (normalizedKeyword && tab === 'local') {
-      void runLocalSearch(normalizedKeyword)
+      void searchQuery.refetch()
       return
     }
 
-    void loadOverviewData()
+    void overviewQuery.refetch()
   }
 
   function retryDrawerData() {
@@ -506,20 +452,15 @@ export function RoutesPage() {
       return
     }
 
-    if (detailMode === 'local') {
-      void openLocalDetail(selectedRoute as Route)
-      return
-    }
-
-    void openPopularDetail(selectedRoute as RoutePlan)
+    void detailQuery.refetch()
   }
 
   function closeDrawer() {
     setSelectedRoute(null)
     setDetailMode(null)
-    setDetailLoading(false)
-    resetDetailState()
     setDrawerNotice(null)
+    commentMutation.reset()
+    collectionMutation.reset()
   }
 
   const drawerFooter =
@@ -740,10 +681,10 @@ export function RoutesPage() {
         onClose={closeDrawer}
       >
         <div className="space-y-6">
-          {drawerNotice ? (
+          {shownDrawerNotice ? (
             <StatusNotice
-              tone={drawerNotice.tone}
-              message={drawerNotice.message}
+              tone={shownDrawerNotice.tone}
+              message={shownDrawerNotice.message}
               actionLabel="重试"
               onAction={retryDrawerData}
             />
