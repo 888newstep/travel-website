@@ -1,4 +1,5 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { attractionApi, type Attraction } from '../api/attraction.api'
 import { AMapNearbyFacilities } from '../components/amap/AMapNearbyFacilities'
 import { AMapPlaceSearchPanel } from '../components/amap/AMapPlaceSearchPanel'
@@ -31,58 +32,87 @@ interface InlineNotice {
   message: string
 }
 
+interface AttractionDetailBundle {
+  detail: Record<string, any> | null
+  images: string[]
+  reviews: Record<string, any>[]
+  nearby: Record<string, any>[]
+}
+
 export function AttractionsPage() {
-  const [items, setItems] = useState<Attraction[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const { keyword, setKeyword, normalizedKeyword } = useSyncedKeyword()
-  const [searching, setSearching] = useState(false)
+  const [debouncedKeyword, setDebouncedKeyword] = useState(normalizedKeyword)
   const [selectedItem, setSelectedItem] = useState<Attraction | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [detailData, setDetailData] = useState<Record<string, any> | null>(null)
-  const [detailImages, setDetailImages] = useState<string[]>([])
-  const [reviews, setReviews] = useState<Record<string, any>[]>([])
-  const [nearby, setNearby] = useState<Record<string, any>[]>([])
   const [reviewForm, setReviewForm] = useState({ rating: '5', content: '' })
-  const [submittingReview, setSubmittingReview] = useState(false)
-  const [searchNotice, setSearchNotice] = useState<InlineNotice | null>(null)
-  const [detailNotice, setDetailNotice] = useState<InlineNotice | null>(null)
-  const [reviewNotice, setReviewNotice] = useState<InlineNotice | null>(null)
-  const hasFetchedRef = useRef(false)
   const hasToken = Boolean(getStoredToken())
-  const fetchAttractions = useCallback(async (searchText: string) => {
-    const normalized = searchText.trim()
-    setSearchNotice(null)
-    if (!hasFetchedRef.current) {
-      setLoading(true)
-    } else {
-      setSearching(true)
-    }
-    try {
-      const data = normalized
-        ? await withRequestTimeout(attractionApi.searchAttractions(normalized))
-        : await withRequestTimeout(attractionApi.getAttractions())
-      setItems(Array.isArray(data) ? data : [])
-    } catch (error) {
-      setItems([])
-      setSearchNotice({
-        tone: normalized ? 'warning' : 'error',
-        message: isRequestTimeoutError(error)
-          ? '景点数据加载超时，请稍后重试。'
-          : normalized
-            ? '景点搜索失败，请更换关键词后重试。'
-            : '景点列表加载失败，请稍后重试。',
-      })
-    } finally {
-      setLoading(false)
-      setSearching(false)
-      hasFetchedRef.current = true
-    }
-  }, [])
+
   useDebouncedKeywordEffect({
     keyword: normalizedKeyword,
     delay: DEBOUNCE_DELAY,
-    onKeywordChange: fetchAttractions,
+    onKeywordChange: setDebouncedKeyword,
   })
+
+  const listQuery = useQuery({
+    queryKey: ['attractions', 'list', debouncedKeyword],
+    queryFn: () =>
+      withRequestTimeout(
+        debouncedKeyword ? attractionApi.searchAttractions(debouncedKeyword) : attractionApi.getAttractions(),
+      ),
+    placeholderData: keepPreviousData,
+  })
+
+  const detailQuery = useQuery({
+    queryKey: ['attractions', 'detail', selectedItem?.id ?? null],
+    enabled: Boolean(selectedItem?.id),
+    queryFn: async (): Promise<AttractionDetailBundle> => {
+      const id = selectedItem?.id as number
+      const [detailResult, imageResult, reviewResult, nearbyResult] = await Promise.allSettled([
+        withRequestTimeout(attractionApi.getAttractionDetail(id)),
+        withRequestTimeout(attractionApi.getAttractionImages(id)),
+        withRequestTimeout(attractionApi.getAttractionReviews(id)),
+        withRequestTimeout(attractionApi.getAttractionNearby(id)),
+      ])
+      return {
+        detail: detailResult.status === 'fulfilled' ? (detailResult.value as Record<string, any>) || null : null,
+        images: imageResult.status === 'fulfilled' ? (imageResult.value as string[]) || [] : [],
+        reviews: reviewResult.status === 'fulfilled' ? (reviewResult.value as Record<string, any>[]) || [] : [],
+        nearby: nearbyResult.status === 'fulfilled' ? (nearbyResult.value as Record<string, any>[]) || [] : [],
+      }
+    },
+  })
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ attractionId, rating, content }: { attractionId: number; rating: number; content: string }) =>
+      attractionApi.submitReview(attractionId, rating, content),
+    onSuccess: async (_data, variables) => {
+      setReviewForm({ rating: '5', content: '' })
+      await queryClient.invalidateQueries({ queryKey: ['attractions', 'detail', variables.attractionId] })
+    },
+  })
+
+  const items = listQuery.data ?? []
+  const loading = listQuery.isLoading
+  const searching = listQuery.isFetching && !listQuery.isLoading
+  const searchNotice: InlineNotice | null = listQuery.error
+    ? {
+        tone: debouncedKeyword ? 'warning' : 'error',
+        message: isRequestTimeoutError(listQuery.error)
+          ? '景点数据加载超时，请稍后重试。'
+          : debouncedKeyword
+            ? '景点搜索失败，请更换关键词后重试。'
+            : '景点列表加载失败，请稍后重试。',
+      }
+    : null
+  const detailData = detailQuery.data?.detail ?? null
+  const detailImages = detailQuery.data?.images ?? []
+  const reviews = detailQuery.data?.reviews ?? []
+  const nearby = detailQuery.data?.nearby ?? []
+  const detailLoading = detailQuery.isLoading
+  const submittingReview = reviewMutation.isPending
+  const reviewNotice: InlineNotice | null = reviewMutation.error
+    ? { tone: 'error', message: '点评提交失败，请稍后再试。' }
+    : null
   const highRatedCount = useMemo(() => items.filter((item) => Number(item.rating) >= 4.5).length, [items])
   const reviewFeedItems = useMemo(
     () =>
@@ -107,75 +137,21 @@ export function AttractionsPage() {
     ],
     [detailData, selectedItem],
   )
-  async function openDetail(item: Attraction) {
+  function openDetail(item: Attraction) {
     setSelectedItem(item)
-    setDetailLoading(true)
-    setDetailNotice(null)
-    setReviewNotice(null)
     setReviewForm({ rating: '5', content: '' })
-    try {
-      const [detailResult, imageResult, reviewResult, nearbyResult] = await Promise.allSettled([
-        withRequestTimeout(attractionApi.getAttractionDetail(item.id!)),
-        withRequestTimeout(attractionApi.getAttractionImages(item.id!)),
-        withRequestTimeout(attractionApi.getAttractionReviews(item.id!)),
-        withRequestTimeout(attractionApi.getAttractionNearby(item.id!)),
-      ])
-      setDetailData(detailResult.status === 'fulfilled' ? (detailResult.value as Record<string, any>) || null : null)
-      setDetailImages(imageResult.status === 'fulfilled' ? (imageResult.value as string[]) || [] : [])
-      setReviews(reviewResult.status === 'fulfilled' ? (reviewResult.value as Record<string, any>[]) || [] : [])
-      setNearby(nearbyResult.status === 'fulfilled' ? (nearbyResult.value as Record<string, any>[]) || [] : [])
-    } catch {
-      setDetailData(null)
-      setDetailImages([])
-      setReviews([])
-      setNearby([])
-      setDetailNotice({ tone: 'error', message: '景点详情加载失败，请稍后重试。' })
-    } finally {
-      setDetailLoading(false)
-    }
+    reviewMutation.reset()
   }
-  async function retryDetail() {
-    if (!selectedItem) return
-    setDetailLoading(true)
-    setDetailNotice(null)
-    try {
-      const [detailResult, imageResult, reviewResult, nearbyResult] = await Promise.allSettled([
-        withRequestTimeout(attractionApi.getAttractionDetail(selectedItem.id!)),
-        withRequestTimeout(attractionApi.getAttractionImages(selectedItem.id!)),
-        withRequestTimeout(attractionApi.getAttractionReviews(selectedItem.id!)),
-        withRequestTimeout(attractionApi.getAttractionNearby(selectedItem.id!)),
-      ])
-      setDetailData(detailResult.status === 'fulfilled' ? (detailResult.value as Record<string, any>) || null : null)
-      setDetailImages(imageResult.status === 'fulfilled' ? (imageResult.value as string[]) || [] : [])
-      setReviews(reviewResult.status === 'fulfilled' ? (reviewResult.value as Record<string, any>[]) || [] : [])
-      setNearby(nearbyResult.status === 'fulfilled' ? (nearbyResult.value as Record<string, any>[]) || [] : [])
-    } catch {
-      setDetailData(null)
-      setDetailImages([])
-      setReviews([])
-      setNearby([])
-      setDetailNotice({ tone: 'error', message: '景点详情刷新失败，请稍后再试。' })
-    } finally {
-      setDetailLoading(false)
-    }
-  }
-  async function submitReview() {
-    if (!selectedItem || !reviewForm.content.trim()) return
-    setSubmittingReview(true)
-    setReviewNotice(null)
-    try {
-      await attractionApi.submitReview(selectedItem.id!, Number(reviewForm.rating), reviewForm.content.trim())
-      setReviewForm({ rating: '5', content: '' })
-      const reviewResult = await attractionApi.getAttractionReviews(selectedItem.id!)
-      setReviews(Array.isArray(reviewResult) ? reviewResult : [])
-    } catch {
-      setReviewNotice({ tone: 'error', message: '点评提交失败，请稍后再试。' })
-    } finally {
-      setSubmittingReview(false)
-    }
+  function submitReview() {
+    if (!selectedItem?.id || !reviewForm.content.trim()) return
+    reviewMutation.mutate({
+      attractionId: selectedItem.id,
+      rating: Number(reviewForm.rating),
+      content: reviewForm.content.trim(),
+    })
   }
   function retrySearch() {
-    fetchAttractions(normalizedKeyword)
+    void listQuery.refetch()
   }
   return (
     <div className="app-container pb-16 pt-4 md:pt-6">
@@ -293,23 +269,10 @@ export function AttractionsPage() {
         loading={detailLoading}
         onClose={() => {
           setSelectedItem(null)
-          setDetailData(null)
-          setDetailImages([])
-          setReviews([])
-          setNearby([])
-          setDetailNotice(null)
-          setReviewNotice(null)
+          reviewMutation.reset()
         }}
       >
         <div className="space-y-6">
-          {detailNotice ? (
-            <StatusNotice
-              tone={detailNotice.tone}
-              message={detailNotice.message}
-              actionLabel="重试"
-              onAction={retryDetail}
-            />
-          ) : null}
           {detailImages.length ? (
             <div className="grid gap-3 sm:grid-cols-2">
               {detailImages.slice(0, 4).map((image, index) => (
