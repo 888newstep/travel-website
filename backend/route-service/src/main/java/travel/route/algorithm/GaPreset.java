@@ -34,6 +34,17 @@ public enum GaPreset {
      * 按景点数量自动选档（实验：n<=8 FAST、n>=60 QUALITY，中间 STANDARD）
      * 阈值与 GA_MIN_N=10 对齐：n<=10 走 NN+2-opt，n>10 才进 GA
      */
+    public static GaPreset fromName(String name) {
+        if (name == null) return STANDARD;
+        String normalized = name.trim().toUpperCase();
+        for (GaPreset preset : values()) {
+            if (preset.name().equals(normalized)) {
+                return preset;
+            }
+        }
+        return STANDARD;
+    }
+
     public static GaPreset forScale(int n) {
         if (n <= 8) return FAST;
         if (n >= 60) return QUALITY;
